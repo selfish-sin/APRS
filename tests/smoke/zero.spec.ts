@@ -209,7 +209,7 @@ test("零日与改项目：模板建项目 → 零日页 → 开工 → 自动�
   // —— 375 宽能用：零日页（示范的「（模板）动画短片」）· 项目设置每一栏 · 项目总览 · 验收 ——
   await page.setViewportSize({ width: 375, height: 812 });
   await open(page, "/projects");
-  await page.getByRole("link", { name: /（模板）动画短片/ }).first().click();
+  await page.locator("main").getByRole("link", { name: /（模板）动画短片/ }).first().click();
   await expect(page.getByText("零日 · 筹备中")).toBeVisible();
   await expect(page.locator('[data-testid="staff-row"][data-position="sound"]')).toContainText("外部");
   await expectNoPageScrollX(page, "零日页");

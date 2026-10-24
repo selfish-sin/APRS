@@ -16,7 +16,7 @@ import { isAdmin } from "@/domain/commands/core";
 import { GRAIN, GROUP, PHASE, PROJECT_STATUS, STAGE_KIND, UNIT, type CutRow, type Group, type Id, type ProjectRow, type ProjectStatus, type StaffPerson, type StageRow, type TaskRow } from "@/domain/model";
 import { cutCode } from "@/domain/naming";
 import { POSITION_GROUPS, POSITION_GROUP_LABEL, PROJECT_TEMPLATES, PROJECT_TEMPLATE_KEYS, positionTemplate, type ProjectTemplateKey } from "@/domain/positions";
-import { cutsOf, filesOn, libraryOf, members, memberById, projectById, projectTimeline, reviewsOf, stagesOf, submissionsOf, taskView, tasksOf, todayOf } from "@/domain/queries";
+import { cutsOf, filesOn, startPreview, libraryOf, members, memberById, projectById, projectTimeline, reviewsOf, stagesOf, submissionsOf, taskView, tasksOf, todayOf } from "@/domain/queries";
 import { groupTemplate, stageText } from "@/domain/templates";
 import { addDays } from "@/domain/clock";
 import { U, useI18n } from "@/i18n/I18n";
@@ -124,10 +124,10 @@ export function ZeroDayPage({ project }: { project: ProjectRow }) {
           <Link to={`/library/${project.id}`} className="ui-button" data-style="Secondary" data-size="Medium">
             {L.common.library}
           </Link>
-          {admin ? <StartButton project={project} /> : null}
         </div>
       </div>
       {!admin ? <p className="label">{L.zero.adminOnly}</p> : null}
+      <StartCheckCard project={project} admin={admin} />
       <CoverCard project={project} editable={admin} />
       <DatesCard project={project} editable={admin} />
       <ZeroStructureCard project={project} editable={admin} />
@@ -135,6 +135,82 @@ export function ZeroDayPage({ project }: { project: ProjectRow }) {
       <StagesPreview project={project} />
       <ProjectTimelineCard projectId={project.id} />
     </>
+  );
+}
+
+/** 零日页最上面：开工检查（还缺什么 · 开工会生成多少 · 谁会自动报到）+ 开工按钮。 */
+function StartCheckCard({ project, admin }: { project: ProjectRow; admin: boolean }) {
+  const { world } = useGuild();
+  const { L, f, t2 } = useI18n();
+  const pv = startPreview(world, project.id);
+  if (!pv) return null;
+  const shown = pv.unfilled.slice(0, 6);
+  return (
+    <section className="card start-card" aria-labelledby="start-title" data-testid="start-check">
+      <div className="card-head">
+        <h2 id="start-title" className="t-heading-18">
+          {L.zero.startCard}
+        </h2>
+        <span className="label" data-testid="start-ready">
+          {pv.ready ? L.zero.readyYes : L.zero.readyNo}
+        </span>
+      </div>
+      {pv.unfilled.length ? (
+        <p className="start-warn" data-testid="start-unfilled">
+          {f(L.zero.unfilled, {
+            n: pv.unfilled.length,
+            names: shown.map((x) => (typeof x.name === "string" ? x.name : t2(x.name))).join(L.zero.listSep),
+            more: pv.unfilled.length > shown.length ? f(L.zero.unfilledMore, { n: pv.unfilled.length, rest: pv.unfilled.length - shown.length }) : "",
+          })}
+        </p>
+      ) : (
+        <p className="start-ok">{L.zero.allFilled}</p>
+      )}
+      <div className="row start-row">
+        {admin ? <StartButton project={project} /> : null}
+        <span className="label">{f(L.zero.startSummary[project.group], { cuts: pv.cuts, tasks: pv.tasks, people: pv.autoEnroll })}</span>
+      </div>
+    </section>
+  );
+}
+
+/** 日期一块上面的小时间轴：开始 · 各关键日 · 计划结束（按日子摆位置）。 */
+function KeyDateTimeline({ project }: { project: ProjectRow }) {
+  const { L, monthDay } = useI18n();
+  const start = Date.parse(project.startOn);
+  const end = Date.parse(project.planEndOn);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  const pos = (d: string) => Math.min(100, Math.max(0, ((Date.parse(d) - start) / (end - start)) * 100));
+  const keys = (project.keyDates ?? []).filter((k) => k.name.trim() && k.date && Number.isFinite(Date.parse(k.date))).sort((a, b) => a.date.localeCompare(b.date));
+  // 关键日正好是开始 / 计划结束那天：合成一个点，用关键日的名字。
+  const atStart = keys.find((k) => k.date === project.startOn);
+  const atEnd = keys.find((k) => k.date === project.planEndOn);
+  const points = [
+    { id: "start", name: atStart?.name ?? L.zero.tlStart, date: project.startOn, edge: true, uc: !!atStart },
+    ...keys.filter((k) => k !== atStart && k !== atEnd).map((k) => ({ id: k.id, name: k.name, date: k.date, edge: false, uc: true })),
+    { id: "end", name: atEnd?.name ?? L.zero.tlEnd, date: project.planEndOn, edge: true, uc: !!atEnd },
+  ];
+  // 挨得太近的关键日，名字放到线的上面，免得叠在一起。
+  let last = -100;
+  let lastRow = "a";
+  const rows = points.map((p, i) => {
+    const at = pos(p.date);
+    const near = at - last < 16 || (i === points.length - 1 ? false : pos(points[i + 1].date) - at < 16);
+    const row = p.edge ? "a" : near && lastRow === "a" ? "b" : "a";
+    last = at;
+    lastRow = row;
+    return row;
+  });
+  return (
+    <ol className="key-timeline" aria-label={L.zero.timeline} data-testid="key-timeline" data-stagger={rows.includes("b") ? "yes" : undefined}>
+      {points.map((p, i) => (
+        <li key={p.id} style={{ ["--at" as string]: `${pos(p.date)}%` }} data-edge={p.edge ? "yes" : undefined} data-row={rows[i]}>
+          <span className="key-timeline-dot" aria-hidden="true" />
+          <span className="key-timeline-name">{p.uc ? <U>{p.name}</U> : p.name}</span>
+          <span className="key-timeline-date num">{monthDay(p.date)}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -261,7 +337,7 @@ export function CoverCard({ project, editable }: { project: ProjectRow; editable
 
 export function DatesCard({ project, editable }: { project: ProjectRow; editable: boolean }) {
   const { dispatch, notify } = useGuild();
-  const { L, err, date } = useI18n();
+  const { L, f, err, date } = useI18n();
   const [startOn, setStartOn] = useState(project.startOn);
   const [planEndOn, setPlanEndOn] = useState(project.planEndOn);
   const [cycle, setCycle] = useState(String(project.cycleDays ?? 7));
@@ -273,6 +349,7 @@ export function DatesCard({ project, editable }: { project: ProjectRow; editable
         <h2 id="dates-title" className="t-heading-18">
           {L.zero.datesTitle}
         </h2>
+        <KeyDateTimeline project={project} />
         <p>
           {date(project.startOn)} → {date(project.planEndOn)} · {L.zero.cycleDays} {project.cycleDays ?? 7}
         </p>
@@ -298,9 +375,13 @@ export function DatesCard({ project, editable }: { project: ProjectRow; editable
   };
   return (
     <section className="card" aria-labelledby="dates-title" data-testid="dates-card">
-      <h2 id="dates-title" className="t-heading-18">
-        {L.zero.datesTitle}
-      </h2>
+      <div className="card-head">
+        <h2 id="dates-title" className="t-heading-18">
+          {L.zero.datesTitle}
+        </h2>
+        <span className="label num">{f(L.zero.datesMeta, { start: date(project.startOn), end: date(project.planEndOn), n: project.cycleDays ?? 7 })}</span>
+      </div>
+      <KeyDateTimeline project={project} />
       <div className="form-grid">
         <TextField label={L.zero.startOn} type="date" value={startOn} onChange={(e) => setStartOn(e.target.value)} data-testid="zero-start-on" disabled={project.status !== "zero"} />
         <TextField label={L.zero.planEndOn} type="date" value={planEndOn} onChange={(e) => setPlanEndOn(e.target.value)} data-testid="zero-plan-end" />

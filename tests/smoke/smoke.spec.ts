@@ -244,7 +244,7 @@ test("管理员的其他操作：视频组项目、改项目、指派外包、�
   await page.getByLabel("口令", { exact: true }).fill("newbie-pass");
   await page.getByRole("button", { name: "加进来" }).click();
   await expect(page.getByText(/加了 新同学/)).toBeVisible();
-  const menu = page.getByRole("button", { name: "打开导航" });
+  const menu = page.getByTestId("tab-more");
   if (await menu.isVisible()) await menu.click();
   await page.getByTestId("logout").click();
   await page.getByTestId("account-newbie").click();

@@ -13,7 +13,7 @@ import { choosePlurals, fill, isPhrase, isText2, isUC, phraseText, type Phrase, 
 import { useStore } from "@/lib/store";
 import { LANG_KEY, detectLang, fmt, msgPhrase, type Lang, type Msg } from "./core";
 import { en } from "./en";
-import { fmtCountdown, fmtDate, fmtDateTime, fmtDay, fmtMonthDay, fmtNumber, fmtRelative } from "./format";
+import { fmtCountdown, fmtDate, fmtDateTime, fmtDay, fmtMonthDay, fmtNumber, fmtRelative, fmtWaited } from "./format";
 import { zh } from "./zh";
 
 export type Dict = typeof zh;
@@ -108,6 +108,8 @@ export interface I18n {
   dateTime: (iso: IsoDateTime) => string;
   relative: (then: IsoDateTime, now: IsoDateTime) => string;
   countdown: (ms: number) => ReturnType<typeof fmtCountdown>;
+  /** 「等了 1 天 3 小时」/「waiting 1 d 3 h」。 */
+  waited: (ms: number) => string;
   num: (n: number) => string;
   /** 环节名（模板里的两种说法；管理员自己起的照原样）。 */
   stageName: (group: Group, stage: StageLike) => string;
@@ -174,6 +176,7 @@ export function makeI18n(lang: Lang, setLang: (l: Lang) => void = () => undefine
     dateTime: (iso) => fmtDateTime(iso, lang),
     relative: (then, now) => fmtRelative(then, now, lang),
     countdown: (ms) => fmtCountdown(ms, lang),
+    waited: (ms) => fmtWaited(ms, lang),
     num: (n) => fmtNumber(n, lang),
     stageName: (group, st) => stageText(group, st, lang).name,
     stage: (group, st) => {

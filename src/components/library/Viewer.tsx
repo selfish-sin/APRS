@@ -16,7 +16,7 @@ import { compareCandidates, fileKind, fileWhereP, members, memberById, pinsOf } 
 import { RETURN_TAGS } from "@/domain/rules";
 import { useFiles, useFileUrl } from "@/lib/files/FilesProvider";
 import { useGuild } from "@/lib/store";
-import { FileFacts, MissingPlaceholder, SaveFileButton } from "./tiles";
+import { FileFacts, FileImage, MissingPlaceholder, SaveFileButton } from "./tiles";
 import { SheetStage } from "./SheetView";
 
 const MIN_SCALE = 0.05;
@@ -142,7 +142,42 @@ export function Viewer({ files, startId, onClose, forReview = false, focusPinId 
           </div>
         </div>
       )}
+      {images.length > 1 ? (
+        <nav className="viewer-strip" aria-label={L.viewer.strip} data-testid="viewer-strip">
+          <button type="button" className="viewer-btn viewer-strip-arrow" onClick={() => go(-1)} aria-label={L.viewer.prev}>
+            ←
+          </button>
+          <div className="viewer-strip-list">
+            {images.map((x, i) => (
+              <StripThumb key={x.id} file={x} current={i === index} onPick={() => { setIndex(i); setCompareId(null); }} />
+            ))}
+          </div>
+          <button type="button" className="viewer-btn viewer-strip-arrow" onClick={() => go(1)} aria-label={L.viewer.next}>
+            →
+          </button>
+        </nav>
+      ) : null}
     </div>
+  );
+}
+
+/** 底部缩略图条的一格：图片是小图，别的写类型字（CLIP · CSV · PDF…）。当前的高亮。 */
+function StripThumb({ file, current, onPick }: { file: FileRow; current: boolean; onPick: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const image = fileKind(file) === "image";
+  useEffect(() => {
+    // 只横着滚缩略图条本身（不动外面的页面）。
+    const el = ref.current;
+    const list = el?.parentElement;
+    if (!current || !el || !list) return;
+    const l = el.offsetLeft - list.offsetLeft;
+    if (l < list.scrollLeft) list.scrollLeft = l;
+    else if (l + el.offsetWidth > list.scrollLeft + list.clientWidth) list.scrollLeft = l + el.offsetWidth - list.clientWidth;
+  }, [current]);
+  return (
+    <button ref={ref} type="button" className="viewer-strip-item" aria-current={current ? "true" : undefined} onClick={onPick} title={file.name} data-testid="viewer-strip-item">
+      {image ? <FileImage file={file} className="viewer-strip-img" alt={file.name} /> : <span className="viewer-strip-ext">{(file.name.split(".").pop() ?? "").toUpperCase().slice(0, 5)}</span>}
+    </button>
   );
 }
 
@@ -419,21 +454,34 @@ function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; for
                 onDone={(pinId) => {
                   setDraft(null);
                   if (pinId) setActivePin(pinId);
+                  // 手机上写意见时页面滚到了下面：钉好以后滚回图，接着钉下一个。
+                  const body = stage.current?.closest<HTMLElement>(".viewer-body");
+                  if (body && body.scrollHeight > body.clientHeight + 1 && getComputedStyle(body).overflowY !== "visible") body.scrollTop = 0;
                 }}
               />
             ) : (
               <p className="label">{mode === "pin" ? L.viewer.pinHintOn : L.viewer.pinHintOff}</p>
             )}
-            <div className="row" data-justify="between">
-              <h2 className="t-heading-18">
-                {L.viewer.notes} <span className="count">{pins.length}</span>
-              </h2>
-              {pins.some((p) => p.status === "resolved") ? (
-                <label className="check-row label">
-                  <input type="checkbox" checked={hideResolved} onChange={(e) => setHideResolved(e.target.checked)} data-testid="pins-hide-resolved" />
-                  {L.viewer.hideResolved}
-                </label>
+            <h2 className="t-heading-18">
+              {L.viewer.notes} <span className="count">{pins.length}</span>
+            </h2>
+            <div className="row viewer-side-tools">
+              {here ? (
+                <Button
+                  Label={L.viewer.addPin2}
+                  Size="Small"
+                  Style={mode === "pin" ? "Primary" : "Accent"}
+                  onClick={() => {
+                    setMode("pin");
+                    setDraft(null);
+                  }}
+                  data-testid="viewer-add-pin"
+                />
               ) : null}
+              <label className="check-row label">
+                <input type="checkbox" checked={hideResolved} onChange={(e) => setHideResolved(e.target.checked)} data-testid="pins-hide-resolved" />
+                {f(L.viewer.hideResolvedN, { n: pins.filter((p) => p.status === "resolved").length })}
+              </label>
             </div>
             {shownPins.length === 0 ? <p className="label">{L.viewer.noNotes}</p> : null}
             <ol className="pin-list" data-testid="pin-list">
@@ -533,7 +581,13 @@ export function PinItem({ pin, active, onJump, now }: { pin: PinRow; active: boo
   const meta = [pin.layer ? f(L.viewer.layerMeta, { layer: pin.layer }) : null, pin.sheets ? rich(L.viewer.sheetsMeta, { sheets: <U>{pin.sheets}</U> }) : null].filter(Boolean);
   const ref = useRef<HTMLLIElement>(null);
   useEffect(() => {
-    if (active) ref.current?.scrollIntoView?.({ block: "nearest" });
+    // 只在侧栏自己能滚的时候（桌面）把这一条滚到看得见；手机上侧栏跟着页面走，不去动图的位置。
+    const el = ref.current;
+    const side = el?.closest<HTMLElement>(".viewer-side");
+    if (!active || !el || !side || side.scrollHeight <= side.clientHeight + 1 || getComputedStyle(side).overflowY === "visible") return;
+    const top = el.getBoundingClientRect().top - side.getBoundingClientRect().top + side.scrollTop;
+    if (top < side.scrollTop) side.scrollTop = top;
+    else if (top + el.offsetHeight > side.scrollTop + side.clientHeight) side.scrollTop = top + el.offsetHeight - side.clientHeight;
   }, [active]);
   return (
     <li ref={ref} className="pin-item" data-status={pin.status} data-active={active ? "yes" : "no"} data-testid="pin-item">

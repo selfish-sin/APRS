@@ -85,9 +85,9 @@ export async function login(page: Page, who: "admin" | "member01", pass = PASS[w
   await expect(page).toHaveURL(/#\/hall/);
 }
 
-/** 换人：退出，回到登录页。手机上「换人」在抽屉里。 */
+/** 换人：退出，回到登录页。手机上「换人」在底部标签栏「更多」打开的抽屉里。 */
 export async function logout(page: Page) {
-  const menu = page.getByRole("button", { name: "打开导航" });
+  const menu = page.getByTestId("tab-more");
   if (await menu.isVisible()) await menu.click();
   await page.getByTestId("logout").click();
   await expect(page.getByRole("heading", { name: "选账号登录" })).toBeVisible();

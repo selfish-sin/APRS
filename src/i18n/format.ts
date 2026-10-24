@@ -78,6 +78,20 @@ export function fmtCountdown(ms: number, lang: Lang): { text: string; big: strin
   return { text: overdue ? `超时 ${text}` : `还剩 ${text}`, big, unit, overdue };
 }
 
+/** 等了多久：「等了 1 天 3 小时」「等了 3 小时」「等了 14 分钟」/「waiting 1 d 3 h」。 */
+export function fmtWaited(ms: number, lang: Lang): string {
+  const abs = Math.max(0, ms);
+  const days = Math.floor(abs / (24 * HOUR_MS));
+  const hours = Math.floor((abs % (24 * HOUR_MS)) / HOUR_MS);
+  const minutes = Math.floor((abs % HOUR_MS) / 60_000);
+  if (lang === "en") {
+    const t = days > 0 ? `${days} d${hours ? ` ${hours} h` : ""}` : hours > 0 ? `${hours} h` : minutes > 0 ? `${minutes} min` : "";
+    return t ? `waiting ${t}` : "just now";
+  }
+  const t = days > 0 ? `${days} 天${hours ? ` ${hours} 小时` : ""}` : hours > 0 ? `${hours} 小时` : minutes > 0 ? `${minutes} 分钟` : "";
+  return t ? `等了 ${t}` : "刚刚";
+}
+
 /** 数字：整数不带小数点，其余一位小数；英文千位加逗号。 */
 export function fmtNumber(n: number, lang: Lang): string {
   if (!Number.isFinite(n)) return "0";

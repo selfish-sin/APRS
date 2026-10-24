@@ -48,6 +48,13 @@ export const zh = {
   stay: "留在这里",
   goHall: "去大厅交",
   newQuest: "新任务单",
+  projectCode: "PROJECT",
+  chosen: "已选：{stage} · {kind}",
+  chosenMeta: "{open} 张可接 · {rate} · 已经有 {n} 人报到",
+  chosenNone: "先点上面一个环节。每张卡上写着现在有几张可接、Tn 是多少。",
+  mineChip: "{group} · {stage} · 熟练度 {skill} · 最多 {n} 张",
+  leave: "不报了",
+  mineCount: "{n} 个环节",
 };
 
 export const en: Shape<typeof zh> = {
@@ -97,4 +104,11 @@ export const en: Shape<typeof zh> = {
   stay: "Stay here",
   goHall: "Go to the hall to hand in",
   newQuest: "New task card",
+  projectCode: "PROJECT",
+  chosen: "Picked: {stage} · {kind}",
+  chosenMeta: "{open} open · {rate} · {n} signed up",
+  chosenNone: "Pick a stage above. Each card shows how many tasks are open and its Tn.",
+  mineChip: "{group} · {stage} · skill {skill} · up to {n}",
+  leave: "Leave",
+  mineCount: "{n} {n|stage|stages}",
 };

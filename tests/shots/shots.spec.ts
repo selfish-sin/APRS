@@ -39,7 +39,7 @@ test("截图", async ({ page }, info) => {
   await expect(page.getByTestId("accept-view")).toBeVisible();
   await shot("p12-accept");
   await open(page, "/projects");
-  await page.getByRole("link", { name: /（模板）动画短片/ }).first().click();
+  await page.locator("main").getByRole("link", { name: /（模板）动画短片/ }).first().click();
   await expect(page.getByTestId("staff-card")).toBeVisible();
   await shot("p12-zero-day");
   await open(page, projectPath);
@@ -57,6 +57,24 @@ test("截图", async ({ page }, info) => {
   await shot("p8-admin-ruling");
   await open(page, "/backup");
   await shot("p10-backup");
+  await open(page, "/review");
+  await page.getByRole("tab", { name: "退回" }).click();
+  await shot("p7-review-return");
+  await open(page, "/library");
+  await page.getByTestId("library-project").first().click();
+  await shot("p11-library");
+  await page.getByTestId("file-tile").first().locator(".file-tile-open").click();
+  await expect(page.getByTestId("viewer")).toBeVisible();
+  await page.screenshot({ path: `artifacts/shots/p11-viewer-${tag}.png` });
+  await page.getByTestId("viewer-close").click();
+  // 手机：底部标签栏的「更多」打开其余页面
+  const more = page.getByTestId("tab-more");
+  if (await more.isVisible()) {
+    await more.click();
+    await expect(page.getByTestId("logout")).toBeVisible();
+    await page.waitForTimeout(400); // 抽屉滑出来的动画
+    await page.screenshot({ path: `artifacts/shots/nav-more-${tag}.png` });
+  }
 });
 
 test.describe("English", () => {
@@ -83,7 +101,7 @@ test.describe("English", () => {
     await shot("p3-enroll");
     await open(page, "/me");
     await shot("p9-member");
-    const menu = page.getByRole("button", { name: "Open menu" });
+    const menu = page.getByTestId("tab-more");
     if (await menu.isVisible()) await menu.click();
     await page.getByTestId("logout").click();
     await signIn("admin");
@@ -97,7 +115,7 @@ test.describe("English", () => {
     await expect(page.getByTestId("stages-card")).toBeVisible();
     await shot("p12-settings-stages");
     await open(page, "/projects");
-    await page.getByRole("link", { name: /（模板）动画短片/ }).first().click();
+    await page.locator("main").getByRole("link", { name: /（模板）动画短片/ }).first().click();
     await expect(page.getByTestId("staff-card")).toBeVisible();
     await shot("p12-zero-day");
     await open(page, projectPath);
@@ -113,6 +131,6 @@ test.describe("English", () => {
     await shot("p11-library");
     await page.getByTestId("file-tile").first().locator(".file-tile-open").click();
     await expect(page.getByTestId("viewer")).toBeVisible();
-    await shot("p11-viewer");
+    await page.screenshot({ path: `artifacts/shots/p11-viewer-${tag}.png` });
   });
 });

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { formatPoints } from "@/domain/labels";
+import { hoursOf, taskRate } from "@/domain/rules";
 import { stageText } from "@/domain/templates";
 import { Joined, U, useI18n } from "@/i18n/I18n";
 import type { Id } from "@/domain/model";
@@ -23,13 +24,15 @@ export function QuestCard({ quest, eyebrow, showCutLink = true, actions = true }
   const { view, indicator } = quest;
   const { task, stage, project, cut } = view;
   const { notify } = useGuild();
-  const { L, f, r: rich, ph, pt, lang, countdown: cd, num, tag, unit: unitOf } = useI18n();
+  const { L, f, r: rich, ph, pt, lang, countdown: cd, num, tag, unit: unitOf, dateTime } = useI18n();
   const countdown = quest.remainingMs === null ? null : cd(quest.remainingMs);
   const st = stageText(project.group, stage, lang);
   const [dialog, setDialog] = useState<"submit" | "ask" | "release" | null>(null);
   const inHand = task.status === "claimed" || task.status === "returned";
   const urgent = !!quest.remainingMs && quest.remainingMs < 6 * 3600_000;
   const unit = unitOf(stage.unit, project.group, task.workload);
+  const fixed = !!task.extra && task.extra.fixedPoints !== null && !task.workload;
+  const hours = hoursOf(taskRate(stage, task), task.workload);
   const uc = (custom: boolean, text: string) => (custom ? <U>{text}</U> : text);
   return (
     <article className="quest" aria-label={f(L.quest.aria, { title: pt(view.titleP) })} data-testid="quest-card">
@@ -39,36 +42,48 @@ export function QuestCard({ quest, eyebrow, showCutLink = true, actions = true }
         </span>
         <StatusPill Status={task.status} Label={task.status === "submitted" && view.versionTag ? f(L.quest.inReviewV, { v: view.versionTag }) : undefined} />
       </div>
-      <div className="stack" data-gap="small">
-        <h2 className="quest-title">{ph(view.labelP)}</h2>
-        {quest.assignedBy ? (
-          <p className="quest-assigned" data-testid="quest-assigned-by">
-            {rich(L.quest.assignedBy, { name: <U>{quest.assignedBy.nickname}</U> })}
+      <div className="quest-main">
+        <div className="stack" data-gap="small">
+          <h2 className="quest-title">{ph(view.labelP)}</h2>
+          {quest.assignedBy ? (
+            <p className="quest-assigned" data-testid="quest-assigned-by">
+              {rich(L.quest.assignedBy, { name: <U>{quest.assignedBy.nickname}</U> })}
+            </p>
+          ) : null}
+          {task.extra?.description ? (
+            <p className="quest-sub break">
+              <U>{task.extra.description}</U>
+            </p>
+          ) : null}
+          <p className="quest-sub">
+            {project.code} · {L.labels.phase[stage.phase]} · {L.labels.stageKind[stage.kind]}
+            {stage.hub && stage.kind !== "hub" ? L.quest.hubSuffix : ""}
+            {view.versionTag ? f(L.quest.latest, { v: view.versionTag }) : ""}
           </p>
-        ) : null}
-        {task.extra?.description ? (
-          <p className="quest-sub break">
-            <U>{task.extra.description}</U>
-          </p>
-        ) : null}
-        <p className="quest-sub">
-          {project.code} · {L.labels.phase[stage.phase]} · {L.labels.stageKind[stage.kind]}
-          {stage.hub && stage.kind !== "hub" ? L.quest.hubSuffix : ""}
-          {view.versionTag ? f(L.quest.latest, { v: view.versionTag }) : ""}
-        </p>
+        </div>
+        <div className="quest-clock" data-urgent={urgent || countdown?.overdue ? "true" : "false"} data-testid="quest-clock">
+          <div className="quest-clock-big num">
+            {countdown ? countdown.big : task.status === "submitted" && view.versionTag ? view.versionTag : "—"}
+            {countdown && !countdown.big.includes(":") ? <span className="quest-clock-unit">{countdown.unit}</span> : null}
+          </div>
+          <div className="quest-clock-small">
+            {countdown ? countdown.text : task.status === "submitted" ? L.quest.submittedWaiting : L.quest.noDeadline}
+            {countdown && quest.dueAt ? ` · ${f(L.quest.dueAt, { at: dateTime(quest.dueAt) })}` : ""}
+          </div>
+        </div>
       </div>
-      <div className="quest-numbers">
-        <div className="quest-number">
-          <span className="num">{num(task.workload)}</span>
-          <small>{f(L.quest.workload, { unit })}</small>
+      <div className="quest-stats">
+        <div className="quest-stat">
+          <span>{L.quest.statWorkload}</span>
+          <b>{fixed ? L.quest.fixedWork : `${num(task.workload)} ${unit}`}</b>
         </div>
-        <div className="quest-number" data-urgent={urgent || countdown?.overdue ? "true" : "false"}>
-          <span className="num">{countdown ? countdown.big : "—"}</span>
-          <small>{countdown ? countdown.text : task.status === "submitted" ? L.quest.submittedWaiting : L.quest.noDeadline}</small>
+        <div className="quest-stat">
+          <span>{L.quest.statHours}</span>
+          <b className="num">{fixed ? "—" : `${num(hours)}h`}</b>
         </div>
-        <div className="quest-number">
-          <span className="num">{formatPoints(quest.reward, true)}</span>
-          <small>{L.quest.reward}</small>
+        <div className="quest-stat" data-kind="reward">
+          <span>{L.quest.statReward}</span>
+          <b>{f(L.quest.rewardPoints, { p: formatPoints(quest.reward, true) })}</b>
         </div>
       </div>
 

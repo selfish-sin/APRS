@@ -40,7 +40,7 @@ pnpm shots          # 主要页面的截图 → artifacts/shots/（不进仓库�
 | `src/pages/` | P1 进门 · 登录 · P2 大厅 · P3 报到 · P4 项目 · P5 项目总览 · P6 卡详情 · P7 审核台 · P8 管理 · P9 成员 · P10 备份 |
 | `src/components/` | `ui/`（基础组件）、`storage/`（本机存储和备份）· `app/`（任务单黑卡、关卡地图、网格、时间线、外壳…） |
 | `src/i18n/` | 中文 / English 词典（`zh.ts` · `en.ts` · `ns/*`）、`useI18n()`、「中 / EN」切换（§16） |
-| `tests/smoke/` | Playwright：每页打开 0 报错（三套设置）· 端到端主流程 · 断网 · 单文件 · English 每页扫汉字 |
+| `tests/smoke/` | Playwright：每页打开 0 报错（三套设置）· 端到端主流程 · 断网 · 单文件 · English 每页扫汉字 · 从设计组搬来的 7 处界面（`ports.spec.ts`） |
 
 ## 新依赖
 

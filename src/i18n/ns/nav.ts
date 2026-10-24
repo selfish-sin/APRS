@@ -27,6 +27,13 @@ export const zh = {
   badge: "{n} 件",
   switchUser: "换人",
   close: "关闭",
+  zero: "零日",
+  cuts: { animation: "{n} 卡", video: "{n} 期" },
+  libraryCount: "{n} 个文件",
+  tabs: "底部导航",
+  tabMine: "我的",
+  tabMore: "更多",
+  projectList: "项目列表",
 };
 
 export const en: Shape<typeof zh> = {
@@ -55,4 +62,11 @@ export const en: Shape<typeof zh> = {
   badge: { one: "{n} item", other: "{n} items" },
   switchUser: "Switch user",
   close: "Close",
+  zero: "Day zero",
+  cuts: { animation: "{n} {n|cut|cuts}", video: "{n} {n|ep|eps}" },
+  libraryCount: "{n} {n|file|files}",
+  tabs: "Bottom navigation",
+  tabMine: "Me",
+  tabMore: "More",
+  projectList: "Projects",
 };

@@ -1,20 +1,26 @@
-/** P2 大厅：身份卡 · 当前任务单（黑卡）· 接任务 · 等我处理 · 工会动态。 */
-import { useMemo, useState } from "react";
+/** P2 大厅：概要一行 · 身份卡 · 当前任务单（黑卡）· 手上的任务 · 交上去等审的 · 等我处理（按种类分组，每行带动作）· 工会动态。 */
+import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
-import { Empty, Level, MemberAvatar, Stat, Tag, XpBar } from "@/components/app/bits";
+import { Drawer } from "@/components/ui/Drawer";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { Empty, Level, MemberAvatar, Stat, Tag, TextArea, XpBar } from "@/components/app/bits";
 import { MiniQuest, QuestCard } from "@/components/app/quest";
 import { isReviewer } from "@/domain/commands/core";
 import { formatPoints } from "@/domain/labels";
 import { U, useI18n } from "@/i18n/I18n";
-import { enrollmentsOf, feedOf, growthOf, inboxOf, pendingReviewCount, questFor, reviewQueue, taskViewById } from "@/domain/queries";
+import type { Id } from "@/domain/model";
+import { enrollmentsOf, feedOf, growthOf, inboxOf, pendingReviewCount, questFor, reviewQueue, taskViewById, todayOf, type ThreadView } from "@/domain/queries";
 import { Viewer } from "@/components/library/Viewer";
+import { FileImage } from "@/components/library/tiles";
 import { LinkList } from "@/components/app/links";
 import { Link, useRoute } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 
+const msSince = (then: string, now: string) => Math.max(0, Date.parse(now) - Date.parse(then));
+
 export function HallPage() {
   const { world, me, now, dispatch, notify } = useGuild();
-  const { L, f, r: rich, ph, relative, say, stage: stageEl } = useI18n();
+  const { L, f, r: rich, ph, relative, say, day, waited, lang, stage: stageEl } = useI18n();
   const growth = useMemo(() => growthOf(world, me.id), [world, me.id]);
   const quests = useMemo(() => questFor(world, me.id), [world, me.id]);
   const inbox = useMemo(() => inboxOf(world, me.id), [world, me.id]);
@@ -23,9 +29,12 @@ export function HallPage() {
   const route = useRoute();
   const [picked, setPicked] = useState<string | null>(route.query.get("task"));
   const [pinOpen, setPinOpen] = useState<{ fileId: string; pinId: string } | null>(null);
+  const [replyTo, setReplyTo] = useState<ThreadView | null>(null);
   const current = quests.find((q) => q.view.task.id === picked) ?? quests[0] ?? null;
   const canReview = isReviewer(me);
   const myQueue = canReview ? reviewQueue(world, me.id).length : 0;
+  const inHand = quests.filter((q) => q.view.task.status === "claimed" || q.view.task.status === "returned");
+  const waiting = quests.filter((q) => q.view.task.status === "submitted");
 
   const claim = () => {
     const r = dispatch("task.claim", {});
@@ -36,12 +45,21 @@ export function HallPage() {
     }
   };
 
+  const goFix = (taskId: Id) => {
+    setPicked(taskId);
+    requestAnimationFrame(() => document.querySelector('[data-testid="quest-card"]')?.scrollIntoView?.({ behavior: "smooth", block: "start" }));
+  };
+
   return (
     <>
       <div className="page-head">
         <div className="page-head-text">
           <span className="label">{L.hall.title}</span>
           <h1 className="t-title-32">{rich(L.hall.hello, { name: <U>{me.nickname}</U> })}</h1>
+          <span className="muted" data-testid="hall-summary">
+            {f(L.hall.summary, { day: day(todayOf(world)), hand: inHand.length })}
+            {waiting.length ? f(L.hall.summaryWaiting, { n: waiting.length }) : ""}
+          </span>
         </div>
         <div className="page-head-actions">
           {canReview ? (
@@ -49,13 +67,10 @@ export function HallPage() {
               {f(L.hall.reviewDesk, { n: myQueue })}
             </Link>
           ) : null}
-          {enrolled ? (
-            <Button Label={L.hall.claim} Style="Accent" onClick={claim} data-testid="claim" />
-          ) : (
-            <Link to="/enroll" className="ui-button" data-style="Accent" data-size="Medium">
-              {L.hall.goEnroll}
-            </Link>
-          )}
+          <Link to="/enroll" className="ui-button" data-style={enrolled ? "Secondary" : "Accent"} data-size="Medium" data-testid="hall-enroll">
+            {L.hall.goEnroll}
+          </Link>
+          {enrolled ? <Button Label={L.hall.claim} Style="Accent" onClick={claim} data-testid="claim" /> : null}
         </div>
       </div>
 
@@ -92,76 +107,140 @@ export function HallPage() {
             </section>
           ) : null}
 
-          <section className="card" aria-labelledby="inbox-title">
-            <div className="card-head">
-              <h2 id="inbox-title" className="t-heading-18">
-                {L.hall.inbox} <span className="count">{inbox.total}</span>
-              </h2>
-            </div>
-            {inbox.total === 0 ? (
-              <Empty>{L.hall.inboxEmpty}</Empty>
-            ) : (
+          {waiting.length ? (
+            <section className="card" aria-labelledby="waiting-title" data-testid="hall-waiting">
+              <div className="card-head">
+                <h2 id="waiting-title" className="t-heading-18">
+                  {L.hall.waitingTitle}
+                </h2>
+                <span className="label num">{waiting.length}</span>
+              </div>
               <ul className="list">
-                {inbox.returned.map((q) => (
+                {waiting.map((q) => (
                   <li key={q.view.task.id}>
-                    <Tag tone="danger">{L.hall.returnedTag}</Tag>
+                    <StatusPill Status="submitted" />
                     <div className="list-main">
-                      <button type="button" className="inline-link t-body-14m" style={{ textAlign: "left", textDecoration: "none" }} onClick={() => setPicked(q.view.task.id)}>
-                        {ph(q.view.titleP)}
-                      </button>
-                      <span className="label break">{q.lastReturn ? <U>{q.lastReturn.comments.map((c) => c.text).join("；")}</U> : L.hall.seeReview}</span>
-                    </div>
-                  </li>
-                ))}
-                {inbox.asked.map((t) => (
-                  <li key={t.thread.id}>
-                    <Tag tone="info">{L.hall.askedTag}</Tag>
-                    <div className="list-main">
-                      <Link to={t.cut ? `/cut/${t.cut.id}` : `/project/${t.thread.projectId}`} className="t-body-14m">
-                        {ph(t.whereP)}
-                      </Link>
-                      <span className="label break">{rich(L.hall.saidColon, { who: t.by ? <U>{t.by.nickname}</U> : L.hall.someone, text: <U>{t.thread.text}</U> })}</span>
-                    </div>
-                  </li>
-                ))}
-                {inbox.links.map((x) => (
-                  <li key={`${x.submission.id}:${x.link.id}`} data-testid="inbox-broken-link" style={{ flexDirection: "column", alignItems: "stretch" }}>
-                    <div className="row">
-                      <Tag tone="danger">{L.hall.brokenLinkTag}</Tag>
-                      <span className="t-body-14m break">
-                        {ph(x.view.titleP)} v{String(x.submission.versionNo).padStart(2, "0")}
+                      <span className="t-body-14m">
+                        {ph(q.view.labelP)}
+                        {q.view.versionTag ? ` · ${q.view.versionTag}` : ""}
                       </span>
-                    </div>
-                    <span className="label">{rich(L.hall.brokenBy, { who: x.by ? <U>{x.by.nickname}</U> : L.hall.reviewer })}</span>
-                    <LinkList submission={x.submission} compact />
-                  </li>
-                ))}
-                {inbox.pins.map((v) => (
-                  <li key={v.pin.id} data-testid="inbox-pin">
-                    <Tag tone="danger">{L.hall.pinTag}</Tag>
-                    <div className="list-main">
-                      <button type="button" className="inline-link t-body-14m" style={{ textAlign: "left", textDecoration: "none" }} onClick={() => setPinOpen({ fileId: v.file.id, pinId: v.pin.id })}>
-                        {rich(L.hall.pinNo, { where: v.whereP, n: v.pin.number })}
-                      </button>
-                      <span className="label break">{rich(L.hall.saidColon, { who: v.by ? <U>{v.by.nickname}</U> : L.hall.someone, text: <U>{v.pin.text}</U> })}</span>
-                    </div>
-                  </li>
-                ))}
-                {inbox.todos.map((t) => (
-                  <li key={t.thread.id}>
-                    <Tag tone="warning">{L.hall.todoTag}</Tag>
-                    <div className="list-main">
-                      <Link to={t.cut ? `/cut/${t.cut.id}` : `/project/${t.thread.projectId}`} className="t-body-14m">
-                        {ph(t.whereP)}
-                      </Link>
                       <span className="label break">
-                        <U>{t.thread.text.replace(/^要补：/, "")}</U>
+                        <U>{q.view.project.name}</U> · {q.indicator.reviewer ? rich(L.hall.waitingFor, { who: <U>{q.indicator.reviewer.nickname}</U> }) : L.hall.waitingAdmin}
+                        {q.view.latest ? ` · ${waited(msSince(q.view.latest.at, now))}` : ""}
                       </span>
                     </div>
+                    {q.view.cut ? (
+                      <Link to={`/cut/${q.view.cut.id}`} className="label">
+                        {L.hall.view}
+                      </Link>
+                    ) : null}
                   </li>
                 ))}
               </ul>
-            )}
+            </section>
+          ) : null}
+
+          <section className="card" aria-labelledby="inbox-title" data-testid="hall-inbox">
+            <div className="card-head">
+              <h2 id="inbox-title" className="t-heading-18">
+                {L.hall.inbox}
+              </h2>
+              <span className="label num">{f(L.hall.inboxCount, { n: inbox.total })}</span>
+            </div>
+            {inbox.total === 0 ? <Empty>{L.hall.inboxEmpty}</Empty> : null}
+
+            <InboxGroup title={L.hall.groupLinks} n={inbox.links.length} testId="inbox-group-links">
+              {inbox.links.map((x) => (
+                <li key={`${x.submission.id}:${x.link.id}`} data-testid="inbox-broken-link" className="inbox-row" data-kind="link">
+                  <Tag tone="danger">{L.hall.brokenLinkTag}</Tag>
+                  <div className="list-main">
+                    <span className="t-body-14m break">
+                      {ph(x.view.titleP)} v{String(x.submission.versionNo).padStart(2, "0")}
+                    </span>
+                    <span className="label">{rich(L.hall.brokenBy, { who: x.by ? <U>{x.by.nickname}</U> : L.hall.reviewer })}</span>
+                    <LinkList submission={x.submission} compact />
+                  </div>
+                </li>
+              ))}
+            </InboxGroup>
+
+            <InboxGroup title={L.hall.groupPins} n={inbox.pins.length} testId="inbox-group-pins">
+              {inbox.pins.map((v) => (
+                <li key={v.pin.id} data-testid="inbox-pin" className="inbox-row">
+                  <button type="button" className="inbox-thumb" onClick={() => setPinOpen({ fileId: v.file.id, pinId: v.pin.id })} aria-label={L.hall.viewImage}>
+                    <FileImage file={v.file} className="inbox-thumb-img" alt="" />
+                    <span className="pin-num" data-status="open" aria-hidden="true">
+                      {v.pin.number}
+                    </span>
+                  </button>
+                  <div className="list-main">
+                    <span className="t-body-14m break">
+                      <U>{v.pin.text}</U>
+                    </span>
+                    <span className="label break">
+                      {rich(v.pin.cell ? L.hall.cellMeta : v.pin.kind === "box" ? L.hall.boxMeta : L.hall.pinMeta, { who: v.by ? <U>{v.by.nickname}</U> : L.hall.someone })} · {ph(v.whereP)} · {waited(msSince(v.pin.at, now))}
+                    </span>
+                  </div>
+                  <Button Label={L.hall.viewImage} Size="Small" Style="Secondary" onClick={() => setPinOpen({ fileId: v.file.id, pinId: v.pin.id })} data-testid="inbox-pin-open" />
+                </li>
+              ))}
+            </InboxGroup>
+
+            <InboxGroup title={L.hall.groupAsked} n={inbox.asked.length} testId="inbox-group-asked">
+              {inbox.asked.map((t) => (
+                <li key={t.thread.id} className="inbox-row" data-testid="inbox-asked">
+                  {t.by ? <MemberAvatar member={t.by} size="28" /> : <Tag tone="info">{L.hall.askedTag}</Tag>}
+                  <div className="list-main">
+                    <span className="t-body-14m break">
+                      <U>{t.thread.text}</U>
+                    </span>
+                    <span className="label break">
+                      {rich(L.hall.askedMeta, { who: t.by ? <U>{t.by.nickname}</U> : L.hall.someone })} · {t.cut ? <Link to={`/cut/${t.cut.id}`}>{ph(t.whereP)}</Link> : ph(t.whereP)} · {waited(msSince(t.thread.at, now))}
+                    </span>
+                  </div>
+                  <Button Label={L.hall.reply} Size="Small" Style="Secondary" onClick={() => setReplyTo(t)} data-testid="inbox-reply" />
+                </li>
+              ))}
+            </InboxGroup>
+
+            <InboxGroup title={L.hall.groupTodos} n={inbox.todos.length} testId="inbox-group-todos">
+              {inbox.todos.map((t) => (
+                <li key={t.thread.id} className="inbox-row" data-testid="inbox-todo">
+                  <Tag tone="warning">{L.hall.todoTag}</Tag>
+                  <div className="list-main">
+                    <span className="t-body-14m break">
+                      {t.cut ? <Link to={`/cut/${t.cut.id}`}>{ph(t.whereP)}</Link> : ph(t.whereP)} · <U>{t.thread.text.replace(/^要补：/, "")}</U>
+                    </span>
+                    <span className="label">{f(L.hall.ruledAt, { at: relative(t.thread.at, now) })}</span>
+                  </div>
+                  <Button
+                    Label={L.hall.fixed}
+                    Size="Small"
+                    Style="Secondary"
+                    data-testid="inbox-todo-fixed"
+                    onClick={() => {
+                      const r = dispatch("thread.resolve", { threadId: t.thread.id }, { quiet: true });
+                      if (r.ok) notify(say((d) => d.hall.markedFixed), "Neutral");
+                    }}
+                  />
+                </li>
+              ))}
+            </InboxGroup>
+
+            <InboxGroup title={L.hall.groupReturned} n={inbox.returned.length} testId="inbox-group-returned">
+              {inbox.returned.map((q) => (
+                <li key={q.view.task.id} className="inbox-row" data-testid="inbox-returned">
+                  <StatusPill Status="returned" />
+                  <div className="list-main">
+                    <span className="t-body-14m">{ph(q.view.titleP)}</span>
+                    <span className="label break">
+                      {q.lastReturn && q.lastReturn.comments.length ? <U>{q.lastReturn.comments.map((c) => c.text).join(lang === "en" ? "; " : "；")}</U> : f(L.hall.returnedMeta, { v: q.view.versionTag ?? "" })}
+                    </span>
+                  </div>
+                  <Button Label={L.hall.goFix} Size="Small" Style="Secondary" onClick={() => goFix(q.view.task.id)} data-testid="inbox-go-fix" />
+                </li>
+              ))}
+            </InboxGroup>
           </section>
         </div>
 
@@ -223,6 +302,63 @@ export function HallPage() {
         </div>
       </div>
       {pinOpen && world.files[pinOpen.fileId] ? <Viewer files={[world.files[pinOpen.fileId]]} startId={pinOpen.fileId} focusPinId={pinOpen.pinId} onClose={() => setPinOpen(null)} /> : null}
+      {replyTo ? <ReplyDialog view={replyTo} onClose={() => setReplyTo(null)} /> : null}
     </>
+  );
+}
+
+/** 「等我处理」的一组：小标题「链接打不开 · 1」+ 列表；没有就不显示。 */
+function InboxGroup({ title, n, testId, children }: { title: string; n: number; testId: string; children: ReactNode }) {
+  if (!n) return null;
+  return (
+    <div className="inbox-group" data-testid={testId}>
+      <p className="inbox-group-title label">
+        {title} · <span className="num">{n}</span>
+      </p>
+      <ul className="list">{children}</ul>
+    </div>
+  );
+}
+
+/** 被问到的：在大厅里直接回复。 */
+function ReplyDialog({ view, onClose }: { view: ThreadView; onClose: () => void }) {
+  const { dispatch, notify } = useGuild();
+  const { L, r: rich, err, say, ph } = useI18n();
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const send = () => {
+    const r = dispatch("thread.reply", { threadId: view.thread.id, text }, { quiet: true });
+    if (!r.ok) return setError(err(r.error));
+    notify(say((d) => d.hall.replied));
+    onClose();
+  };
+  return (
+    <Drawer
+      Type="Dialog"
+      Title={rich(L.hall.replyTitle, { who: view.by ? <U>{view.by.nickname}</U> : L.hall.someone })}
+      open
+      onClose={onClose}
+      actions={
+        <>
+          <Button Label={L.hall.cancel} Style="Secondary" onClick={onClose} />
+          <Button Label={L.hall.reply} Style="Accent" onClick={send} data-testid="inbox-reply-send" />
+        </>
+      }
+    >
+      <div className="stack" data-gap="small">
+        <div className="quote">
+          <span className="label">{ph(view.whereP)}</span>
+          <p className="break">
+            <U>{view.thread.text}</U>
+          </p>
+        </div>
+        <TextArea label={L.hall.replyLabel} placeholder={L.hall.replyPlaceholder} value={text} onChange={(e) => setText(e.target.value)} data-testid="inbox-reply-text" />
+        {error ? (
+          <p className="error-text" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </Drawer>
   );
 }

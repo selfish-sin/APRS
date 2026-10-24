@@ -13,29 +13,26 @@ import { Button } from "@/components/ui/Button";
 import { Empty, SelectField, Tag, TextArea, TextField } from "@/components/app/bits";
 import { isReviewer } from "@/domain/commands/core";
 import { formatPoints } from "@/domain/labels";
-import { Joined, U, useI18n, type I18n } from "@/i18n/I18n";
+import { Joined, U, useI18n } from "@/i18n/I18n";
 import type { Id, Quality } from "@/domain/model";
 import { fileNameFor } from "@/domain/naming";
 import { reviewQueue, type ReviewItem } from "@/domain/queries";
-import { QUALITY_OPTIONS, RETURN_TAGS } from "@/domain/rules";
+import { QUALITY_OPTIONS, RETURN_TAGS, SELF_FIX_HOURS_PER_CUT } from "@/domain/rules";
 import { Link, navigate, useRoute } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 
-function waited(i: I18n, ms: number): string {
-  const h = Math.floor(ms / 3600_000);
-  if (h < 1) return i.L.review.justIn;
-  if (h < 24) return i.f(i.L.review.waitedHours, { n: h });
-  return i.f(i.L.review.waitedDays, { n: Math.floor(h / 24) });
-}
-
 export function ReviewPage() {
   const { world, me } = useGuild();
-  const i18n = useI18n();
-  const { L, r: rich, ph } = i18n;
+  const { L, r: rich, ph, waited } = useI18n();
   const route = useRoute();
-  const queue = useMemo(() => (isReviewer(me) ? reviewQueue(world, me.id) : []), [world, me]);
+  const all = useMemo(() => (isReviewer(me) ? reviewQueue(world, me.id) : []), [world, me]);
+  const assigned = all.filter((i) => i.reviewerId === me.id);
+  // 归我审的 / 全部待审：有指定给我的就先看我的。
+  const [scope, setScope] = useState<"mine" | "all">(() => (route.query.get("scope") === "all" || !assigned.length ? "all" : "mine"));
+  const queue = scope === "mine" ? assigned : all;
   const wanted = route.query.get("task");
-  const current = queue.find((i) => i.view.task.id === wanted) ?? queue[0] ?? null;
+  // 链接里点名的那一张，就算不在当前这一栏也打开。
+  const current = queue.find((i) => i.view.task.id === wanted) ?? all.find((i) => i.view.task.id === wanted) ?? queue[0] ?? null;
   if (!isReviewer(me)) {
     return (
       <section className="card">
@@ -57,11 +54,26 @@ export function ReviewPage() {
           <h1 className="t-title-32">
             {L.review.waiting} <span className="num">{queue.length}</span>
           </h1>
+          <p className="muted">{L.review.lead}</p>
+        </div>
+        <div className="page-head-actions">
+          <div className="seg" role="radiogroup" aria-label={L.review.scope}>
+            {(
+              [
+                ["mine", L.review.scopeMine, assigned.length],
+                ["all", L.review.scopeAll, all.length],
+              ] as const
+            ).map(([k, label, n]) => (
+              <button key={k} type="button" role="radio" aria-checked={scope === k} aria-pressed={scope === k} onClick={() => setScope(k)} data-testid={`review-scope-${k}`}>
+                {label} <span className="num">{n}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-      {queue.length === 0 ? (
+      {queue.length === 0 && !current ? (
         <section className="card">
-          <Empty>{L.review.empty}</Empty>
+          <Empty>{scope === "mine" && all.length ? L.review.mineEmpty : L.review.empty}</Empty>
         </section>
       ) : (
         <div className="review-layout">
@@ -79,7 +91,12 @@ export function ReviewPage() {
                   <span className="num label">v{String(item.submission.versionNo).padStart(2, "0")}</span>
                 </span>
                 <span className="label">
-                  <U>{item.view.project.name}</U> · {item.submitter ? <U>{item.submitter.nickname}</U> : item.view.task.outsourced ? rich(L.review.outsourced, { name: <U>{item.view.task.outsourceName ?? ""}</U> }) : L.review.someone} · {waited(i18n, item.waitingMs)}
+                  <U>{item.view.project.name}</U> ·{" "}
+                  {rich(L.review.queueMeta, {
+                    who: item.submitter ? <U>{item.submitter.nickname}</U> : item.view.task.outsourced ? rich(L.review.outsourced, { name: <U>{item.view.task.outsourceName ?? ""}</U> }) : L.review.someone,
+                    waited: waited(item.waitingMs),
+                  })}{" "}
+                  · {item.reviewerId ? rich(L.review.reviewerIs, { name: <U>{world.members[item.reviewerId]?.nickname ?? ""}</U> }) : L.review.reviewerAdmin}
                 </span>
               </button>
             ))}
@@ -183,13 +200,26 @@ function ReviewPanel({ item, next }: { item: ReviewItem; next: ReviewItem | null
       {lastReview && lastReview.comments.length ? (
         <div className="stack" data-gap="small">
           <span className="label">{f(L.review.lastNotes, { v: `v${String(item.history[item.history.length - 1].submission.versionNo).padStart(2, "0")}`, verdict: L.labels.verdict[lastReview.verdict] })}</span>
-          <ul className="comments">
+          <ul className="comments note-block" data-tone="danger" data-testid="review-last-notes">
             {lastReview.comments.map((c, i) => (
               <li key={i}>
                 <span className="label"><Joined parts={[c.layer ? f(L.review.layerOpt, { layer: c.layer }) : null, c.sheets ? rich(L.review.sheetNo, { n: <U>{c.sheets}</U> }) : null, c.tag ? tag(c.tag) : null]} fallback={L.review.comment} /></span>
                 <span className="break">
                   <U>{c.text}</U>
                 </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {item.todos.length ? (
+        <div className="stack" data-gap="small">
+          <span className="label">{L.review.todosTitle}</span>
+          <ul className="comments note-block" data-tone="warning" data-testid="review-todos">
+            {item.todos.map((t) => (
+              <li key={t.id}>
+                <span className="break">{rich(L.review.todoLine, { text: <U>{t.text.replace(/^要补：/, "")}</U> })}</span>
               </li>
             ))}
           </ul>
@@ -222,14 +252,14 @@ function ReviewPanel({ item, next }: { item: ReviewItem; next: ReviewItem | null
       {mode !== "return" ? (
         <div className="stack" data-gap="small">
           <span className="label">{L.review.quality}</span>
-          <div className="skill-options" role="radiogroup" aria-label={L.review.quality} style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+          <div className="chips quality-pills" role="radiogroup" aria-label={L.review.quality}>
             {QUALITY_OPTIONS.map((q) => (
-              <button key={q.value} type="button" className="option" role="radio" aria-checked={quality === q.value} aria-pressed={quality === q.value} onClick={() => setQuality(q.value)} data-testid={`quality-${q.label}`}>
-                <span className="num t-body-14m">{q.label}</span>
-                <span className="muted label">{L.review.qualityHint[q.label as "0.5" | "1.0" | "1.2"] ?? q.hint}</span>
+              <button key={q.value} type="button" className="ui-chip" role="radio" aria-checked={quality === q.value} aria-pressed={quality === q.value} onClick={() => setQuality(q.value)} data-testid={`quality-${q.label}`}>
+                {f(L.review.qualityPill, { q: q.label, hint: L.review.qualityHint[q.label as "0.5" | "1.0" | "1.2"] ?? q.hint })}
               </button>
             ))}
           </div>
+          <PointsLine item={item} quality={quality} selfFix={mode === "fix_pass"} />
         </div>
       ) : null}
 
@@ -285,6 +315,36 @@ function ReviewPanel({ item, next }: { item: ReviewItem; next: ReviewItem | null
         ) : null}
       </div>
     </section>
+  );
+}
+
+/** 通过前公开活力点怎么算（随质量系数实时变）：「北窗 会拿到 +36.0 活力点 = 1.5h × 20 张 ×（1 掌控 + 0.2 熟练度）× 1 质量」。 */
+function PointsLine({ item, quality, selfFix }: { item: ReviewItem; quality: number; selfFix: boolean }) {
+  const { L, f, r: rich, num, unit } = useI18n();
+  const p = item.points;
+  const q = num(quality);
+  const pts = formatPoints(p.pointsAt(quality), true);
+  const calc =
+    p.fixed !== null
+      ? f(L.review.calcFixed, { fixed: num(p.fixed), q })
+      : f(L.review.calc, {
+          rate: p.per === 1 ? f(L.review.calcRate, { tn: num(p.tn) }) : f(L.review.calcRatePer, { tn: num(p.tn), per: num(p.per) }),
+          w: num(p.workload),
+          unit: unit(p.unit, p.group, p.workload),
+          control: num(p.control),
+          sign: p.skill < 0 ? "−" : "+",
+          skill: num(Math.abs(p.skill)),
+          q,
+        });
+  return (
+    <div className="points-line" data-testid="review-points">
+      {p.outsourced || !p.member ? (
+        <span>{L.review.outsourcedNoPoints}</span>
+      ) : (
+        <span>{rich(L.review.pointsLine, { who: <U>{p.member.nickname}</U>, points: <strong className="num">{pts}</strong>, calc })}</span>
+      )}
+      {selfFix ? <span>{f(L.review.selfFixLine, { points: formatPoints(SELF_FIX_HOURS_PER_CUT, true), h: num(SELF_FIX_HOURS_PER_CUT) })}</span> : null}
+    </div>
   );
 }
 

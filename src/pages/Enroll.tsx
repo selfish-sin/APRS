@@ -2,14 +2,13 @@
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
-import { Empty, Tag } from "@/components/app/bits";
+import { Tag } from "@/components/app/bits";
 import { QuestCard } from "@/components/app/quest";
-import { StageShape } from "@/components/app/stage";
 import { skillLabel } from "@/domain/labels";
 import { stageText } from "@/domain/templates";
 import { U, useI18n } from "@/i18n/I18n";
 import { GROUP, PHASE, type Group, type Skill } from "@/domain/model";
-import { enrollOptions, enrollmentsOf, questOf, taskById } from "@/domain/queries";
+import { enrollOptions, enrollmentsOf, questOf, taskById, type EnrollOption } from "@/domain/queries";
 import { DEFAULT_MAX_ACTIVE, SKILL_OPTIONS } from "@/domain/rules";
 import { GROUPS } from "@/domain/templates";
 import { navigate, useRoute } from "@/lib/router";
@@ -17,7 +16,7 @@ import { useGuild } from "@/lib/store";
 
 export function EnrollPage() {
   const { world, me, dispatch, notify } = useGuild();
-  const { L, f, lang, stageName, stage: stageEl, rate } = useI18n();
+  const { L, f, r: rich, lang, stageName, stage: stageEl, rate } = useI18n();
   const route = useRoute();
   const qGroup = route.query.get("group");
   const [group, setGroup] = useState<Group>(GROUP.includes(qGroup as Group) ? (qGroup as Group) : "animation");
@@ -57,6 +56,42 @@ export function EnrollPage() {
         </div>
       </div>
 
+      {mine.length ? (
+        <section className="card" aria-labelledby="mine-title" data-testid="enroll-mine">
+          <div className="card-head">
+            <h2 id="mine-title" className="t-heading-18">
+              {L.enroll.mine}
+            </h2>
+            <span className="label">{f(L.enroll.mineCount, { n: mine.length })}</span>
+          </div>
+          <div className="chips">
+            {mine.map((e) => {
+              const t = GROUPS[e.group].stages.find((s) => s.key === e.stageKey);
+              const custom = !t ? Object.values(world.stages).find((s) => s.templateKey === e.stageKey && !s.archivedAt) : undefined;
+              const stageLike = t ? { templateKey: t.key, name: t.name } : custom ?? { templateKey: e.stageKey, name: e.stageKey };
+              return (
+                <span key={e.id} className="mine-chip" data-testid="enroll-mine-chip">
+                  <span>
+                    {rich(L.enroll.mineChip, { group: L.labels.group[e.group], stage: stageEl(e.group, stageLike), skill: skillLabel(e.skill), n: e.maxActive })}
+                    {e.assigned ? L.enroll.mineAssigned : (e.origin ?? "self") === "claimed" ? L.enroll.mineClaimed : ""}
+                  </span>
+                  <button
+                    type="button"
+                    className="inline-link label"
+                    onClick={() => {
+                      const r = dispatch("enroll.remove", { enrollmentId: e.id });
+                      if (r.ok) notify(f(L.enroll.cancelled, { stage: stageName(e.group, stageLike) }), "Neutral");
+                    }}
+                  >
+                    {L.enroll.leave}
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
       <section className="stack" data-gap="small" aria-label={L.enroll.step1}>
         <h2 className="t-heading-18">{L.enroll.step1Title}</h2>
         <div className="group-tiles">
@@ -91,36 +126,36 @@ export function EnrollPage() {
               <span className="label">
                 {L.labels.phaseLevel[phase]} · {L.labels.phase[phase]}
               </span>
-              <div className="roles">
+              <div className="enroll-grid">
                 {list.map((o) => {
                   const st = stageText(group, { templateKey: o.template.key, name: o.template.name, indicator: { receive: o.template.receive, deliver: o.template.deliver, handTo: o.template.handTo }, note: o.template.note ?? null }, lang);
                   return (
-                    <button key={o.template.key} type="button" className="role-card" aria-pressed={stageKey === o.template.key} onClick={() => pick(o.template.key)} data-testid={`role-${o.template.key}`}>
-                      <span className="role-card-top">
-                        <StageShape kind={o.template.kind} hub={o.template.hub} state={o.open ? "open" : "locked"} size={28} />
-                        <span className="role-card-name">{st.name}</span>
-                        {o.mine ? (
-                          <Tag tone="inverse">
-                            {o.mine.assigned ? L.enroll.assigned : (o.mine.origin ?? "self") === "claimed" ? L.enroll.claimed : L.enroll.enrolled} {skillLabel(o.mine.skill)}
-                          </Tag>
-                        ) : null}
-                        {o.locked ? <Tag tone="warning">{L.enroll.lockedTag}</Tag> : null}
-                      </span>
-                      <span className="role-card-numbers">
-                        <span>
-                          <span className="num">{o.open}</span> <span className="label">{L.enroll.openCount}</span>
+                    <button key={o.template.key} type="button" className="ecard" aria-pressed={stageKey === o.template.key} data-locked={o.lockedForMe ? "yes" : undefined} onClick={() => pick(o.template.key)} data-testid={`role-${o.template.key}`}>
+                      <span className="ecard-top">
+                        <span className="ecard-code">{o.template.code ?? L.enroll.projectCode}</span>
+                        <span className="kind-tag">
+                          {L.labels.stageKind[o.template.kind]}
+                          {o.template.hub && o.template.kind !== "hub" ? L.enroll.hubSuffix : ""}
                         </span>
-                        <span>
-                          <span className="num">{o.enrolled}</span> <span className="label">{L.enroll.peopleCount}</span>
+                        {o.locked ? <span className="lock-tag">{L.enroll.lockedTag}</span> : null}
+                      </span>
+                      {o.mine ? (
+                        <span className="ecard-badge done-tag">
+                          {o.mine.assigned ? L.enroll.assigned : (o.mine.origin ?? "self") === "claimed" ? L.enroll.claimed : L.enroll.enrolled} {skillLabel(o.mine.skill)}
+                        </span>
+                      ) : null}
+                      <span className="ecard-name">{st.name}</span>
+                      <span className="ecard-desc">{st.deliver}</span>
+                      <span className="ecard-foot">
+                        <span className="ecard-open">
+                          <span className="num">{o.open}</span>
+                          <small>{L.enroll.openCount}</small>
+                        </span>
+                        <span className="ecard-meta">
+                          {o.template.adminSet ? `${L.labels.adminSet.trim().replace(/^[（(]|[）)]$/g, "")} · ` : ""}
+                          {rate({ tn: o.tn, per: o.per, unit: o.template.unit }, group)}
                         </span>
                       </span>
-                      <span className="label">
-                        {L.labels.stageKind[o.template.kind]}
-                        {o.template.hub && o.template.kind !== "hub" ? L.enroll.hubSuffix : ""} · {rate({ tn: o.tn, per: o.per, unit: o.template.unit }, group)}
-                        {o.template.adminSet ? L.labels.adminSet : ""}
-                      </span>
-                      <span className="muted label break">{f(L.enroll.receiveDeliver, { receive: st.receive, deliver: st.deliver })}</span>
-                      {st.note ? <span className="label">{st.note}</span> : null}
                     </button>
                   );
                 })}
@@ -130,7 +165,8 @@ export function EnrollPage() {
         })}
       </section>
 
-      <section className="card" aria-label={L.enroll.step3}>
+      <section className="card enroll-detail" aria-label={L.enroll.step3} data-testid="enroll-detail">
+        {picked ? <PickedStage group={group} option={picked} /> : <p className="muted">{L.enroll.chosenNone}</p>}
         <h2 className="t-heading-18">{f(L.enroll.step3Title, { what: picked ? f(L.enroll.howGood, { stage: stageName(group, { templateKey: picked.template.key, name: picked.template.name }) }) : L.enroll.pickFirst })}</h2>
         <div className="skill-options" role="radiogroup" aria-label={L.enroll.skill}>
           {SKILL_OPTIONS.map((s) => (
@@ -169,43 +205,6 @@ export function EnrollPage() {
         {picked?.lockedForMe ? <p className="label">{L.enroll.lockedForMe}</p> : null}
       </section>
 
-      <section className="card" aria-labelledby="mine-title">
-        <h2 id="mine-title" className="t-heading-18">
-          {L.enroll.mine} <span className="count">{mine.length}</span>
-        </h2>
-        {mine.length === 0 ? (
-          <Empty>{L.enroll.mineEmpty}</Empty>
-        ) : (
-          <ul className="list">
-            {mine.map((e) => {
-              const t = GROUPS[e.group].stages.find((s) => s.key === e.stageKey);
-              const custom = !t ? Object.values(world.stages).find((s) => s.templateKey === e.stageKey && !s.archivedAt) : undefined;
-              const stageLike = t ? { templateKey: t.key, name: t.name } : custom ?? { templateKey: e.stageKey, name: e.stageKey };
-              return (
-                <li key={e.id}>
-                  <div className="list-main">
-                    <span className="t-body-14m">{stageEl(e.group, stageLike)}</span>
-                    <span className="label">
-                      {f(L.enroll.mineLine, { group: L.labels.group[e.group], skill: skillLabel(e.skill), n: e.maxActive })}
-                      {e.assigned ? L.enroll.mineAssigned : (e.origin ?? "self") === "claimed" ? L.enroll.mineClaimed : ""}
-                    </span>
-                  </div>
-                  <Button
-                    Label={L.enroll.cancel}
-                    Size="Small"
-                    Style="Ghost"
-                    onClick={() => {
-                      const r = dispatch("enroll.remove", { enrollmentId: e.id });
-                      if (r.ok) notify(f(L.enroll.cancelled, { stage: stageName(e.group, stageLike) }), "Neutral");
-                    }}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-
       {gotQuest ? (
         <Drawer
           Type="Dialog"
@@ -223,5 +222,26 @@ export function EnrollPage() {
         </Drawer>
       ) : null}
     </>
+  );
+}
+
+/** 选中的环节：名字 · 类型 · 几张可接 · Tn · 几人报到，收什么 / 交什么 / 说明（不丢）。 */
+function PickedStage({ group, option: o }: { group: Group; option: EnrollOption }) {
+  const { L, f, lang, rate } = useI18n();
+  const st = stageText(group, { templateKey: o.template.key, name: o.template.name, indicator: { receive: o.template.receive, deliver: o.template.deliver, handTo: o.template.handTo }, note: o.template.note ?? null }, lang);
+  const kind = `${L.labels.stageKind[o.template.kind]}${o.template.hub && o.template.kind !== "hub" ? L.enroll.hubSuffix : ""}`;
+  return (
+    <div className="stack" data-gap="small" data-testid="enroll-picked">
+      <div className="row" data-justify="between">
+        <strong className="t-body-14m">{f(L.enroll.chosen, { stage: st.name, kind })}</strong>
+        {o.locked ? <span className="lock-tag">{L.enroll.lockedTag}</span> : null}
+      </div>
+      <span className="label">
+        {f(L.enroll.chosenMeta, { open: o.open, rate: rate({ tn: o.tn, per: o.per, unit: o.template.unit }, group), n: o.enrolled })}
+        {o.template.adminSet ? L.labels.adminSet : ""}
+      </span>
+      <span className="muted label break">{f(L.enroll.receiveDeliver, { receive: st.receive, deliver: st.deliver })}</span>
+      {st.note ? <span className="label">{st.note}</span> : null}
+    </div>
   );
 }

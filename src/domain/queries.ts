@@ -42,11 +42,11 @@ import type {
 import { ACTIVE_STATUS, PHASE } from "./model";
 import { EXTRA_KIND_TEXT, cutCode, cutCode2, fileNameFor, folderFor, stageParam, taskLabel, taskLabelP } from "./naming";
 import { phrase, phraseText, t2, uc, type Phrase, type Text2, type TextParam } from "./text";
-import { HOURS_PER_DAY, deadlineFactorOf, hoursOf, levelOf, rateFor, rewardOf, stageLocked, type LevelInfo } from "./rules";
+import { HOURS_PER_DAY, deadlineFactorOf, hoursOf, levelOf, rateFor, rewardOf, stageLocked, taskPoints, taskRate, type LevelInfo } from "./rules";
 import { GROUPS, groupTemplate, type StageTemplate } from "./templates";
 import { isAdmin, isReviewer } from "./commands/core";
 import { linksOf } from "./commands/links";
-import { positionTemplate } from "./positions";
+import { PROJECT_TEMPLATES, positionTemplate } from "./positions";
 
 // ---------------------------------------------------------------------------
 // 索引（每个世界状态建一次）
@@ -653,6 +653,12 @@ export interface ReviewItem {
   view: TaskView;
   submission: SubmissionRow;
   submitter: MemberRow | null;
+  /** 这一张归谁审（环节或新任务上写的审核员；没写 = 管理员）。 */
+  reviewerId: Id | null;
+  /** 这一卡、这个环节拍板后要补的（还没补好）。 */
+  todos: ThreadRow[];
+  /** 通过时活力点怎么算（审核台上公开算式）。 */
+  points: PointsPreview;
   /** 之前每一版和它的审核。 */
   history: { submission: SubmissionRow; review: ReviewRow | null }[];
   waitingMs: number;
@@ -681,12 +687,59 @@ export function reviewItem(state: WorldState, task: TaskRow): ReviewItem | null 
   const submission = subs[subs.length - 1];
   if (!view || !submission) return null;
   const reviews = reviewsOf(state, task.id);
+  const cut = view.cut;
+  const todos = indexOf(state).threads.filter((t) => t.kind === "todo" && t.status === "open" && !t.archivedAt && !!cut && t.cutId === cut.id && (!t.stageKey || t.stageKey === view.stage.templateKey));
   return {
     view,
     submission,
     submitter: memberById(state, submission.byMemberId) ?? null,
+    reviewerId: task.extra?.reviewerId ?? view.stage.reviewerId ?? null,
+    todos,
+    points: pointsPreview(state, task, submission.byMemberId ?? null),
     history: subs.slice(0, -1).map((s) => ({ submission: s, review: reviews.find((r) => r.submissionId === s.id) ?? null })),
     waitingMs: Math.max(0, msBetween(submission.at, nowOf(state))),
+  };
+}
+
+/**
+ * 通过时活力点的算式（和 task.review 记账用的是同一套公式）：
+ * 活力点 = Tn × 工作量 ×（掌控 + 熟练度）× 质量；固定活力点的新任务 = 固定值 × 质量；外包的不记。
+ */
+export interface PointsPreview {
+  member: MemberRow | null;
+  outsourced: boolean;
+  fixed: number | null;
+  tn: number;
+  per: number;
+  workload: number;
+  unit: StageRow["unit"];
+  group: Group;
+  control: number;
+  skill: number;
+  hours: number;
+  /** 按这个质量系数会记多少。 */
+  pointsAt: (quality: number) => number;
+}
+
+export function pointsPreview(state: WorldState, task: TaskRow, memberId: Id | null): PointsPreview {
+  const stage = stageById(state, task.stageId)!;
+  const group = projectById(state, task.projectId)?.group ?? "animation";
+  const rate = taskRate(stage, task);
+  const skill = memberId ? skillOf(state, memberId, group, stage.templateKey) : 0;
+  const fixed = task.extra && task.extra.fixedPoints !== null ? task.extra.fixedPoints : null;
+  return {
+    member: memberId ? memberById(state, memberId) ?? null : null,
+    outsourced: !!task.outsourced || !memberId,
+    fixed,
+    tn: rate.tn,
+    per: rate.per > 0 ? rate.per : 1,
+    workload: task.workload,
+    unit: stage.unit,
+    group,
+    control: stage.control,
+    skill,
+    hours: hoursOf(rate, task.workload),
+    pointsAt: (q) => taskPoints(stage, task, skill, q),
   };
 }
 
@@ -1943,4 +1996,45 @@ export function scheduleOf(state: WorldState, projectId: Id): Schedule | null {
   const weeks = Math.max(planWeeks, today, ...rows.map((r) => Math.max(r.plan.end, r.actual?.end ?? 0)));
   const weekStarts = Array.from({ length: weeks }, (_, i) => addDays(project.startOn, i * cycleDays));
   return { project, cycleDays, weeks, today, weekStarts, phases: PHASE.map((phase) => ({ phase, rows: rows.filter((r) => r.stage.phase === phase) })) };
+}
+
+// ---------------------------------------------------------------------------
+// 零日：开工检查
+// ---------------------------------------------------------------------------
+
+export interface StartPreview {
+  /** 结构填好了几卡。 */
+  cuts: number;
+  /** 开工会生成几张任务（按模板的环节：整个项目一张 · 每卡一张 · 每层一张）。 */
+  tasks: number;
+  /** 还没人的职位（模板里的名字 / 自己加的名字）。 */
+  unfilled: { key: string; name: Text2 | string; custom: boolean }[];
+  /** 人员表里填了人的成员，开工时会自动报到的有几人。 */
+  autoEnroll: number;
+  /** 能不能开工（结构至少一卡）。 */
+  ready: boolean;
+}
+
+export function startPreview(state: WorldState, projectId: Id): StartPreview | null {
+  const p = projectById(state, projectId);
+  if (!p) return null;
+  const plan = p.cutsPlan ?? [];
+  const tpl = PROJECT_TEMPLATES[p.template ?? "anim_standard"];
+  let tasks = 0;
+  if (tpl.stages)
+    for (const t of groupTemplate(p.group).stages) {
+      if (t.grain === "project") tasks += 1;
+      else if (t.grain === "cut") tasks += plan.length;
+      else tasks += plan.reduce((n, c) => n + c.layers.length, 0);
+    }
+  const staff = p.staff ?? [];
+  const unfilled = staff
+    .filter((pos) => !pos.people.length)
+    .map((pos) => {
+      const t = positionTemplate(p.template, pos.key);
+      return pos.custom ? { key: pos.key, name: pos.custom.name, custom: true } : { key: pos.key, name: t ? t.name : pos.key, custom: !t };
+    });
+  const members = new Set<Id>();
+  for (const pos of staff) if (pos.stageKeys.length) for (const x of pos.people) if ("memberId" in x) members.add(x.memberId);
+  return { cuts: plan.length, tasks, unfilled, autoEnroll: members.size, ready: plan.length > 0 };
 }
