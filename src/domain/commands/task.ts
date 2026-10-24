@@ -24,7 +24,7 @@ import {
   taskRate,
 } from "../rules";
 import { stageTemplate } from "../templates";
-import { guarded, insert, isAdmin, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustMember, ok, optInteger, optText, reject, round1, update, type Ctx } from "./core";
+import { guarded, insert, isAdmin, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustMember, ok, optInteger, optText, reject, rejectT, round1, update, type Ctx } from "./core";
 import { optFileName, optLink } from "./validate";
 import { mustLinks } from "./links";
 
@@ -101,7 +101,7 @@ export function nextOpenTask(rm: ReadModel, group: Group, stageKey: string, memb
   const stageIds = new Set(
     rm
       .where("stages", { templateKey: stageKey })
-      .filter((s) => projects.has(s.projectId))
+      .filter((s) => projects.has(s.projectId) && !s.disabled)
       .filter((s) => !memberId || mayWork(rm, memberId, group, s))
       .map((s) => s.id)
   );
@@ -142,7 +142,8 @@ export const enroll = guarded<EnrollInput>((rm, input, ctx) => {
     member = mustGet(rm, ctx, "members", input.memberId, "成员");
   }
   const group = mustBeOneOf(input.group, GROUP, "组");
-  const t = stageTemplate(group, input.stageKey);
+  // 模板里的环节，或者管理员在某个项目里自己加的环节。
+  const t = stageTemplate(group, input.stageKey) ?? (rm.where("stages", { templateKey: input.stageKey }).some((s) => rm.get("projects", s.projectId)?.group === group) ? { key: input.stageKey } : undefined);
   if (!t) reject("not_found", "这个组里没有这个环节");
   if (!SKILL.includes(input.skill as Skill)) reject("invalid", "熟练度选一个：+0.5 / +0.2 / 0 / −0.2");
   const skill = input.skill as Skill;
@@ -207,6 +208,7 @@ export const claimTask = guarded<ClaimInput>((rm, input, ctx) => {
     const group = groupOf(rm, task);
     const label = labelOf(rm, task, stage);
     if (task.status !== "open") reject("state", `${label}现在不能接（${task.status === "locked" ? "上游还没完" : "已经有人接了或做完了"}）`);
+    if (stage.disabled) rejectT("state", "stage_disabled", { stage: stage.name });
     if (!mayWork(rm, me.id, group, stage)) reject("forbidden", LOCKED_STAGE_MESSAGE);
     const changes: Change[] = [];
     // 不止能接自己报到的环节：第一次认领别的环节时自动报到（熟练度 0，「自己认领」）。
@@ -222,7 +224,7 @@ export const claimTask = guarded<ClaimInput>((rm, input, ctx) => {
   if (mine.length === 0 && input.stageKey && input.group) {
     // 认领一个还没报到的环节：先看有没有能接的，有就自动报到再接。
     const group = mustBeOneOf(input.group, GROUP, "组");
-    if (!stageTemplate(group, input.stageKey)) reject("not_found", "这个组里没有这个环节");
+    if (!stageTemplate(group, input.stageKey) && !rm.where("stages", { templateKey: input.stageKey }).length) reject("not_found", "这个组里没有这个环节");
     const anyOpen = rm.where("stages", { templateKey: input.stageKey }).filter((s) => rm.get("projects", s.projectId)?.group === group);
     if (anyOpen.length && anyOpen.every((s) => !mayWork(rm, me.id, group, s))) reject("forbidden", LOCKED_STAGE_MESSAGE);
     const next = nextOpenTask(rm, group, input.stageKey, me.id);
@@ -370,13 +372,35 @@ export const reclaimTask = guarded<ReclaimInput>((rm, input, ctx) => {
 
 export interface ReopenInput {
   taskId: Id;
+  /** 打回重做（通过的任务）时的意见。 */
+  comments?: ReviewCommentInput[];
 }
 
-/** 收回的任务重新放出来，回到「可接」（收回之前它已经放出来过，不再等上游）。 */
+/**
+ * 两种用法：
+ *   - 收回的任务重新放出来，回到「可接」（收回之前它已经放出来过，不再等上游）
+ *   - 打回重做（验收时，SPEC §12.2）：通过的任务回到退回，带意见；原来的活力点不扣，重做通过后按新的算
+ */
 export const reopenTask = guarded<ReopenInput>((rm, input, ctx) => {
-  mustAdmin(rm, ctx, "重新放出任务");
+  const me = mustAdmin(rm, ctx, "重新放出任务");
   const task = mustGet(rm, ctx, "tasks", input.taskId, "任务");
-  if (task.status !== "reclaimed") reject("state", "只有收回的任务才能重新放出");
+  if (task.status === "passed") {
+    const stage = stageOf(rm, ctx, task);
+    const cut = task.cutId ? rm.get("cuts", task.cutId) ?? null : null;
+    const comments = mustComments(input.comments, cut?.layers.map((l) => l.name) ?? []);
+    if (!comments.length) rejectT("invalid", "reopen_need_comment");
+    const subs = rm.where("submissions", { taskId: task.id }).sort((a, b) => a.versionNo - b.versionNo);
+    const last = subs[subs.length - 1];
+    const changes: Change[] = [];
+    if (last) changes.push(insert(ctx, "reviews", { taskId: task.id, submissionId: last.id, verdict: "return", quality: null, comments, byMemberId: me.id, at: ctx.worldNow }).change);
+    // 回到最后交这一版的人手上（审核员自修出的版本：回到原来做的人）。
+    const back = task.outsourced ? null : subs.filter((s) => !s.selfFix).pop()?.byMemberId ?? task.assigneeId;
+    const grace = Math.max(RETURN_GRACE_MIN_HOURS, deadlineHours(stage, task, rulesOf(rm, ctx)) * RETURN_GRACE_SHARE);
+    const c = update("tasks", task, { status: back || task.outsourced ? "returned" : "open", assigneeId: back ?? null, passedAt: null, dueAt: addHours(ctx.worldNow, grace), claimedAt: task.claimedAt ?? ctx.worldNow, redo: true });
+    if (c) changes.push(c);
+    return ok(changes, { taskId: task.id });
+  }
+  if (task.status !== "reclaimed") rejectT("state", "reopen_not_passed");
   const c = update("tasks", task, { status: "open" });
   return ok(c ? [c] : [], { taskId: task.id });
 });
@@ -571,7 +595,7 @@ export const reviewTask = guarded<ReviewInput>((rm, input, ctx) => {
   }
 
   const acc = new TaskPatches(rm);
-  acc.set(task, { status: "passed", versions: version, passedAt: ctx.worldNow, dueAt: task.dueAt });
+  acc.set(task, { status: "passed", versions: version, passedAt: ctx.worldNow, dueAt: task.dueAt, ...(task.redo ? { redo: false } : {}) });
   unlockReady(rm, acc, task.projectId);
   // 「要等它」的新任务通过了：发布时锁回去的那几张放回可接（别的新任务还挡着的除外）。
   if (task.extra?.blocking && task.extra.relocked?.length) {

@@ -4,6 +4,7 @@ import { FilesNotice, StorageNotices, StorageUiProvider } from "@/components/sto
 import { AppShell, Toasts } from "@/components/app/shell";
 import { navigate, useRoute, useScrollTopOnRoute } from "@/lib/router";
 import { FilesProvider } from "@/lib/files/FilesProvider";
+import { I18nProvider } from "@/i18n/I18n";
 import { StoreProvider, useStore } from "@/lib/store";
 import { AdminPage } from "@/pages/Admin";
 import { BackupPage } from "@/pages/Backup";
@@ -17,6 +18,7 @@ import { LibraryIndexPage, LibraryPage } from "@/pages/Library";
 import { MemberPage, MembersPage } from "@/pages/Member";
 import { NotFound } from "@/pages/NotFound";
 import { ProjectPage } from "@/pages/Project";
+import { ProjectSettingsPage } from "@/pages/ProjectSetup";
 import { ProjectsPage } from "@/pages/Projects";
 import { ReviewPage } from "@/pages/Review";
 
@@ -47,7 +49,7 @@ function Page() {
     case "projects":
       return <ProjectsPage />;
     case "project":
-      return <ProjectPage />;
+      return route.segments[2] === "settings" ? <ProjectSettingsPage /> : <ProjectPage />;
     case "cut":
       return <CutPage />;
     case "review":
@@ -100,6 +102,7 @@ function Routes() {
 export function App() {
   return (
     <StoreProvider>
+      <I18nProvider>
       <FilesProvider>
         <StorageUiProvider>
           <Routes />
@@ -108,6 +111,7 @@ export function App() {
           <Toasts />
         </StorageUiProvider>
       </FilesProvider>
+      </I18nProvider>
     </StoreProvider>
   );
 }

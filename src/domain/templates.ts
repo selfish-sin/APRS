@@ -527,3 +527,72 @@ export function groupTemplate(group: Group): GroupTemplate {
 export function stageTemplate(group: Group, key: string): StageTemplate | undefined {
   return GROUPS[group]?.stages.find((s) => s.key === key);
 }
+
+/** 模板里环节的英文（SPEC §16：模板自带中英两种名字；管理员自己起的环节名就是他写的那个）。 */
+export interface StageEn {
+  name: string;
+  receive: string;
+  deliver: string;
+  handTo: string;
+  note?: string;
+}
+
+export const STAGE_EN: Record<Group, Record<string, StageEn>> = {
+  animation: {
+    plan: { name: "Planning", receive: "Ideas, references and budget", deliver: "Project plan: what, how long, how many people, when it's due", handTo: "Script, Art design" },
+    script: { name: "Script", receive: "Project plan", deliver: "Script", handTo: "Storyboard", note: "Script and storyboard together are 4 h per 15 s, half each" },
+    storyboard: { name: "Storyboard", receive: "Script", deliver: "Storyboard: framing and seconds for every cut", handTo: "Layout, Sound", note: "Script and storyboard together are 4 h per 15 s, half each" },
+    art: { name: "Art design (characters / settings)", receive: "Project plan", deliver: "Character and setting sheets", handTo: "Color design, Layout" },
+    color_design: { name: "Color design", receive: "Character and setting sheets", deliver: "Color model sheets", handTo: "Coloring" },
+    layout: { name: "Layout", receive: "Storyboard and settings sheets", deliver: "Layout for this cut", handTo: "Key animation (key counts and dispatch are set here), Backgrounds", note: "Once the storyboard and settings are done, split cuts, set key animation workloads and dispatch here" },
+    key: { name: "Key animation", receive: "Layout for this cut", deliver: "Key drawings and timing sheet", handTo: "Animation direction" },
+    key_check: { name: "Animation direction", receive: "Key drawings and timing for this cut", deliver: "Corrected keys; in-between counts set", handTo: "Cleanup, In-between (in-between workloads and dispatch are set here)", note: "A review stage and a hub: in-between workloads are set here" },
+    clean: { name: "Cleanup", receive: "Corrected keys", deliver: "Clean lines, one file per layer", handTo: "In-between" },
+    inbetween: { name: "In-between", receive: "Clean lines and the key timing sheet", deliver: "In-betweens for this layer (by drawing count), layers kept separate", handTo: "In-between check" },
+    inbetween_check: { name: "In-between check", receive: "In-betweens for layers A / B of this cut", deliver: "Checked animation; coloring counts set", handTo: "Color export, Coloring (coloring is dispatched here)", note: "A review stage and a hub: coloring is dispatched here" },
+    color_out: { name: "Color export (film files)", receive: "Checked animation", deliver: "Film files for coloring", handTo: "Coloring" },
+    paint: { name: "Coloring (ink & paint)", receive: "Film files and color model sheets", deliver: "This layer colored: add color layers per drawing inside the existing A / B animation folders", handTo: "Color check" },
+    paint_check: { name: "Color check", receive: "Colored animation for this cut", deliver: "Checked coloring (gaps, color lines and layers all checked)", handTo: "Export" },
+    export: { name: "Export (color · lines · layers)", receive: "Checked color files", deliver: "Lines, color and special layers exported separately, packed in one folder", handTo: "Compositing" },
+    background: { name: "Backgrounds", receive: "Layout for this cut", deliver: "Background art", handTo: "Compositing", note: "Can start right after Layout, alongside key animation" },
+    composite: { name: "Compositing", receive: "Exported frames and backgrounds", deliver: "Composited shot", handTo: "Effects · grading", note: "Frames and backgrounds come together here" },
+    fx: { name: "Effects · grading", receive: "Composited shot", deliver: "Shot with effects and grading", handTo: "Final output" },
+    sound: { name: "Sound (voice · SFX)", receive: "Storyboard", deliver: "Voice and sound effect files", handTo: "Final output", note: "Can start after the storyboard, alongside the picture" },
+    final: { name: "Final output", receive: "All shots and sound", deliver: "Final film", handTo: "Release", note: "Picture and sound come together here" },
+  },
+  video: {
+    topic: { name: "Topic", receive: "Everyone's ideas and recent work", deliver: "How many episodes this season, what each covers, who makes them", handTo: "Writing", note: "Episode count and roles are set here" },
+    draft: { name: "Writing", receive: "This episode's topic", deliver: "Script", handTo: "Storyboard / shot list" },
+    vboard: { name: "Storyboard / shot list", receive: "Script", deliver: "Storyboard and shot list", handTo: "Materials" },
+    material: { name: "Materials", receive: "Storyboard and shot list", deliver: "Recorded drawing sessions and artwork to show", handTo: "Recording", note: "Record drawing sessions · artwork to show" },
+    record: { name: "Recording (explanations)", receive: "Script and materials", deliver: "Recorded explanations", handTo: "Rough cut" },
+    rough: { name: "Rough cut", receive: "Recordings and materials", deliver: "Rough cut", handTo: "Fine cut" },
+    fine: { name: "Fine cut", receive: "Rough cut", deliver: "Fine cut", handTo: "Voice & subtitles" },
+    voice: { name: "Voice & subtitles", receive: "Fine cut", deliver: "Version with voice-over and subtitles", handTo: "Packaging & effects" },
+    package: { name: "Packaging & effects", receive: "Subtitled version", deliver: "Version with titles, packaging and effects", handTo: "Screening" },
+    screening: { name: "Screening", receive: "Packaged final cut", deliver: "Approved final cut", handTo: "Publishing", note: "A review stage and a hub" },
+    publish: { name: "Publishing", receive: "Approved final cut", deliver: "Published link", handTo: "—" },
+  },
+};
+
+/** 环节在这种语言里叫什么：模板里的（名字没改过）用模板的说法；管理员自己起的、改过名字的照原样（算用户写的）。 */
+export function stageText(group: Group, stage: { templateKey: string; name: string; indicator?: { receive: string; deliver: string; handTo: string }; note?: string | null }, lang: "zh" | "en"): { name: string; receive: string; deliver: string; handTo: string; note: string | null; custom: boolean } {
+  const t = stageTemplate(group, stage.templateKey);
+  const custom = !t || t.name !== stage.name;
+  const ind = stage.indicator ?? { receive: "", deliver: "", handTo: "" };
+  if (lang === "zh" || !t) return { name: stage.name, receive: ind.receive, deliver: ind.deliver, handTo: ind.handTo, note: stage.note ?? null, custom };
+  const e = STAGE_EN[group][t.key];
+  return {
+    name: custom ? stage.name : e?.name ?? stage.name,
+    receive: ind.receive === t.receive ? e?.receive ?? ind.receive : ind.receive,
+    deliver: ind.deliver === t.deliver ? e?.deliver ?? ind.deliver : ind.deliver,
+    handTo: ind.handTo === t.handTo ? e?.handTo ?? ind.handTo : ind.handTo,
+    note: stage.note && stage.note === t.note ? e?.note ?? stage.note : stage.note ?? null,
+    custom,
+  };
+}
+
+export const GROUP_EN: Record<Group, { name: string; cutLabel: string }> = {
+  animation: { name: "Animation", cutLabel: "cut" },
+  video: { name: "Video", cutLabel: "episode" },
+};

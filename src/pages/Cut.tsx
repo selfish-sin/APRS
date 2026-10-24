@@ -22,6 +22,8 @@ import { cutById, cutName, filesOfCut, members, memberById, projectById, stagesO
 import { Link, useRoute } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 import { NotFound } from "./NotFound";
+import { CutAdminCard } from "./ProjectSetup";
+import { isAdmin } from "@/domain/commands/core";
 
 function dotKind(item: TimelineItem): string {
   if (item.kind === "review") return item.review?.verdict === "return" ? "return" : "review";
@@ -34,7 +36,7 @@ function dotKind(item: TimelineItem): string {
 const DOT_TEXT: Record<string, string> = { review: "过", return: "退", submit: "交", thread: "问", todo: "补", pin: "钉", file: "图", other: "·" };
 
 export function CutPage() {
-  const { world } = useGuild();
+  const { world, me } = useGuild();
   const route = useRoute();
   const cut = cutById(world, route.segments[1]);
   const project = cut ? projectById(world, cut.projectId) : undefined;
@@ -148,6 +150,7 @@ export function CutPage() {
         </section>
 
         <div className="stack">
+          {isAdmin(me) ? <CutAdminCard cut={cut} /> : null}
           <section className="card" aria-labelledby="compose-title">
             <h2 id="compose-title" className="t-heading-18">
               留意见 · 问上游

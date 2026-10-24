@@ -44,6 +44,7 @@ import { HOURS_PER_DAY, deadlineFactorOf, hoursOf, levelOf, rateFor, rewardOf, s
 import { GROUPS, groupTemplate, type StageTemplate } from "./templates";
 import { isAdmin, isReviewer } from "./commands/core";
 import { linksOf } from "./commands/links";
+import { positionTemplate } from "./positions";
 
 // ---------------------------------------------------------------------------
 // 索引（每个世界状态建一次）
@@ -96,7 +97,7 @@ function push<K, V>(m: Map<K, V[]>, k: K, v: V) {
   else m.set(k, [v]);
 }
 
-const byNumber = compareBy<CutRow>((c) => numberKey(c.number));
+const byNumber = compareBy<CutRow>((c) => numberKey(c.number), (c) => c.suffix ?? "");
 const bySort = compareBy<StageRow>((s) => s.sort);
 const taskOrder = compareBy<TaskRow>((t) => t.sort, (t) => layerKey(t.layer));
 
@@ -1056,7 +1057,7 @@ export function feedText(state: WorldState, e: JournalEntry): string | null {
     case "task.reclaim":
       return `${who} 收回了 ${taskShort(state, p.taskId)}`;
     case "task.reopen":
-      return `${who} 重新放出了 ${taskShort(state, p.taskId)}`;
+      return Array.isArray(p.comments) && p.comments.length ? `${who} 把 ${taskShort(state, p.taskId)} 打回重做` : `${who} 重新放出了 ${taskShort(state, p.taskId)}`;
     case "task.assign": {
       const ids = Array.isArray(p.taskIds) && p.taskIds.length ? (p.taskIds as Id[]) : [p.taskId as Id];
       const what = ids.length > 1 ? `${taskShort(state, ids[0])} 等 ${ids.length} 张` : taskShort(state, ids[0]);
@@ -1088,6 +1089,49 @@ export function feedText(state: WorldState, e: JournalEntry): string | null {
       const sub = state.submissions[p.submissionId as Id];
       return sub ? `${who} 换了 ${taskShort(state, sub.taskId)} v${String(sub.versionNo).padStart(2, "0")} 的一条链接` : null;
     }
+    case "project.draft":
+      return `${who} 建了项目「${projectById(state, created.projectId)?.name ?? String(p.name ?? "")}」（零日）`;
+    case "project.set_structure": {
+      const s = p.structure as { episodes?: number; scenesPerEpisode?: number; cutsPerScene?: number } | undefined;
+      const n = (s?.episodes ?? 1) * (s?.scenesPerEpisode ?? 1) * (s?.cutsPerScene ?? 0);
+      return `${who} 改了「${projectById(state, p.projectId as Id)?.name ?? ""}」的结构（${n} 卡）`;
+    }
+    case "project.start":
+      return `${who} 让「${projectById(state, p.projectId as Id)?.name ?? ""}」开工了`;
+    case "project.extend":
+      return `${who} 把「${projectById(state, p.projectId as Id)?.name ?? ""}」的计划结束改到 ${String(p.until ?? "")}`;
+    case "staff.set": {
+      const proj = projectById(state, p.projectId as Id);
+      const pos = proj?.staff?.find((x) => x.key === p.positionKey);
+      const name = pos?.custom?.name ?? positionTemplate(proj?.template, String(p.positionKey))?.name.zh ?? "职位";
+      return `${who} 改了人员表「${name}」`;
+    }
+    case "staff.add_position":
+      return `${who} 在人员表里加了职位「${String(p.name ?? "")}」`;
+    case "stage.add":
+      return `${who} 加了环节「${String(p.name ?? "")}」${p.afterKey ? `，接在「${stagesOf(state, p.projectId as Id).find((s) => s.templateKey === p.afterKey)?.name ?? ""}」后面` : ""}`;
+    case "stage.update":
+      return `${who} 改了环节「${stageById(state, p.stageId as Id)?.name ?? ""}」`;
+    case "stage.move":
+      return `${who} 把环节「${stageById(state, p.stageId as Id)?.name ?? ""}」${p.direction === "up" ? "往前" : "往后"}挪了`;
+    case "stage.remove":
+      return `${who} 删了环节「${state.stages[p.stageId as Id]?.name ?? ""}」`;
+    case "stage.disable":
+      return `${who} ${p.disabled ? "停用" : "重新启用"}了环节「${stageById(state, p.stageId as Id)?.name ?? ""}」`;
+    case "stage.accept":
+      return `${who} 验收通过了「${stageById(state, p.stageId as Id)?.name ?? ""}」`;
+    case "stage.extend":
+      return `${who} 给「${stageById(state, p.stageId as Id)?.name ?? ""}」在做的任务延期${extendText(p)}`;
+    case "task.extend":
+      return `${who} 给 ${taskShort(state, p.taskId)} 延期${extendText(p)}`;
+    case "cut.add": {
+      const after = p.afterCutId ? state.cuts[p.afterCutId as Id] : undefined;
+      return `${who} 加了 ${String(p.count ?? 1)} 卡${after ? `（插在 ${cutName(state, after)} 后面）` : ""}`;
+    }
+    case "cut.update":
+      return `${who} 改了 ${state.cuts[p.cutId as Id] ? cutName(state, state.cuts[p.cutId as Id]) : "一卡"}（层 / 张数 / 秒数）`;
+    case "cut.archive":
+      return `${who} 停用了 ${state.cuts[p.cutId as Id] ? cutName(state, state.cuts[p.cutId as Id]) : "一卡"}`;
     case "stage.set_rate":
       return `${who} 改了「${stageById(state, p.stageId as Id)?.name ?? "环节"}」的时限参数`;
     case "project.create":
@@ -1139,6 +1183,82 @@ export function feedText(state: WorldState, e: JournalEntry): string | null {
     default:
       return null;
   }
+}
+
+function extendText(p: Record<string, unknown>): string {
+  if (p.until) return `到 ${String(p.until)}`;
+  const parts = [p.days ? `${String(p.days)} 天` : null, p.hours ? `${String(p.hours)} 小时` : null].filter(Boolean);
+  return parts.length ? ` ${parts.join(" ")}` : "";
+}
+
+/** 改项目的那些命令（项目时间线上列出来）。 */
+const PROJECT_COMMANDS = new Set([
+  "project.create",
+  "project.draft",
+  "project.update",
+  "project.set_structure",
+  "project.start",
+  "project.extend",
+  "staff.set",
+  "staff.add_position",
+  "stage.add",
+  "stage.update",
+  "stage.move",
+  "stage.remove",
+  "stage.disable",
+  "stage.accept",
+  "stage.extend",
+  "stage.set_lock",
+  "stage.set_period",
+  "stage.set_rate",
+  "stage.set_reviewer",
+  "task.extend",
+  "task.reopen",
+  "task.publish",
+  "hub.dispatch",
+  "cut.add",
+  "cut.update",
+  "cut.archive",
+]);
+
+export interface ProjectTimelineItem {
+  key: string;
+  seq: number;
+  at: IsoDateTime;
+  command: string;
+  memberId: Id | null;
+  text: string;
+  /** 为什么（延期、停用、加卡时写的原因）。 */
+  reason: string | null;
+}
+
+function projectOfEntry(state: WorldState, e: JournalEntry): Id | null {
+  const p = (e.payload ?? {}) as Record<string, unknown>;
+  if (typeof p.projectId === "string") return p.projectId;
+  if (e.created?.projectId) return e.created.projectId;
+  const stageId = (p.stageId ?? p.hubStageId) as Id | undefined;
+  if (stageId && state.stages[stageId]) return state.stages[stageId].projectId;
+  if (typeof p.taskId === "string" && state.tasks[p.taskId]) return state.tasks[p.taskId].projectId;
+  if (typeof p.cutId === "string" && state.cuts[p.cutId]) return state.cuts[p.cutId].projectId;
+  return null;
+}
+
+/** 项目时间线：改项目的每一步（谁、改了什么、为什么），新的在前。 */
+export function projectTimeline(state: WorldState, projectId: Id): ProjectTimelineItem[] {
+  const out: ProjectTimelineItem[] = [];
+  for (const e of state.journal) {
+    if (!PROJECT_COMMANDS.has(e.command)) continue;
+    if (e.command === "task.reopen" && !(Array.isArray((e.payload as { comments?: unknown[] })?.comments) && (e.payload as { comments: unknown[] }).comments.length)) continue;
+    if (projectOfEntry(state, e) !== projectId) continue;
+    const text = feedText(state, e);
+    if (!text) continue;
+    const p = (e.payload ?? {}) as Record<string, unknown>;
+    // 打回重做的「为什么」= 写的意见。
+    const comments = Array.isArray(p.comments) ? (p.comments as { text?: unknown }[]).map((c) => (typeof c?.text === "string" ? c.text.trim() : "")).filter(Boolean) : [];
+    const reason = typeof p.reason === "string" && p.reason.trim() ? p.reason.trim() : comments.length ? comments.join("；") : null;
+    out.push({ key: e.id, seq: e.seq, at: e.worldAt ?? e.createdAt, command: e.command, memberId: e.actorMemberId, text, reason });
+  }
+  return out.reverse();
 }
 
 /** 工会动态：按世界时间倒着排（同一刻按日志顺序），最近的 `limit` 条。 */

@@ -24,13 +24,12 @@ import {
   rateTable,
   stageHours,
   theWorld,
-  todayOf,
 } from "@/domain/queries";
 import { GROUPS } from "@/domain/templates";
 import { makePasscode, passcodeProblem } from "@/lib/passcode";
 import { navigate, useRoute } from "@/lib/router";
 import { useGuild } from "@/lib/store";
-import { addDays } from "@/domain/clock";
+import { NewProjectForm } from "./ProjectSetup";
 
 const TABS = [
   { id: "new", label: "开项目" },
@@ -69,168 +68,12 @@ export function AdminPage() {
           </button>
         ))}
       </div>
-      {tab === "new" ? <NewProject /> : null}
+      {tab === "new" ? <NewProjectForm /> : null}
       {tab === "dispatch" ? <Dispatch /> : null}
       {tab === "ruling" ? <Rulings /> : null}
       {tab === "members" ? <Members /> : null}
       {tab === "rates" ? <Rates /> : null}
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 开项目
-// ---------------------------------------------------------------------------
-
-interface CutDraft {
-  number: number;
-  sheets: Record<string, number>;
-  keySheets: number;
-  seconds: number;
-}
-
-function NewProject() {
-  const { world, dispatch, notify } = useGuild();
-  const route = useRoute();
-  const qg = route.query.get("group");
-  const today = todayOf(world);
-  const [group, setGroup] = useState<Group>(GROUP.includes(qg as Group) ? (qg as Group) : "animation");
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [episode, setEpisode] = useState("EP01");
-  const [scene, setScene] = useState("SC001");
-  const [startOn, setStartOn] = useState(today);
-  const [planEndOn, setPlanEndOn] = useState(addDays(today, 7 * 16));
-  const [feishuRoot, setFeishuRoot] = useState("");
-  const [count, setCount] = useState(14);
-  const [layerNames, setLayerNames] = useState("A,B");
-  const [sheets, setSheets] = useState(20);
-  const [keySheets, setKeySheets] = useState(6);
-  const [seconds, setSeconds] = useState(5);
-  const [rows, setRows] = useState<CutDraft[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const tpl = GROUPS[group];
-  const layers = tpl.hasLayers
-    ? layerNames
-        .split(/[,，\s]+/)
-        .map((s) => s.trim().toUpperCase())
-        .filter(Boolean)
-    : [];
-
-  const build = () => {
-    const n = Math.max(1, Math.min(200, Math.floor(count) || 1));
-    setRows(Array.from({ length: n }, (_, i) => ({ number: i + 1, sheets: Object.fromEntries(layers.map((l) => [l, sheets])), keySheets, seconds })));
-  };
-
-  const create = () => {
-    const draft = rows ?? Array.from({ length: Math.max(1, Math.floor(count) || 1) }, (_, i) => ({ number: i + 1, sheets: Object.fromEntries(layers.map((l) => [l, sheets])), keySheets, seconds }));
-    const r = dispatch(
-      "project.create",
-      {
-        group,
-        name,
-        code,
-        episode,
-        scene,
-        startOn,
-        planEndOn,
-        feishuRoot: feishuRoot || null,
-        cuts: draft.map((c) => ({ number: c.number, layers: layers.map((l) => ({ name: l, sheets: c.sheets[l] ?? sheets })), keySheets: tpl.hasLayers ? c.keySheets : 0, seconds: c.seconds })),
-      },
-      { quiet: true }
-    );
-    if (!r.ok) {
-      setError(r.error.message);
-      return;
-    }
-    notify(`开好了「${name}」，环节、${tpl.cutLabel}和任务都生成了`);
-    navigate(`/project/${r.created.projectId}`);
-  };
-
-  return (
-    <section className="card" aria-label="开项目">
-      <h2 className="t-heading-18">开项目</h2>
-      <div className="chips" role="radiogroup" aria-label="组">
-        {GROUP.map((g) => (
-          <button key={g} type="button" className="ui-chip" aria-pressed={group === g} onClick={() => { setGroup(g); setRows(null); }}>
-            {GROUP_LABEL[g]}
-            {GROUPS[g].draft ? "（草案）" : ""}
-          </button>
-        ))}
-      </div>
-      <div className="form-grid">
-        <TextField label="项目名字" value={name} onChange={(e) => setName(e.target.value)} data-testid="new-name" />
-        <TextField label="代号（2–6 位大写）" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="2–6 位大写字母" data-testid="new-code" />
-        <TextField label="集" value={episode} onChange={(e) => setEpisode(e.target.value.toUpperCase())} />
-        <TextField label="场" value={scene} onChange={(e) => setScene(e.target.value.toUpperCase())} />
-        <TextField label="开始" type="date" value={startOn} onChange={(e) => setStartOn(e.target.value)} />
-        <TextField label="计划结束" type="date" value={planEndOn} onChange={(e) => setPlanEndOn(e.target.value)} />
-        <TextField label="飞书根文件夹（可以以后再填）" type="url" placeholder="https://…" value={feishuRoot} onChange={(e) => setFeishuRoot(e.target.value)} />
-      </div>
-      <h3 className="t-body-14m">批量填</h3>
-      <div className="form-grid">
-        <TextField label={`${tpl.cutLabel}数`} type="number" min={1} max={200} value={count} onChange={(e) => { setCount(Number(e.target.value)); setRows(null); }} data-testid="new-count" />
-        {tpl.hasLayers ? (
-          <>
-            <TextField label="层（用逗号分开）" value={layerNames} onChange={(e) => { setLayerNames(e.target.value); setRows(null); }} data-testid="new-layers" />
-            <TextField label="每层张数" type="number" min={1} value={sheets} onChange={(e) => { setSheets(Number(e.target.value)); setRows(null); }} data-testid="new-sheets" />
-            <TextField label="原画张数（每卡）" type="number" min={0} value={keySheets} onChange={(e) => { setKeySheets(Number(e.target.value)); setRows(null); }} />
-          </>
-        ) : null}
-        <TextField label={`每${tpl.cutLabel}秒数`} type="number" min={0} value={seconds} onChange={(e) => { setSeconds(Number(e.target.value)); setRows(null); }} />
-      </div>
-      <p className="label">
-        例如「14 卡，每卡 A / B 两层，各 20 张」。生成逐{tpl.cutLabel}表以后可以一{tpl.cutLabel}一{tpl.cutLabel}改。
-      </p>
-      <div className="form-actions">
-        <Button Label={`生成逐${tpl.cutLabel}表`} Style="Secondary" onClick={build} />
-      </div>
-      {rows ? (
-        <div className="table-scroll">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>{tpl.cutLabel}</th>
-                {layers.map((l) => (
-                  <th key={l}>{l} 层张数</th>
-                ))}
-                {tpl.hasLayers ? <th>原画张数</th> : null}
-                <th>秒数</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={r.number}>
-                  <td className="num">{cutCode(r, group)}</td>
-                  {layers.map((l) => (
-                    <td key={l}>
-                      <input className="field-control" type="number" min={1} aria-label={`${cutCode(r, group)} ${l} 层张数`} value={r.sheets[l] ?? sheets} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, sheets: { ...x.sheets, [l]: Number(e.target.value) } } : x)))} />
-                    </td>
-                  ))}
-                  {tpl.hasLayers ? (
-                    <td>
-                      <input className="field-control" type="number" min={0} aria-label={`${cutCode(r, group)} 原画张数`} value={r.keySheets} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, keySheets: Number(e.target.value) } : x)))} />
-                    </td>
-                  ) : null}
-                  <td>
-                    <input className="field-control" type="number" min={0} aria-label={`${cutCode(r, group)} 秒数`} value={r.seconds} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, seconds: Number(e.target.value) } : x)))} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-      {error ? (
-        <p className="error-text" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <div className="form-actions">
-        <Button Label="开项目" Style="Accent" onClick={create} data-testid="new-create" />
-        <span className="label">会照{tpl.name}的流程生成 {tpl.stages.length} 个环节和每{tpl.cutLabel}的任务；没有上游的马上可接。</span>
-      </div>
-    </section>
   );
 }
 

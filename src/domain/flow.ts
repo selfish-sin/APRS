@@ -56,11 +56,27 @@ function groupByStage(tasks: TaskRow[]): Map<Id, TaskRow[]> {
 }
 
 /** 这个任务等的上游任务（每个上游环节一组）。 */
+/** 上游的环节；停用的环节绕过去，看它的上游（SPEC §12.2）。 */
+export function liveUpstream(stage: StageRow, stagesByKey: Map<string, StageRow>): StageRow[] {
+  const out: StageRow[] = [];
+  const seen = new Set<string>();
+  const walk = (keys: string[]) => {
+    for (const k of keys) {
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const up = stagesByKey.get(k);
+      if (!up) continue;
+      if (up.disabled) walk(up.upstream);
+      else out.push(up);
+    }
+  };
+  walk(stage.upstream);
+  return out;
+}
+
 export function upstreamTasksOf(task: TaskRow, stage: StageRow, stagesByKey: Map<string, StageRow>, byStage: Map<Id, TaskRow[]>): { stage: StageRow; tasks: TaskRow[] }[] {
   const out: { stage: StageRow; tasks: TaskRow[] }[] = [];
-  for (const key of stage.upstream) {
-    const up = stagesByKey.get(key);
-    if (!up) continue;
+  for (const up of liveUpstream(stage, stagesByKey)) {
     // 随时发的新任务不算进流程（不挡下游），勾了「这一卡要等它做完」的另算（blockersOf）。
     const ups = (byStage.get(up.id) ?? []).filter((t) => !t.extra);
     let relevant: TaskRow[];

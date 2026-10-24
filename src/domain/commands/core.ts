@@ -5,6 +5,8 @@
  * 只返回变更集，不碰存储。被拒时返回中文的 `error.message`，页面原样显示。
  */
 import { ID_PREFIX, type IdTable } from "../ids";
+import { ERRORS, type ErrorKey } from "../errors";
+import { fill, type TextParam } from "../text";
 import type { Change, Id, IsoDateTime, MemberRow, Patch, RowHeader, TableName, Tables } from "../model";
 import type { ReadModel } from "../readmodel";
 
@@ -32,6 +34,9 @@ export interface DomainError {
   code: DomainErrorCode;
   /** Short, user-facing (Chinese) message. */
   message: string;
+  /** 词典里的原因（SPEC §16）：界面按语言拼。没有 = 只有中文 message。 */
+  key?: string;
+  params?: Record<string, TextParam>;
   detail?: Record<string, unknown>;
 }
 
@@ -58,6 +63,11 @@ export class DomainFailure extends Error {
 
 export function reject(code: DomainErrorCode, message: string, detail?: Record<string, unknown>): never {
   throw new DomainFailure({ code, message, detail });
+}
+
+/** 被拒，原因走词典（中文 message 照样带着，测试和旧的地方还能用）。 */
+export function rejectT(code: DomainErrorCode, key: ErrorKey, params?: Record<string, TextParam>): never {
+  throw new DomainFailure({ code, key, params, message: fill(ERRORS[key].zh, params, "zh") });
 }
 
 /** Lets command bodies use `reject(...)` / `must...` helpers instead of threading Results. */

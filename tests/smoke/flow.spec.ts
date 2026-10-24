@@ -7,7 +7,7 @@
  */
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { HAS_PASS, enterDemo, expectClean, login, logout, noExternal, open, watch } from "./helpers";
+import { HAS_PASS, createProject, enterDemo, expectClean, login, logout, noExternal, open, watch } from "./helpers";
 
 test.skip(!HAS_PASS, "没有设 ARPS_PASS_ADMIN / ARPS_PASS_MEMBER，跳过端到端");
 
@@ -39,15 +39,7 @@ test("主流程：开项目 → 派发 → 报到拿任务单 → 交 → 退回
   // —— admin：开项目 ——
   await enterDemo(page);
   await login(page, "admin");
-  await open(page, "/admin?tab=new");
-  await page.getByTestId("new-name").fill(NAME);
-  await page.getByTestId("new-code").fill(CODE);
-  await page.getByTestId("new-count").fill("1");
-  await page.getByTestId("new-layers").fill("A");
-  await page.getByTestId("new-sheets").fill("6");
-  await page.getByTestId("new-create").click();
-  await expect(page).toHaveURL(/#\/project\//);
-  const projectPath = new URL(page.url()).hash.slice(1);
+  const projectPath = await createProject(page, { name: NAME, code: CODE, count: 1, layers: "A", sheets: 6 });
   const projectId = projectPath.split("/")[2];
   expect(await cellOf(page, projectPath, "中割")).toBe("locked");
 

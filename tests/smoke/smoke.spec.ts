@@ -197,18 +197,16 @@ test("管理员的其他操作：视频组项目、改项目、指派外包、�
   const errors = watch(page);
   await createGuild(page, "smoke-pass-2");
   // 视频组项目（不分层，按期）
-  await open(page, "/admin?tab=new&group=video");
-  await page.getByTestId("new-name").fill("讲座第一季");
-  await page.getByTestId("new-code").fill("JZ");
-  await page.getByTestId("new-count").fill("3");
-  await page.getByTestId("new-create").click();
-  await expect(page).toHaveURL(/#\/project\//);
+  const jzPath = await createProject(page, { name: "讲座第一季", code: "JZ", count: 3, group: "video" });
   await expect(page.locator("table.board tbody tr")).toHaveCount(3);
   await expect(page.locator("table.board tbody th").first()).toContainText("第 1 期");
   // 改项目
-  await page.getByRole("button", { name: "改项目" }).click();
+  await page.getByTestId("project-settings").click();
+  await page.getByTestId("settings-tab-cover").click();
   await page.getByLabel("飞书根文件夹的链接").fill("https://feishu.example.com/drive/jz");
-  await page.getByRole("button", { name: "保存" }).click();
+  await page.getByTestId("zero-cover-save").click();
+  await expect(page.getByText("存好了")).toBeVisible();
+  await open(page, jzPath);
   await expect(page.getByRole("link", { name: "飞书根文件夹" })).toBeVisible();
   // 项目级的「选题」：指派给外包，管理员代交
   await page.locator(".strip-item").first().click();

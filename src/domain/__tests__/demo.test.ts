@@ -127,4 +127,19 @@ describe("示范工会", () => {
   it("视频组没有项目", () => {
     expect(q.projects(s, "video")).toEqual([]);
   });
+
+  it("零日的例子项目「（模板）动画短片」：还没开工、不生成任务；介绍、关键日、结构、人员表都填了一些，有外部、有缺人", () => {
+    const z = q.projects(s).find((p) => p.code === "TMPL")!;
+    expect(z).toMatchObject({ name: "（模板）动画短片", status: "zero", template: "anim_standard" });
+    expect(q.stagesOf(s, z.id)).toHaveLength(0);
+    expect(q.cutsOf(s, z.id)).toHaveLength(0);
+    expect(q.tasksOf(s, z.id)).toHaveLength(0);
+    expect(z.cutsPlan).toHaveLength(8);
+    expect(z.keyDates?.map((k) => k.name)).toEqual(["分镜定稿", "原画完成", "交片"]);
+    expect(z.intro).toBeTruthy();
+    const staff = z.staff ?? [];
+    expect(staff.find((p) => p.key === "sound")?.people).toEqual([{ name: "外面的录音老师" }]);
+    expect(staff.filter((p) => p.people.length === 0).length).toBeGreaterThan(0);
+    expect(staff.find((p) => p.key === "inbetween")?.people).toHaveLength(2);
+  });
 });

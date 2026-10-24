@@ -6,17 +6,18 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { Empty, MemberAvatar, SelectField, Tag, TextField } from "@/components/app/bits";
+import { Empty, MemberAvatar, SelectField, Tag } from "@/components/app/bits";
 import { Board, StatusLegend } from "@/components/app/board";
 import { MapLegend, StageMap } from "@/components/app/stage";
 import { TaskDrawer } from "@/components/app/task";
 import { BatchAssign, ExtrasList, PublishForm, ScheduleView, StageSettings } from "@/components/app/flex";
 import { ReportDialog } from "@/components/app/report";
 import { ThreadBody } from "@/components/app/thread";
+import { AcceptDialog, AddCutsForm, ExtendDialog, ZeroDayPage } from "./ProjectSetup";
 import { dateZh } from "@/domain/clock";
 import { isAdmin, isReviewer } from "@/domain/commands/core";
 import { GRAIN_LABEL, GROUP_LABEL, PHASE_LABEL, PROJECT_STATUS_LABEL, STAGE_KIND_LABEL, TASK_STATUS_LABEL, rateLabel } from "@/domain/labels";
-import { PROJECT_STATUS, TASK_STATUS, type ProjectStatus, type TaskRow } from "@/domain/model";
+import { TASK_STATUS, type TaskRow } from "@/domain/model";
 import { gridOf, members, memberById, pipelineOf, projectById, type GridFilter, type StageNode } from "@/domain/queries";
 import { GROUPS } from "@/domain/templates";
 import { Link, useRoute } from "@/lib/router";
@@ -37,13 +38,13 @@ export function ProjectPage() {
   const [filter, setFilter] = useState<GridFilter>("all");
   const [node, setNode] = useState<StageNode | null>(null);
   const [task, setTask] = useState<TaskRow | null>(null);
-  const [editing, setEditing] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [view, setView] = useState<"flow" | "schedule">(route.query.get("view") === "schedule" ? "schedule" : "flow");
   const project = projectById(world, id);
   const pipeline = useMemo(() => (project ? pipelineOf(world, project.id) : null), [world, project]);
   const grid = useMemo(() => (project ? gridOf(world, project.id, filter, me.id) : null), [world, project, filter, me.id]);
   if (!project || !pipeline || !grid) return <NotFound what="这个项目" />;
+  if (project.status === "zero") return <ZeroDayPage project={project} />;
   const admin = isAdmin(me);
   const threads = Object.values(world.threads).filter((t) => t.projectId === project.id && t.subjectType === "project" && !t.archivedAt);
   threads.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
@@ -82,7 +83,9 @@ export function ProjectPage() {
             <span className="label">还没填飞书根文件夹</span>
           )}
           <Button Label="导出汇报" Style="Secondary" onClick={() => setReporting(true)} data-testid="report-open" />
-          {admin ? <Button Label="改项目" Style="Secondary" onClick={() => setEditing(true)} /> : null}
+          <Link to={`/project/${project.id}/settings?tab=${admin ? "stages" : "cover"}`} className="ui-button" data-style="Secondary" data-size="Medium" data-testid="project-settings">
+            {admin ? "改项目" : "项目介绍"}
+          </Link>
         </div>
       </div>
 
@@ -186,7 +189,6 @@ export function ProjectPage() {
 
       {liveNode ? <StageDrawer node={liveNode} onClose={() => setNode(null)} /> : null}
       {liveTask ? <TaskDrawer task={liveTask} onClose={() => setTask(null)} /> : null}
-      {editing ? <ProjectEditDialog projectId={project.id} onClose={() => setEditing(false)} /> : null}
       {reporting ? <ReportDialog projectId={project.id} onClose={() => setReporting(false)} /> : null}
     </>
   );
@@ -239,9 +241,27 @@ function StageDrawer({ node, onClose }: { node: StageNode; onClose: () => void }
   const reviewer = memberById(world, stage.reviewerId);
   const reviewers = members(world).filter((m) => isReviewer(m));
   const [publishing, setPublishing] = useState(false);
+  const [sub, setSub] = useState<"accept" | "extend" | "cuts" | null>(null);
+  const stageTasks = Object.values(world.tasks).filter((t) => t.stageId === stage.id && !t.archivedAt && !t.extra);
+  if (sub === "accept") return <AcceptDialog stage={stage} onClose={() => setSub(null)} />;
+  if (sub === "extend") return <ExtendDialog target={{ kind: "stage", stage }} tasks={stageTasks} onClose={() => setSub(null)} />;
   return (
     <Drawer Type="Drawer" Title={stage.name} open onClose={onClose} actions={<Button Label="关上" Style="Secondary" onClick={onClose} />}>
       <div className="stack" data-gap="small" style={{ overflowY: "auto" }}>
+        {admin ? (
+          <div className="form-actions" data-testid="stage-admin">
+            <Button Label="验收" Size="Small" Style="Secondary" onClick={() => setSub("accept")} data-testid="stage-accept-open" />
+            <Button Label="延期" Size="Small" Style="Secondary" onClick={() => setSub("extend")} data-testid="stage-extend-open" />
+            {stage.grain !== "project" ? <Button Label="加卡" Size="Small" Style="Secondary" onClick={() => setSub(sub === "cuts" ? null : "cuts")} data-testid="stage-cuts-open" /> : null}
+          </div>
+        ) : null}
+        {sub === "cuts" ? <AddCutsForm projectId={stage.projectId} onDone={() => setSub(null)} /> : null}
+        {stage.acceptedAt || stage.disabled ? (
+          <div className="row">
+            {stage.acceptedAt ? <Tag tone="success">已验收</Tag> : null}
+            {stage.disabled ? <Tag>停用</Tag> : null}
+          </div>
+        ) : null}
         <div className="row">
           <Tag>{PHASE_LABEL[stage.phase]}</Tag>
           <Tag tone="lilac">
@@ -312,57 +332,6 @@ function StageDrawer({ node, onClose }: { node: StageNode; onClose: () => void }
             </Link>
           ) : null}
         </div>
-      </div>
-    </Drawer>
-  );
-}
-
-function ProjectEditDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
-  const { world, dispatch, notify } = useGuild();
-  const p = world.projects[projectId];
-  const [name, setName] = useState(p.name);
-  const [code, setCode] = useState(p.code);
-  const [planEndOn, setPlanEndOn] = useState(p.planEndOn);
-  const [feishuRoot, setFeishuRoot] = useState(p.feishuRoot ?? "");
-  const [status, setStatus] = useState<ProjectStatus>(p.status);
-  const [cycleDays, setCycleDays] = useState(String(p.cycleDays ?? 7));
-  const [error, setError] = useState<string | null>(null);
-  const save = () => {
-    const r = dispatch("project.update", { projectId, name, code, planEndOn, feishuRoot: feishuRoot || null, status, cycleDays: Number(cycleDays) || 7 }, { quiet: true });
-    if (!r.ok) {
-      setError(r.error.message);
-      return;
-    }
-    notify("项目改好了", "Neutral");
-    onClose();
-  };
-  return (
-    <Drawer
-      Type="Dialog"
-      Title="改项目"
-      open
-      onClose={onClose}
-      actions={
-        <>
-          <Button Label="取消" Style="Secondary" onClick={onClose} />
-          <Button Label="保存" Style="Accent" onClick={save} />
-        </>
-      }
-    >
-      <div className="stack" data-gap="small">
-        <TextField label="项目名字" value={name} onChange={(e) => setName(e.target.value)} />
-        <TextField label="代号（2–6 位大写，用在文件名里）" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
-        <TextField label="计划结束" type="date" value={planEndOn} onChange={(e) => setPlanEndOn(e.target.value)} />
-        <TextField label="一周期几天（排期按这个画格子）" type="number" min={1} max={31} value={cycleDays} onChange={(e) => setCycleDays(e.target.value)} />
-        <TextField label="飞书根文件夹的链接" type="url" placeholder="https://…" value={feishuRoot} onChange={(e) => setFeishuRoot(e.target.value)} />
-        <SelectField label="状态" value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)}>
-          {PROJECT_STATUS.map((s) => (
-            <option key={s} value={s}>
-              {PROJECT_STATUS_LABEL[s]}
-            </option>
-          ))}
-        </SelectField>
-        {error ? <p className="error-text">{error}</p> : null}
       </div>
     </Drawer>
   );

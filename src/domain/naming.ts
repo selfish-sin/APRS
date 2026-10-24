@@ -6,14 +6,15 @@
 import type { CutRow, Group, ProjectRow, StageRow, TaskRow } from "./model";
 
 /** 卡在界面上的名字：动画组 C005，视频组 第 5 期。 */
-export function cutCode(cut: Pick<CutRow, "number">, group: Group = "animation"): string {
-  if (group === "video") return `第 ${cut.number} 期`;
-  return `C${String(cut.number).padStart(3, "0")}`;
+export function cutCode(cut: Pick<CutRow, "number"> & Partial<Pick<CutRow, "suffix">>, group: Group = "animation", lang: "zh" | "en" = "zh"): string {
+  const sfx = cut.suffix ?? "";
+  if (group === "video") return lang === "en" ? `Ep. ${cut.number}${sfx}` : `第 ${cut.number}${sfx} 期`;
+  return `C${String(cut.number).padStart(3, "0")}${sfx}`;
 }
 
-/** 文件名里的镜头段：CUT005（视频组 P005）。 */
-export function cutFileSegment(cut: Pick<CutRow, "number">, group: Group = "animation"): string {
-  return `${group === "video" ? "P" : "CUT"}${String(cut.number).padStart(3, "0")}`;
+/** 文件名里的镜头段：CUT005（视频组 P005）；插进去的 CUT005a。 */
+export function cutFileSegment(cut: Pick<CutRow, "number"> & Partial<Pick<CutRow, "suffix">>, group: Group = "animation"): string {
+  return `${group === "video" ? "P" : "CUT"}${String(cut.number).padStart(3, "0")}${cut.suffix ?? ""}`;
 }
 
 export function versionTag(version: number): string {

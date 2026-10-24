@@ -100,15 +100,28 @@ export async function createGuild(page: Page, pass: string) {
   await expect(page).toHaveURL(/#\/hall/);
 }
 
-/** 管理 → 开项目（批量：n 卡，层，每层张数）。返回项目页的路径。 */
-export async function createProject(page: Page, opts: { name: string; code: string; count: number; layers: string; sheets: number }) {
-  await open(page, "/admin?tab=new");
+/** 管理 → 建项目（先进零日）→ 零日页填结构（1 集 1 场 n 卡，层，每层张数）→ 开工。返回项目页的路径。 */
+export async function createProject(page: Page, opts: { name: string; code: string; count: number; layers?: string; sheets?: number; group?: "video" }) {
+  await open(page, opts.group === "video" ? "/admin?tab=new&group=video" : "/admin?tab=new");
   await page.getByTestId("new-name").fill(opts.name);
   await page.getByTestId("new-code").fill(opts.code);
-  await page.getByTestId("new-count").fill(String(opts.count));
-  await page.getByTestId("new-layers").fill(opts.layers);
-  await page.getByTestId("new-sheets").fill(String(opts.sheets));
   await page.getByTestId("new-create").click();
   await expect(page).toHaveURL(/#\/project\//);
+  await startFromZero(page, opts);
   return new URL(page.url()).hash.slice(1);
+}
+
+/** 在零日页填结构（1 集 1 场 n 卡）再开工。 */
+export async function startFromZero(page: Page, opts: { count: number; layers?: string; sheets?: number }) {
+  await expect(page.getByTestId("structure-card")).toBeVisible();
+  await page.getByTestId("zero-episodes").fill("1");
+  await page.getByTestId("zero-scenes").fill("1");
+  await page.getByTestId("zero-cuts").fill(String(opts.count));
+  if (opts.layers !== undefined) await page.getByTestId("zero-layers").fill(opts.layers);
+  if (opts.sheets !== undefined) await page.getByTestId("zero-sheets").fill(String(opts.sheets));
+  await page.getByTestId("zero-structure-save").click();
+  await expect(page.getByTestId("structure-card")).toContainText(new RegExp(`${opts.count} (卡|cuts?)`));
+  await page.getByTestId("zero-start").click();
+  await page.getByTestId("zero-start-confirm").click();
+  await expect(page.getByTestId("board")).toBeVisible();
 }

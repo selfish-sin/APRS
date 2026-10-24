@@ -109,3 +109,17 @@ export const setPasscode = guarded<SetPasscodeInput>((rm, input, ctx) => {
   const ch = update("accounts", account, { salt: mustSalt(input.salt), hash: mustHash(input.hash) });
   return ok(ch ? [ch] : []);
 });
+
+export interface SetLangInput {
+  lang: "zh" | "en";
+}
+
+/** 记下这个账号用哪种界面语言（SPEC §16）。 */
+export const setAccountLang = guarded<SetLangInput>((rm, input, ctx) => {
+  mustMember(rm, ctx);
+  if (!ctx.accountId) reject("forbidden", "请先登录");
+  const a = mustGet(rm, ctx, "accounts", ctx.accountId, "账号");
+  const lang = mustBeOneOf(input.lang, ["zh", "en"] as const, "语言");
+  const c = update("accounts", a, { lang });
+  return ok(c ? [c] : [], { accountId: a.id });
+});

@@ -4,13 +4,15 @@
  */
 import type { Command } from "./core";
 import { createGuild, setRules } from "./guild";
-import { createAccount, joinMember, setPasscode, setRole, updateMember } from "./member";
+import { createAccount, joinMember, setAccountLang, setPasscode, setRole, updateMember } from "./member";
 import { createProject, hubDispatch, setRate, setReviewer, updateProject } from "./project";
 import { assignTask, claimTask, enroll, expireTask, reclaimTask, releaseTask, reopenTask, reviewTask, submitTask, unenroll } from "./task";
 import { makeRuling, openThread, replyThread, resolveThread } from "./thread";
 import { addFile, archiveFile, moveFile, renameFile, tagFile } from "./file";
 import { addPin, reopenPin, replyPin, resolvePin } from "./pin";
 import { markLinkBroken, replaceLink } from "./links";
+import { addPosition, draftProject, setStaff, setStructure, startProject } from "./zero";
+import { acceptStage, addCuts, addStage, archiveCut, disableStage, extendProject, extendStage, extendTask, moveStage, removeStage, updateCut, updateStage } from "./edit";
 import { assignRole, publishTask, setStageLock, setStagePeriod, setStageRate, unassignRole } from "./flex";
 import { addBlock, archivePage, createPage, moveBlock, removeBlock, renamePage, updateBlock } from "./page";
 
@@ -22,6 +24,7 @@ export const COMMANDS = {
   "member.update": updateMember,
   "account.create": createAccount,
   "account.set_passcode": setPasscode,
+  "account.set_lang": setAccountLang,
   "enroll.add": enroll,
   "enroll.remove": unenroll,
   "task.claim": claimTask,
@@ -34,6 +37,23 @@ export const COMMANDS = {
   "task.review": reviewTask,
   "task.publish": publishTask,
   "link.mark_broken": markLinkBroken,
+  "project.draft": draftProject,
+  "project.set_structure": setStructure,
+  "project.start": startProject,
+  "project.extend": extendProject,
+  "staff.set": setStaff,
+  "staff.add_position": addPosition,
+  "stage.add": addStage,
+  "stage.update": updateStage,
+  "stage.move": moveStage,
+  "stage.remove": removeStage,
+  "stage.disable": disableStage,
+  "stage.accept": acceptStage,
+  "stage.extend": extendStage,
+  "task.extend": extendTask,
+  "cut.add": addCuts,
+  "cut.update": updateCut,
+  "cut.archive": archiveCut,
   "link.replace": replaceLink,
   "role.assign": assignRole,
   "role.unassign": unassignRole,

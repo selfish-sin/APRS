@@ -159,7 +159,7 @@ describe("task.reclaim / task.reopen", () => {
     expect(g.reject(worker, "task.claim", { taskId })).toMatch(/现在不能接/);
     g.run(g.admin, "task.reopen", { taskId });
     expect(g.state.tasks[taskId].status).toBe("open");
-    expect(g.reject(g.admin, "task.reopen", { taskId })).toBe("只有收回的任务才能重新放出");
+    expect(g.reject(g.admin, "task.reopen", { taskId })).toBe("只有收回的任务能重新放出、通过的任务能打回重做");
   });
 
   it("项目级的任务也能收回再放出", () => {

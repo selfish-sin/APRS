@@ -55,7 +55,7 @@ export function Board({ grid }: { grid: Grid }) {
               <span className="sr-only">卡</span>
             </th>
             {grid.columns.map((s) => (
-              <th key={s.id} scope="col" title={s.name}>
+              <th key={s.id} scope="col" title={s.name} data-disabled={s.disabled ? "" : undefined}>
                 <span className="board-col">{s.name.replace(/（.*?）/, "")}</span>
               </th>
             ))}
@@ -63,9 +63,10 @@ export function Board({ grid }: { grid: Grid }) {
         </thead>
         <tbody>
           {grid.rows.map((row) => (
-            <tr key={row.cut.id}>
+            <tr key={row.cut.id} data-disabled={row.cut.disabled ? "" : undefined}>
               <th scope="row">
                 <Link to={`/cut/${row.cut.id}`}>{row.code}</Link>
+                {row.cut.disabled ? <span className="row-off">停用</span> : null}
                 {row.openThreads ? <span className="row-flag" title="这一卡有开着的要补或提问">!</span> : null}
               </th>
               {row.cells.map((cell) => (

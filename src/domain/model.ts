@@ -72,7 +72,8 @@ export type ThreadStatus = (typeof THREAD_STATUS)[number];
 export const THREAD_SUBJECT = ["project", "cut", "task", "block"] as const;
 export type ThreadSubject = (typeof THREAD_SUBJECT)[number];
 
-export const PROJECT_STATUS = ["active", "paused", "done"] as const;
+/** 零日（筹备，还没开工）· 进行中 · 暂停 · 完成。 */
+export const PROJECT_STATUS = ["zero", "active", "paused", "done"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUS)[number];
 
 /** 活力点流水的种类：做任务 · 审核员自修 · 超时扣分。 */
@@ -159,6 +160,8 @@ export interface AccountRow extends RowHeader {
   memberId: Id;
   salt: string;
   hash: string;
+  /** 界面语言（登录以后跟着账号，SPEC §16）。 */
+  lang?: "zh" | "en" | null;
 }
 
 /** 报到是怎么来的：自己报到 · 管理员指派职位 · 第一次认领别的环节时自动加的（SPEC §13.1）。 */
@@ -193,6 +196,55 @@ export interface ProjectRow extends RowHeader {
   feishuRoot: string | null;
   /** 一周期几天（排期按这个画格子，默认 7）。 */
   cycleDays?: number;
+  /** 零日（SPEC §12.1）：用哪个模板开的局。 */
+  template?: "anim_standard" | "video_standard" | "blank" | null;
+  /** 项目介绍：讲什么、多长、给谁看。 */
+  intro?: string | null;
+  /** 封面图（资料库里的一张）。 */
+  coverFileId?: Id | null;
+  /** 关键日（分镜定稿 · 原画完成 · 交片 …）。 */
+  keyDates?: KeyDate[];
+  /** 结构（批量填）；开工以前改，开工时照 cutsPlan 生成卡。 */
+  structure?: ProjectStructure | null;
+  cutsPlan?: CutPlan[];
+  /** 人员表：按模板列出职位，每个职位填人（成员或外部名字）。 */
+  staff?: StaffPosition[];
+  /** 开工的时间。 */
+  startedAt?: IsoDateTime | null;
+}
+
+export interface KeyDate {
+  id: string;
+  name: string;
+  date: IsoDate;
+}
+
+export interface ProjectStructure {
+  episodes: number;
+  scenesPerEpisode: number;
+  cutsPerScene: number;
+  /** A / B …（视频组没有）。 */
+  layers: string[];
+  sheetsPerLayer: number;
+  secondsPerCut: number;
+}
+
+export interface CutPlan {
+  episode: string;
+  scene: string;
+  number: number;
+  layers: CutLayer[];
+  seconds: number;
+}
+
+export type StaffPerson = { memberId: Id } | { name: string };
+
+export interface StaffPosition {
+  key: string;
+  /** 模板里的职位只存 key（名字和说明在 positions.ts，中英都有）；自己加的职位存名字。 */
+  custom: { name: string; desc: string | null } | null;
+  stageKeys: string[];
+  people: StaffPerson[];
 }
 
 export interface StageIndicator {
@@ -240,6 +292,13 @@ export interface StageRow extends RowHeader {
   /** 这个环节自己的时限系数 / 最短时限（没写 = 用工会的 1.5 / 4 小时）。 */
   deadlineFactor?: number | null;
   minDeadlineHours?: number | null;
+  /** 停用（已经有交付的环节不能删，只能停用；停用的任务不再派，流程绕过它）。 */
+  disabled?: boolean;
+  /** 验收通过（SPEC §12.2）。 */
+  acceptedAt?: IsoDateTime | null;
+  acceptedById?: Id | null;
+  /** 管理员自己加的环节（不在模板里）：工作量怎么算。 */
+  workloadRule?: "one" | "layerSheets" | "cutSheets" | "keySheets" | "cutSeconds" | "projectSeconds" | null;
 }
 
 export interface StagePlan {
@@ -263,6 +322,10 @@ export interface CutRow extends RowHeader {
   seconds: number;
   /** 原画张数（Layout 枢纽定）。 */
   keySheets: number;
+  /** 插在某卡后面加的：C005a 的 a。 */
+  suffix?: string | null;
+  /** 停用这一卡（不再派）。 */
+  disabled?: boolean;
 }
 
 export interface TaskRow extends RowHeader {
@@ -292,6 +355,8 @@ export interface TaskRow extends RowHeader {
   rate?: { tn: number; per: number } | null;
   /** 随时发的新任务（额外任务 · 修正 · 补设定，SPEC §13.3）；普通任务没有。 */
   extra?: ExtraTask | null;
+  /** 验收时打回重做的（重做通过以后清掉）。 */
+  redo?: boolean;
 }
 
 export const EXTRA_KIND = ["extra", "fix", "setting"] as const;

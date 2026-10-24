@@ -8,7 +8,7 @@ import type { ReadModel } from "../readmodel";
 import { rateFor } from "../rules";
 import { groupTemplate, stageTemplate, type DefaultWorkload, type StageTemplate } from "../templates";
 import { cutCode } from "../naming";
-import { guarded, insert, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustNumber, mustText, ok, optDate, optInteger, optNumber, reject, update, type Ctx } from "./core";
+import { guarded, insert, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustNumber, mustText, ok, optDate, optInteger, optNumber, reject, rejectT, update, type Ctx } from "./core";
 import { optLink } from "./validate";
 
 export interface CutInput {
@@ -217,6 +217,10 @@ export interface UpdateProjectInput {
   status?: ProjectStatus;
   /** 一周期几天（排期用，默认 7）。 */
   cycleDays?: number;
+  /** 零日页（封面）：介绍 · 封面图 · 关键日。 */
+  intro?: string | null;
+  coverFileId?: Id | null;
+  keyDates?: { id?: string; name: string; date: string }[];
 }
 
 export const updateProject = guarded<UpdateProjectInput>((rm, input, ctx) => {
@@ -231,6 +235,24 @@ export const updateProject = guarded<UpdateProjectInput>((rm, input, ctx) => {
   if (input.feishuRoot !== undefined) patch.feishuRoot = optLink(input.feishuRoot, "飞书根文件夹");
   if (input.status !== undefined) patch.status = mustBeOneOf(input.status, PROJECT_STATUS, "状态");
   if (input.cycleDays !== undefined) patch.cycleDays = optInteger(input.cycleDays, "一周期几天", 1, 31) ?? 7;
+  if (input.intro !== undefined) patch.intro = typeof input.intro === "string" && input.intro.trim() ? input.intro.trim().slice(0, 1000) : null;
+  if (input.coverFileId !== undefined) {
+    if (input.coverFileId) {
+      const f = mustGet(rm, ctx, "files", input.coverFileId, "封面图");
+      if (f.projectId !== p.id || !f.width) rejectT("invalid", "cover_not_image");
+      patch.coverFileId = f.id;
+    } else patch.coverFileId = null;
+  }
+  if (input.keyDates !== undefined) {
+    const list = Array.isArray(input.keyDates) ? input.keyDates : [];
+    if (list.length > 12) rejectT("invalid", "key_dates_too_many", { max: 12 });
+    patch.keyDates = list.map((k, i) => {
+      const name = typeof k?.name === "string" ? k.name.trim().slice(0, 30) : "";
+      const date = optDate(k?.date, "关键日");
+      if (!name || !date) rejectT("invalid", "key_date_bad");
+      return { id: typeof k.id === "string" && k.id ? k.id.slice(0, 12) : `k${i + 1}`, name, date };
+    });
+  }
   const ch = update("projects", p, patch);
   return ok(ch ? [ch] : []);
 });

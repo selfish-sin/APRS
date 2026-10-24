@@ -9,7 +9,7 @@
  * A = 示范工会里的木星（member01）；B = 测试里现建的成员（测试用口令，不是真的账号）。
  */
 import { expect, test, type Page } from "@playwright/test";
-import { HAS_PASS, enterDemo, expectClean, expectNoPageScrollX, login, logout, noExternal, open, watch } from "./helpers";
+import { HAS_PASS, createProject, enterDemo, expectClean, expectNoPageScrollX, login, logout, noExternal, open, watch } from "./helpers";
 
 test.skip(!HAS_PASS, "没有设 ARPS_PASS_ADMIN / ARPS_PASS_MEMBER，跳过");
 
@@ -42,15 +42,7 @@ test("灵活性：指派职位 · 一批派 · 自己认领 · 锁环节 · 发�
   await login(page, "admin");
 
   // —— 开一个小项目（3 卡），Layout 枢纽和原画监督枢纽都「全部马上放出来」——
-  await open(page, "/admin?tab=new");
-  await page.getByTestId("new-name").fill("灵活性测试片");
-  await page.getByTestId("new-code").fill(CODE);
-  await page.getByTestId("new-count").fill("3");
-  await page.getByTestId("new-layers").fill("A");
-  await page.getByTestId("new-sheets").fill("4");
-  await page.getByTestId("new-create").click();
-  await expect(page).toHaveURL(/#\/project\//);
-  const projectPath = new URL(page.url()).hash.slice(1);
+  const projectPath = await createProject(page, { name: "灵活性测试片", code: CODE, count: 3, layers: "A", sheets: 4 });
   const projectId = projectPath.split("/")[2];
   for (const hub of ["Layout", "原画监督"]) {
     await open(page, `/admin?tab=dispatch&project=${projectId}`);

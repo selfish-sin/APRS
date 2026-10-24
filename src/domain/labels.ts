@@ -32,7 +32,7 @@ export const THREAD_KIND_LABEL: Record<ThreadKind, string> = { comment: "意见"
 
 export const THREAD_STATUS_LABEL: Record<ThreadStatus, string> = { open: "开着", answered: "已答", ruled: "已拍板", done: "已补" };
 
-export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = { active: "进行中", paused: "暂停", done: "完成" };
+export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = { zero: "零日", active: "进行中", paused: "暂停", done: "完成" };
 
 export const LEDGER_KIND_LABEL: Record<LedgerKind, string> = { task: "做任务", self_fix: "审核自修", penalty: "超时扣分" };
 

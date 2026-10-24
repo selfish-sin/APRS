@@ -49,11 +49,21 @@ export function StageMap({ pipeline, onPick }: { pipeline: Pipeline; onPick: (no
                 className="map-node"
                 data-state={node.state}
                 onClick={() => onPick(node)}
-                aria-label={`${node.stage.name}，${STAGE_KIND_LABEL[node.stage.kind]}${node.stage.hub && node.stage.kind !== "hub" ? " · 枢纽" : ""}，${STATE_LABEL[node.state]}，通过 ${node.passed} / ${node.total}`}
+                aria-label={`${node.stage.name}，${node.stage.disabled ? "停用，" : node.stage.acceptedAt ? "已验收，" : ""}${STAGE_KIND_LABEL[node.stage.kind]}${node.stage.hub && node.stage.kind !== "hub" ? " · 枢纽" : ""}，${STATE_LABEL[node.state]}，通过 ${node.passed} / ${node.total}`}
               >
                 <StageShape kind={node.stage.kind} hub={node.stage.hub} state={node.state} />
                 <span className="map-node-name">{node.stage.name}</span>
+
                 <span className="map-node-count">
+                  {node.stage.disabled ? (
+                    <span className="map-node-flag" data-flag="disabled">
+                      停用 ·{" "}
+                    </span>
+                  ) : node.stage.acceptedAt ? (
+                    <span className="map-node-flag" data-flag="accepted">
+                      已验收 ·{" "}
+                    </span>
+                  ) : null}
                   {node.passed}/{node.total}
                   {node.state === "locked" ? " · 锁住" : ""}
                   {node.counts.open ? ` · 可接 ${node.counts.open}` : ""}

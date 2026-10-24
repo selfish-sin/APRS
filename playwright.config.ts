@@ -33,6 +33,12 @@ function chromiumPath(): string | undefined {
 
 const executablePath = chromiumPath();
 
+/**
+ * 业务流程的冒烟断言写的是中文，所以默认先把界面语言定成中文（arps:lang = zh）——三套设置都跑同样的流程。
+ * 英文界面另有 i18n.spec.ts：它清掉这个设置，让 en-US 那一套按浏览器语言打开英文，把每一页扫一遍。
+ */
+export const ZH_STATE = { cookies: [], origins: [{ origin: new URL(baseURL).origin, localStorage: [{ name: "arps:lang", value: "zh" }] }] };
+
 export default defineConfig({
   testDir: "tests/smoke",
   timeout: 90_000,
@@ -48,6 +54,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     // 离线那一项自己打开 service worker；其余的不要它（免得缓存跨测试）。
     serviceWorkers: "block",
+    storageState: ZH_STATE,
     launchOptions: executablePath ? { executablePath } : {},
   },
   projects: [

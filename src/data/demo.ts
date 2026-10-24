@@ -454,6 +454,37 @@ export function buildDemoWorld(): WorldState {
     pb("text", { text: "漏色 · 色线缺失或不闭合 · 背涂填错图层 · 背涂涂到主线 · 主线不透 · 分层错误 · 涂反 · 漏轨目 · 设定没补" });
   }
 
+  // —— 零日的例子项目（SPEC §12.1）：还没开工，给大家看怎么开局 ——
+  {
+    const when = at("2026-10-21 10:00");
+    const zp = b.run(bailu, "project.draft", { template: "anim_standard", name: "（模板）动画短片", code: "TMPL", startOn: "2026-11-02", planEndOn: "2027-01-29" }, when).projectId;
+    b.run(
+      bailu,
+      "project.update",
+      {
+        projectId: zp,
+        intro: "开局的样子：一个 1 分钟左右的小短片，2 场 8 卡。照这张零日页填介绍、日期、结构和人员，填好以后管理员点「开工」。",
+        keyDates: [
+          { id: "k1", name: "分镜定稿", date: "2026-11-20" },
+          { id: "k2", name: "原画完成", date: "2026-12-25" },
+          { id: "k3", name: "交片", date: "2027-01-29" },
+        ],
+      },
+      when
+    );
+    b.run(bailu, "project.set_structure", { projectId: zp, structure: { episodes: 1, scenesPerEpisode: 2, cutsPerScene: 4, layers: ["A", "B"], sheetsPerLayer: 12, secondsPerCut: 4 } }, when);
+    const staff = (positionKey: string, people: ({ memberId: Id } | { name: string })[]) => b.run(bailu, "staff.set", { projectId: zp, positionKey, people }, when);
+    staff("producer", [{ memberId: bailu }]);
+    staff("director", [{ memberId: bailu }]);
+    staff("storyboard", [{ memberId: bailu }]);
+    staff("layout", [{ memberId: lizi }, { memberId: songzhen }]);
+    staff("key", [{ memberId: lizi }]);
+    staff("animation_director", [{ memberId: qingning }]);
+    staff("inbetween", [{ memberId: muxing }, { memberId: beichuang }]);
+    staff("paint", [{ memberId: haiyan }]);
+    staff("sound", [{ name: "外面的录音老师" }]);
+  }
+
   const state = b.state;
   // 示范世界的时钟冻结在 2026-10-23 10:00（底的一部分，不是一步操作）。
   const world = state.worlds[DEMO_WORLD_ID];
