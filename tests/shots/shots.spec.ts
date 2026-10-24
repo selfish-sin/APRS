@@ -16,6 +16,7 @@ async function v11Shots(page: Page, shot: (name: string) => Promise<unknown>) {
   await page.locator('[data-testid="route-row"][data-key="inbetween"]').click();
   await expect(page.getByTestId("stage-title")).toBeVisible();
   await shot("p17-stage");
+  await page.getByTestId("dispatch-expand").click();
   await page.getByTestId("dispatch-menu").first().click();
   await expect(page.getByTestId("dispatch-pop")).toBeVisible();
   await page.screenshot({ path: shotPath(page, "p17-stage-menu"), fullPage: false });
@@ -29,7 +30,7 @@ async function v11Shots(page: Page, shot: (name: string) => Promise<unknown>) {
   await page.getByTestId("stage-accept-open").click();
   await expect(page.getByTestId("accept-view")).toBeVisible();
   await shot("p17-stage-accept");
-  await open(page, `${projectPath}?tab=grid`);
+  await open(page, `${projectPath}?tab=grid&grid=text`);
   await expect(page.getByTestId("board")).toBeVisible();
   await shot("p5-grid");
   await page.locator("table.board tbody th a").nth(4).click();
@@ -52,6 +53,51 @@ async function v11Shots(page: Page, shot: (name: string) => Promise<unknown>) {
     await expect(page.getByTestId(`wizard-step-${n}`)).toHaveAttribute("aria-current", "step");
     await shot(`p17-wizard-${n}`);
   }
+}
+
+/** v1.1（§18）：盘点总览（还差多少 · 历史）· 点一个数下面出墙 · 一次盘点的 4 步（复查时「不对」展开）· 写回过的那次 · 卡 × 环节的墙和看图器 · 环节页的墙 · 卡详情的胶片条。 */
+async function auditShots(page: Page, shot: (name: string) => Promise<unknown>) {
+  await open(page, "/projects");
+  await page.locator("a.project-card").filter({ hasText: /安娜的旅程|Anna/ }).first().click();
+  await expect(page.getByTestId("stage-route")).toBeVisible();
+  const projectPath = new URL(page.url()).hash.slice(1).split("?")[0];
+  await page.getByTestId("ptab-audit").click();
+  await expect(page.getByTestId("remaining")).toBeVisible();
+  await shot("p18-audit");
+  await page.getByTestId("remaining-total").locator("button.remaining-num").nth(1).click();
+  await expect(page.getByTestId("overview-wall")).toBeVisible();
+  await shot("p18-audit-wall");
+  const run = ((await page.getByTestId("history-continue").first().getAttribute("href")) ?? "").replace(/^#/, "");
+  const written = ((await page.getByTestId("history-open").first().getAttribute("href")) ?? "").replace(/^#/, "");
+  for (let n = 1; n <= 4; n++) {
+    await open(page, `${run}?step=${n}`);
+    await expect(page.getByTestId("audit-run")).toHaveAttribute("data-step", String(n));
+    await shot(`p18-step${n}`);
+    if (n === 3) {
+      await page.getByTestId("review-wrong").click();
+      await expect(page.getByTestId("wrong-go")).toBeVisible();
+      await page.getByTestId("wrong-go").scrollIntoViewIfNeeded();
+      await page.screenshot({ path: shotPath(page, "p18-review-wrong"), fullPage: false });
+    }
+  }
+  await open(page, written);
+  await expect(page.getByTestId("written-card")).toBeVisible();
+  await shot("p18-written");
+  await open(page, `${projectPath}?tab=grid`);
+  await expect(page.getByTestId("project-wall")).toBeVisible();
+  await shot("p18-wall");
+  await page.getByTestId("project-wall").locator('[data-testid="wall-cell"][data-stage="layout"]').first().click();
+  await expect(page.getByTestId("wall-viewer")).toBeVisible();
+  await page.screenshot({ path: shotPath(page, "p18-viewer"), fullPage: false });
+  await page.keyboard.press("Escape");
+  await open(page, projectPath);
+  await page.locator('[data-testid="route-row"][data-key="inbetween"]').click();
+  await page.getByTestId("stage-wall").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: shotPath(page, "p18-stage-wall"), fullPage: false });
+  await open(page, `${projectPath}?tab=grid&grid=text`);
+  await page.locator("table.board tbody th a").first().click();
+  await page.getByTestId("cut-filmstrip").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: shotPath(page, "p18-filmstrip"), fullPage: false });
 }
 
 let shotTag = "";
@@ -83,6 +129,7 @@ test("截图", async ({ page }, info) => {
   await open(page, "/projects");
   await shot("p4-projects");
   await v11Shots(page, shot);
+  await auditShots(page, shot);
   await open(page, "/review");
   await shot("p7-review");
   await open(page, "/admin?tab=dispatch");
@@ -146,6 +193,7 @@ test.describe("English", () => {
     await open(page, "/projects");
     await shot("p4-projects");
     await v11Shots(page, shot);
+    await auditShots(page, shot);
     await open(page, "/review");
     await shot("p7-review");
     await open(page, "/admin?tab=dispatch");

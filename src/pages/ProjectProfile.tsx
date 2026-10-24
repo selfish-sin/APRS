@@ -7,7 +7,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Empty, MemberAvatar, SelectField, Tag, TextArea, TextField } from "@/components/app/bits";
 import { FileImage } from "@/components/library/tiles";
-import { isAdmin } from "@/domain/commands/core";
+import { isAdmin, isReviewer } from "@/domain/commands/core";
 import { PROJECT_STATUS, type CutRow, type Id, type ProjectRow, type ProjectStatus, type StaffPerson, type StaffPosition } from "@/domain/model";
 import { cutCode } from "@/domain/naming";
 import { POSITION_GROUPS, POSITION_GROUP_LABEL, positionTemplate } from "@/domain/positions";
@@ -61,6 +61,15 @@ export function ProjectProfile({ project }: { project: ProjectRow }) {
       </div>
       <div className="profile-col">
         {block("staff", L.zero.staffTitle, missing ? f(L.profile.staffHintMissing, { n: missing }) : L.profile.staffHint, <StaffView project={project} />, <StaffEditor project={project} onSaved={done} onCancel={done} />)}
+        {!zero && isReviewer(me) ? (
+          <section className="card" data-testid="profile-audit">
+            <h2 className="t-heading-18">{L.audit.profileEntry}</h2>
+            <p className="label">{L.audit.profileEntryLead}</p>
+            <Link to={`/project/${project.id}/audit`} className="ui-button" data-style="Secondary" data-size="Small" data-testid="profile-audit-open">
+              {L.audit.auditLink}
+            </Link>
+          </section>
+        ) : null}
       </div>
     </div>
   );

@@ -89,6 +89,9 @@ test.describe("示范工会", () => {
       await expect(page.getByTestId("stage-route")).toBeVisible();
       await expectNoPageScrollX(page, "环节路线");
       await page.getByTestId("ptab-grid").click();
+      // 「卡 × 环节」默认是交付物墙（§18）；切回文字网格
+      await expect(page.getByTestId("project-wall")).toBeVisible();
+      await page.getByTestId("grid-text").click();
       await expect(page.getByTestId("board")).toBeVisible();
       for (const f of ["只看我", "只看待审", "只看卡住的", "全部"]) await page.getByRole("button", { name: f, exact: true }).click();
       await page.locator(".map-node").first().click();

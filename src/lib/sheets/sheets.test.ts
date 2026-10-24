@@ -69,10 +69,16 @@ describe("导出汇报", () => {
   const s = buildDemoWorld();
   const andlc = q.projects(s).find((p) => p.code === "ANDLC")!;
 
-  it("五张表：表名、表头照工会的表，行数对得上", () => {
+  it("七张表（§18 多了「交付物盘点」「还差多少」）：表名、表头照工会的表，行数对得上", () => {
     const tables = buildReport(s, andlc.id, REPORT_KEYS);
-    expect(tables.map((t) => t.name)).toEqual(["进度总表", "项目规划表", "卡 × 环节", "必要劳动时间统计表", "审核记录"]);
-    const [progress, plan, grid, hours, reviews] = tables;
+    expect(tables.map((t) => t.name)).toEqual(["进度总表", "项目规划表", "卡 × 环节", "必要劳动时间统计表", "审核记录", "交付物盘点", "还差多少"]);
+    const [progress, plan, grid, hours, reviews, audit, remaining] = tables;
+    // 交付物盘点：最近一次盘点的每一条（示范：安娜的旅程 10-23 那次）；还差多少：合计一行 + 每个环节一行
+    expect(audit.header).toEqual(["卡", "环节", "层", "结果", "文件名", "版本", "问题", "复查人", "结论"]);
+    expect(audit.rows.length).toBeGreaterThan(50);
+    expect(remaining.header).toEqual(["环节", "应交", "已核实", "待复查", "没文件", "有问题", "缺"]);
+    expect(remaining.rows).toHaveLength(1 + q.stagesOf(s, andlc.id).length);
+    expect(remaining.rows[0]).toEqual(["全项目合计", 231, 30, expect.any(Number), expect.any(Number), expect.any(Number), expect.any(Number)]);
     const stages = q.stagesOf(s, andlc.id).length;
     expect(progress.header).toEqual(["序号", "项目", "类型", "预计开始", "预计结束", "计划天数", "进度", "剩余天数", "状态", "实际结束"]);
     expect(progress.rows).toHaveLength(stages);

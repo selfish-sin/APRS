@@ -22,7 +22,7 @@ async function points(page: Page): Promise<number> {
 }
 
 async function cellOf(page: Page, projectPath: string, stageName: string): Promise<string> {
-  await open(page, `${projectPath}?tab=grid`);
+  await open(page, `${projectPath}?tab=grid&grid=text`);
   const header = page.locator("table.board thead th");
   const names = await header.allTextContents();
   const col = names.findIndex((n) => n.trim() === stageName);

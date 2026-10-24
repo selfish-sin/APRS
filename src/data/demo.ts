@@ -15,6 +15,7 @@ import { seededIds } from "@/domain/ids";
 import { emptyWorldState, type Id, type IsoDateTime, type Quality, type ReviewComment, type WorldState } from "@/domain/model";
 import ACCOUNTS from "./accounts.public.json";
 import { demoImage, type DemoImage } from "./demoImages";
+import { andlcAuditItems, catAuditItems } from "./demoAudit";
 
 export const DEMO_WORLD_ID = "wld_demo-guild";
 export const DEMO_TITLE = "示范工会";
@@ -537,6 +538,33 @@ export function buildDemoWorld(): WorldState {
       .map((t) => Date.parse(t.passedAt ?? ""));
     if (!passed.length || passed.some((x) => Number.isNaN(x))) throw new Error(`示范数据：${key} 还有没通过的`);
     b.run(bailu, "stage.accept", { stageId }, plusHours(new Date(Math.max(...passed)).toISOString(), 1));
+  }
+
+  // —— 示范盘点（SPEC §18.9）：安娜的旅程读进来、复查了几条、还没写回；星期三的猫写回过一次 ——
+  {
+    const items = (auditId: Id) => Object.values(b.state.auditItems).filter((i) => i.auditId === auditId);
+    const idsOf = (auditId: Id, names: string[]) => items(auditId).filter((i) => names.includes(i.name)).map((i) => i.id);
+    const catId = Object.values(b.state.projects).find((p) => p.code === "XQSM")!.id;
+    const ca = b.run(bailu, "audit.start", { projectId: catId, demo: true }, at("2026-10-20 10:00")).auditId;
+    b.run(bailu, "audit.add", { auditId: ca, source: { kind: "folder", label: "XQSM" }, items: catAuditItems() }, at("2026-10-20 10:02"));
+    b.run(bailu, "audit.review", { auditId: ca, itemIds: idsOf(ca, ["XQSM_EP01_PLAN_v01.pdf", "XQSM_EP01_SCR_v02.pdf"]), verdict: "ok" }, at("2026-10-20 10:10"));
+    b.run(bailu, "audit.review", { auditId: ca, itemIds: idsOf(ca, ["XQSM_EP01_STB_v01.pdf"]), verdict: "wrong", reason: "unfinished" }, at("2026-10-20 10:12"));
+    b.run(bailu, "audit.write", { auditId: ca }, at("2026-10-20 10:20"));
+
+    // 安娜的旅程 10-02：青柠粘贴了一段名字（Layout · 原画 C001–C010，清线 C001–C005），复查完、白鹭写回（核实 30）
+    const first = b.run(qingning, "audit.start", { projectId: andlc, demo: true }, at("2026-10-02 15:00")).auditId;
+    const pad3 = (n: number) => String(n).padStart(3, "0");
+    const names: string[] = [];
+    for (let n = 1; n <= 10; n++) names.push(`ANDLC_EP01_SC001_CUT${pad3(n)}_LO_v01.clip`, `ANDLC_EP01_SC001_CUT${pad3(n)}_H_v01.clip`);
+    for (let n = 1; n <= 5; n++) names.push(`ANDLC_EP01_SC001_CUT${pad3(n)}_A_CLN_v01.png`, `ANDLC_EP01_SC001_CUT${pad3(n)}_B_CLN_v01.png`);
+    b.run(qingning, "audit.add", { auditId: first, source: { kind: "paste" }, items: names.map((name) => ({ name, origin: "paste" as const, demo: true })) }, at("2026-10-02 15:05"));
+    b.run(qingning, "audit.review", { auditId: first, itemIds: items(first).map((i) => i.id), verdict: "ok" }, at("2026-10-02 16:00"));
+    b.run(bailu, "audit.write", { auditId: first }, at("2026-10-02 18:00"));
+
+    const aa = b.run(bailu, "audit.start", { projectId: andlc, demo: true }, at("2026-10-23 09:00")).auditId;
+    b.run(bailu, "audit.add", { auditId: aa, source: { kind: "folder", label: "EP01" }, items: andlcAuditItems() }, at("2026-10-23 09:05"));
+    const lo = [1, 2, 3].map((n) => `ANDLC_EP01_SC001_CUT${String(n).padStart(3, "0")}_LO_v01.clip`);
+    b.run(qingning, "audit.review", { auditId: aa, itemIds: idsOf(aa, lo), verdict: "ok" }, at("2026-10-23 09:30"));
   }
 
   const state = b.state;

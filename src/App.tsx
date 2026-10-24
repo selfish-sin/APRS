@@ -76,7 +76,7 @@ function Routes() {
   const loggedIn = !!world && !!session?.memberId;
   const first = route.segments[0] ?? "";
 
-  const key = (route.segments[0] === "project" && route.segments[2] === "stage" ? "stage" : TITLE_KEYS.find((k) => k === first)) as TitleKey | "stage" | undefined;
+  const key = (route.segments[0] === "project" && route.segments[2] === "stage" ? "stage" : route.segments[0] === "project" && route.segments[2] === "audit" ? "audit" : TITLE_KEYS.find((k) => k === first)) as TitleKey | "stage" | "audit" | undefined;
   const pageTitle = key ? L.nav[key] : null;
   useEffect(() => {
     document.title = `${pageTitle ? `${pageTitle} · ` : ""}${L.nav.appName}`;

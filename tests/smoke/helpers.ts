@@ -149,11 +149,21 @@ export async function openStage(page: Page, projectPath: string, name: string) {
   await open(page, projectPath);
   await (await routeRow(page, name)).first().click();
   await expect(page.getByTestId("stage-title")).toContainText(name);
+  await expandDispatch(page);
   return page.locator("main");
+}
+
+/** 环节页的派发表默认收起（§18 · 设计 v7-8）：展开它。 */
+export async function expandDispatch(page: Page) {
+  const btn = page.getByTestId("dispatch-expand");
+  // 刚点进环节页时按钮可能还没画出来：先等环节页的标题（和派发表一起画出来；没有派发表的环节就没有这个按钮）
+  await page.getByTestId("stage-title").waitFor();
+  if ((await btn.count()) && (await btn.getAttribute("aria-expanded")) !== "true") await btn.click();
 }
 
 /** 项目的「卡 × 环节」网格。 */
 export async function openGrid(page: Page, projectPath: string) {
-  await open(page, `${projectPath}?tab=grid`);
+  // 「卡 × 环节」默认是交付物墙（§18）；文字网格在 grid=text
+  await open(page, `${projectPath}?tab=grid&grid=text`);
   await expect(page.getByTestId("board")).toBeVisible();
 }

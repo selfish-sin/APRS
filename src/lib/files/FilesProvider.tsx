@@ -9,6 +9,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { demoImages } from "@/data/demoImages";
+import { demoThumbs } from "@/data/demoThumbs";
 import type { FileSubject, Id } from "@/domain/model";
 import { usedShas } from "@/domain/queries";
 import { errorSay } from "@/domain/errors";
@@ -47,6 +48,8 @@ export interface FilesApi {
   urlOf: (sha256: string) => string | null;
   getBlob: (sha256: string) => Promise<Blob | null>;
   addFiles: (files: File[], target: AddTarget) => Promise<AddReport>;
+  /** 盘点的缩略图 / 原图（SPEC §18.3）：只放进文件仓，不记一条文件（不进资料库）。返回 SHA-256。 */
+  putBytes: (bytes: Uint8Array, mime: string) => Promise<string>;
   /** 导出「连文件一起」：这些文件的 base64；缺的不放。 */
   embed: () => Promise<{ files: Record<string, EmbeddedFile>; bytes: number; missing: number }>;
   /** 导入时把备份里的文件放回仓里。返回放了几个。 */
@@ -116,7 +119,8 @@ export function FilesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!store || !world) return;
     const used = new Set(usedShas(world).map((f) => f.sha256));
-    const need = demoImages().filter((d) => (base === "demo" || used.has(d.sha256)) && !present.has(d.sha256));
+    // 示范图 + 示范盘点的占位缩略图（都是代码画的 SVG）
+    const need = [...demoImages(), ...demoThumbs()].filter((d) => (base === "demo" || used.has(d.sha256)) && !present.has(d.sha256));
     if (!need.length) return;
     let alive = true;
     (async () => {
@@ -248,6 +252,19 @@ export function FilesProvider({ children }: { children: ReactNode }) {
     [store, present, dispatch]
   );
 
+  const putBytes = useCallback<FilesApi["putBytes"]>(
+    async (bytes, mime) => {
+      const s = store ?? (await storeReady.current!.promise);
+      const sha256 = await sha256OfBytes(bytes);
+      if (!present.has(sha256)) {
+        await s.put({ sha256, mime, size: bytes.length, data: bytes.slice().buffer as ArrayBuffer });
+        setPresent((prev) => (prev.has(sha256) ? prev : new Set([...Array.from(prev), sha256])));
+      }
+      return sha256;
+    },
+    [store, present]
+  );
+
   const embed = useCallback<FilesApi["embed"]>(async () => {
     const out: Record<string, EmbeddedFile> = {};
     let bytes = 0;
@@ -289,8 +306,8 @@ export function FilesProvider({ children }: { children: ReactNode }) {
   );
 
   const api = useMemo<FilesApi>(
-    () => ({ ready: !!store, persistent: store?.persistent ?? true, present, urlOf, getBlob, addFiles, embed, importEmbedded, usage, refreshUsage }),
-    [store, present, urlOf, getBlob, addFiles, embed, importEmbedded, usage, refreshUsage]
+    () => ({ ready: !!store, persistent: store?.persistent ?? true, present, urlOf, getBlob, addFiles, putBytes, embed, importEmbedded, usage, refreshUsage }),
+    [store, present, urlOf, getBlob, addFiles, putBytes, embed, importEmbedded, usage, refreshUsage]
   );
   return <FilesContext.Provider value={api}>{children}</FilesContext.Provider>;
 }

@@ -261,6 +261,20 @@ export const ERRORS = {
   setup_not_zero: t2("项目已经开工了，不用再走开局向导", "The project has already started; the setup is done."),
   block_top: t2("已经在最上面了", "It's already at the top."),
   block_bottom: t2("已经在最下面了", "It's already at the bottom."),
+  // —— 交付物盘点（§18）——
+  audit_reviewers_only: t2("只有管理员和审核员能盘点", "Only admins and reviewers can run an audit."),
+  audit_written: t2("这次盘点已经写回项目了；要改先撤销", "This audit has already been written back. Undo it first to change anything."),
+  audit_add_max: t2("一次最多放 {max} 个", "At most {max} files at a time."),
+  audit_total_max: t2("一次盘点最多 {max} 条", "One audit can hold at most {max} items."),
+  audit_step_bad: t2("盘点只有 1–4 步", "An audit has steps 1–4 only."),
+  audit_layer_missing: t2("这一卡没有 {layer} 层", "This cut has no layer {layer}."),
+  audit_pick: t2("先选要复查的那一条", "Pick the item to check first."),
+  audit_wrong_text: t2("选了「其他」，写一句是哪里不对", "You picked “Other”. Say what's wrong in a few words."),
+  audit_elsewhere_need: t2("文件在别处：贴一条链接或者写一句放在哪", "File is elsewhere: paste a link or say where it is."),
+  audit_regroup_none: t2("没有还没复查的 {code} 文件", "No unchecked {code} files left."),
+  audit_nothing: t2("还没有要写回的：先在复查里确认几条", "Nothing to write back yet. Confirm some items in the check first."),
+  audit_not_written: t2("这次盘点还没写回，没有可以撤销的", "This audit hasn't been written back, so there's nothing to undo."),
+  audit_undo_none: t2("写回的 {n} 条之后都有人动过，没有能撤销的", "All {n} written items were changed later, so nothing can be undone."),
 } satisfies Record<string, Text2>;
 
 export type ErrorKey = keyof typeof ERRORS;

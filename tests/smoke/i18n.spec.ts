@@ -110,6 +110,8 @@ async function tourStage(page: Page, path: string, label: string) {
     await expectNoPageScrollX(page, `${where} 设置`);
     await expectEnglish(page, `${where} 设置`);
   }
+  const expand = page.getByTestId("dispatch-expand");
+  if (await expand.isVisible()) await expand.click();
   const menu = page.getByTestId("dispatch-menu").first();
   if (await menu.isVisible()) {
     await menu.click();
@@ -133,6 +135,44 @@ async function tourStage(page: Page, path: string, label: string) {
     await expectEnglish(page, `${where} 验收`);
     await page.keyboard.press("Escape");
   }
+}
+
+/** 盘点：总览（还差多少 · 历史 · 墙）· 看图器 · 一次没写回的盘点的 4 步（复查时「不对」「改归属」「一次全确认」也打开看）· 写回过的那次。 */
+async function tourAudit(page: Page, href: string, label: string) {
+  const base = href.replace(/\?.*$/, "");
+  if (!(await page.getByTestId("ptab-audit").count())) return;
+  await visit(page, `${base}/audit`, label);
+  const where = `${label} ${base}/audit`;
+  // 点「还差多少」里的一个数 → 下面出这一类的墙
+  const num = page.getByTestId("remaining-total").locator("button.remaining-num").first();
+  if (await num.count()) {
+    await num.click();
+    await expectEnglish(page, `${where} 墙`);
+  }
+  const cell = page.getByTestId("overview-wall").getByTestId("wall-cell").first();
+  if (await cell.count()) {
+    await cell.click();
+    await expect(page.getByTestId("wall-viewer")).toBeVisible();
+    await expectEnglish(page, `${where} 看图器`);
+    await page.keyboard.press("Escape");
+  }
+  const links = async (id: string) => page.getByTestId(id).evaluateAll((as) => as.map((a) => (a.getAttribute("href") ?? "").replace(/^#/, "")));
+  for (const run of await links("history-continue")) {
+    for (let n = 1; n <= 4; n++) {
+      await visit(page, `${run.split("?")[0]}?step=${n}`, label);
+      if (n !== 3) continue;
+      for (const [btn, what] of [["review-wrong", "不对"], ["review-reassign", "改归属"], ["bulk-open", "一次全确认"]] as const) {
+        const b = page.getByTestId(btn).first();
+        if (!(await b.isVisible())) continue;
+        await b.click();
+        await expectNoPageScrollX(page, `${where} 复查 · ${what}`);
+        await expectEnglish(page, `${where} 复查 · ${what}`);
+        await open(page, `${run.split("?")[0]}?step=3`);
+      }
+    }
+  }
+  // 写回过的那次（第 4 步：写回了什么 · 撤销那一块 · 和上一次比）
+  for (const run of await links("history-open")) await visit(page, run, label);
 }
 
 /** 项目列表里每个项目：环节路线（或开局向导的每一步）· 每个标签 · 每种状态的环节页 · 第一卡 · 资料库 · 资料页 · 看图器。 */
@@ -193,6 +233,22 @@ async function tourProjects(page: Page, label: string) {
           }
         }
         await open(page, `${href}?tab=grid`);
+        await expectEnglish(page, `${label} ${href} 交付物墙`);
+        const wcell = page.getByTestId("project-wall").getByTestId("wall-cell").first();
+        if (await wcell.count()) {
+          await wcell.click();
+          await expect(page.getByTestId("wall-viewer")).toBeVisible();
+          await expectEnglish(page, `${label} ${href} 交付物墙 · 看图器`);
+          await page.keyboard.press("Escape");
+        }
+        const folded = page.getByTestId("wall-folded");
+        if (await folded.isVisible()) {
+          await folded.click();
+          await expectNoPageScrollX(page, `${label} ${href} 交付物墙（全部环节）`);
+          await expectEnglish(page, `${label} ${href} 交付物墙（全部环节）`);
+        }
+        await tourAudit(page, href, label);
+        await open(page, `${href}?tab=grid&grid=text`);
         await page.getByTestId("report-open").click();
         await expect(page.getByTestId("report-dialog")).toBeVisible();
         await expectEnglish(page, `${label} ${href} 导出汇报`);

@@ -403,6 +403,10 @@ export interface SubmissionRow extends RowHeader {
   at: IsoDateTime;
   /** 这一版挂的几条链接（SPEC §15.1；旧的记录只有 link）。 */
   links?: SubmissionLink[];
+  /** 补录（SPEC §18.8）：盘点时照文件补记的一版（哪次盘点 · 哪个文件）。 */
+  backfill?: { auditId: Id; itemId: Id | null } | null;
+  /** 核实（SPEC §18.8）：盘点时人看过、对上了（哪次盘点 · 谁 · 什么时候）。 */
+  verified?: { auditId: Id; itemId: Id | null; byMemberId: Id; at: IsoDateTime } | null;
 }
 
 export interface SubmissionLink {
@@ -580,6 +584,161 @@ export interface BlockRow extends RowHeader {
 }
 
 // ---------------------------------------------------------------------------
+// 交付物盘点（SPEC §18）
+// ---------------------------------------------------------------------------
+
+/** 一条是怎么进来的：拖 / 选的文件 · 粘贴的名字 · zip 里的目录 · 不是文件（复查「系统说交了没找到」那一格的结论）。 */
+export const AUDIT_ORIGIN = ["file", "paste", "zip", "cell"] as const;
+export type AuditOrigin = (typeof AUDIT_ORIGIN)[number];
+
+/**
+ * 复查的结论：确认（含改归属）· 不对 · 跳过 · 加这一卡 · 不要 · 文件在别处 · 确实没交。
+ * 「文件在别处 / 确实没交」只给「系统说交了没找到」的格子。
+ */
+export const AUDIT_VERDICT = ["ok", "wrong", "skip", "add_cut", "drop", "elsewhere", "missing"] as const;
+export type AuditVerdict = (typeof AUDIT_VERDICT)[number];
+
+/** 「不对」的原因：不是这一卡 · 不是这个环节 · 是旧的 · 没做完 · 其他。 */
+export const AUDIT_WRONG = ["not_cut", "not_stage", "old", "unfinished", "other"] as const;
+export type AuditWrong = (typeof AUDIT_WRONG)[number];
+
+export const AUDIT_STATUS = ["open", "written"] as const;
+export type AuditStatus = (typeof AUDIT_STATUS)[number];
+
+/** 认成哪一卡 · 哪个环节 · 哪一层 · 第几版。卡不在卡表里时只有卡号。 */
+export interface AuditPlace {
+  cutId: Id | null;
+  cutNumber: number | null;
+  cutSuffix: string;
+  stageKey: string | null;
+  layer: string | null;
+  version: number | null;
+  /** 怎么认出来的环节（放进来时的建议才有；SPEC §18.4 的几条规则）。 */
+  rule?: "single" | "exact" | "continue" | "earliest" | "last" | null;
+}
+
+/** 文件里读出来的信息（只显示，不算错）。 */
+export interface AuditFileInfo {
+  kind: "clip" | "image" | "psd" | "video" | "zip" | "archive" | "other";
+  canvas?: { width: number; height: number; dpi: number | null } | null;
+  fps?: number | null;
+  frames?: number | null;
+  seconds?: number | null;
+  /** .clip 的顶层文件夹名（文件里的，原样）。 */
+  folders?: string[];
+  /** zip 里有几个文件。 */
+  entries?: number | null;
+}
+
+/** 缩略图：长边 640，存在文件仓（IndexedDB，按内容的 SHA-256）。 */
+export interface AuditThumb {
+  sha256: string;
+  mime: string;
+  width: number;
+  height: number;
+}
+
+export interface AuditReview {
+  verdict: AuditVerdict;
+  reason: AuditWrong | null;
+  text: string | null;
+  /** 文件在别处：贴的链接。 */
+  link: string | null;
+  /** 改归属（改完算确认）。 */
+  place: AuditPlace | null;
+  /** 「不对 · 没做完」、系统里已经通过：要打回重做（人勾的，不自动）。 */
+  redo: boolean;
+  byMemberId: Id;
+  at: IsoDateTime;
+}
+
+export interface AuditItemRow extends RowHeader {
+  auditId: Id;
+  projectId: Id;
+  /** 第几批放进来的（同一次盘点能放好几次）。 */
+  batch: number;
+  origin: AuditOrigin;
+  /** 文件名（原样）。 */
+  name: string;
+  /** 在文件夹里的路径（拖文件夹 / zip 里的 / 粘贴的整条路径）。 */
+  path: string | null;
+  size: number | null;
+  /** 修改时间（文件自己带的）。 */
+  mtime: IsoDateTime | null;
+  /** zip 里的：哪个 zip。 */
+  container: string | null;
+  /** 指纹 = 大小 + 修改时间 + 缩略图的 SHA-256（认重复、比上次多了什么）。 */
+  fingerprint: string | null;
+  thumb: AuditThumb | null;
+  /** 勾了「小图连原图一起存」：原图在文件仓里的 SHA-256。 */
+  originalSha: string | null;
+  info: AuditFileInfo | null;
+  /** 放进来时给的「最可能的归属」（SPEC §18.4）。 */
+  guess: AuditPlace | null;
+  /** origin = cell：哪一张任务。 */
+  taskId: Id | null;
+  review: AuditReview | null;
+  /** 写回了什么。 */
+  written: { action: "verify" | "backfill" | "redo" | "add_cut"; taskId: Id | null; submissionId: Id | null } | null;
+  /** 示范盘点里的（缩略图是代码画的占位图）。 */
+  demo?: boolean;
+}
+
+export interface AuditSource {
+  batch: number;
+  kind: "folder" | "files" | "paste" | "zip";
+  /** 文件夹名 / 压缩包名（原样）。 */
+  label: string | null;
+  count: number;
+  at: IsoDateTime;
+}
+
+/** 写回时改的一行（撤销用：版本号没变 = 之后没人动过）。 */
+export interface AuditRef {
+  table: TableName;
+  id: Id;
+  /** 写回以后这一行的版本号。 */
+  version: number;
+  /** 改之前的值（新加的行没有）。 */
+  prev: Record<string, unknown> | null;
+}
+
+export interface AuditUnit {
+  kind: "verify" | "backfill" | "redo" | "add_cut" | "unlock";
+  taskId: Id | null;
+  cutId: Id | null;
+  refs: AuditRef[];
+}
+
+export interface AuditWritten {
+  at: IsoDateTime;
+  byMemberId: Id;
+  counts: { verify: number; backfill: number; redo: number; addCut: number; untouched: number };
+  units: AuditUnit[];
+}
+
+export interface AuditRow extends RowHeader {
+  projectId: Id;
+  byMemberId: Id;
+  /** 世界时间：开始盘点的时候。 */
+  at: IsoDateTime;
+  /** 从环节页进来的：默认只看这个环节。 */
+  stageKey: string | null;
+  /** 这一批放在哪（飞书 / Drive / Dropbox 的文件夹链接）。 */
+  link: string | null;
+  /** 存什么：只存名字和缩略图（推荐）· 小图连原图一起存。 */
+  keep: "thumbs" | "full";
+  /** 做到第几步（1 放进来 · 2 自动查 · 3 人工复查 · 4 写回项目）。 */
+  step: number;
+  status: AuditStatus;
+  sources: AuditSource[];
+  written: AuditWritten | null;
+  /** 撤销过（写回的东西退回去了，盘点回到第 4 步）。 */
+  undone: { at: IsoDateTime; byMemberId: Id; kept: number }[];
+  demo?: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // 表
 // ---------------------------------------------------------------------------
 
@@ -601,6 +760,8 @@ export interface Tables {
   pins: PinRow;
   pages: PageRow;
   blocks: BlockRow;
+  audits: AuditRow;
+  auditItems: AuditItemRow;
 }
 
 export type TableName = keyof Tables;
@@ -623,6 +784,8 @@ export const TABLE_NAMES: TableName[] = [
   "pins",
   "pages",
   "blocks",
+  "audits",
+  "auditItems",
 ];
 
 /** Fields a command may never patch. */

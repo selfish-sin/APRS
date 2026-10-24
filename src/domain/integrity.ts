@@ -28,6 +28,8 @@ const REFS: Partial<Record<TableName, Record<string, TableName>>> = {
   pins: { fileId: "files", projectId: "projects", cutId: "cuts", taskId: "tasks", reviewTaskId: "tasks", byMemberId: "members" },
   pages: { projectId: "projects", byMemberId: "members" },
   blocks: { pageId: "pages", byMemberId: "members" },
+  audits: { projectId: "projects", byMemberId: "members" },
+  auditItems: { auditId: "audits", projectId: "projects", taskId: "tasks" },
 };
 
 const REQUIRED = new Set([
@@ -53,6 +55,10 @@ const REQUIRED = new Set([
   "pins.byMemberId",
   "pages.projectId",
   "blocks.pageId",
+  "audits.projectId",
+  "audits.byMemberId",
+  "auditItems.auditId",
+  "auditItems.projectId",
 ]);
 
 const SUBJECT_TABLE = { project: "projects", cut: "cuts", task: "tasks", block: "blocks" } as const;
@@ -123,9 +129,28 @@ export function checkIntegrity(state: WorldState): IntegrityProblem[] {
   }
   const versions = new Map<string, number>();
   for (const s of Object.values(state.submissions)) {
+    // 归档的（撤销了的补录）不算
+    if (s.archivedAt) continue;
     const key = `${s.taskId}#${s.versionNo}`;
     versions.set(key, (versions.get(key) ?? 0) + 1);
     if ((versions.get(key) ?? 0) > 1) problems.push({ table: "submissions", id: s.id, field: "versionNo", problem: "two submissions with the same version" });
+  }
+  // 盘点（SPEC §18）：一条在它那次盘点的项目里；缩略图 / 原图是 sha256；补录 / 核实指向在的盘点。
+  for (const it of Object.values(state.auditItems ?? {})) {
+    const a = state.audits[it.auditId];
+    if (a && a.projectId !== it.projectId) problems.push({ table: "auditItems", id: it.id, field: "projectId", problem: "item is in another project than its audit" });
+    if (it.thumb && !/^[0-9a-f]{64}$/.test(it.thumb.sha256)) problems.push({ table: "auditItems", id: it.id, field: "thumb", problem: "not a sha256" });
+    if (it.originalSha && !/^[0-9a-f]{64}$/.test(it.originalSha)) problems.push({ table: "auditItems", id: it.id, field: "originalSha", problem: "not a sha256" });
+    if (it.origin === "cell" && !it.taskId) problems.push({ table: "auditItems", id: it.id, field: "taskId", problem: "cell decision without a task" });
+    const t = it.taskId ? state.tasks[it.taskId] : undefined;
+    if (t && t.projectId !== it.projectId) problems.push({ table: "auditItems", id: it.id, field: "taskId", problem: "task is in another project" });
+  }
+  for (const s of Object.values(state.submissions)) {
+    for (const [field, ref] of [["backfill", s.backfill], ["verified", s.verified]] as const) {
+      if (!ref) continue;
+      if (!state.audits?.[ref.auditId]) problems.push({ table: "submissions", id: s.id, field, problem: `→ audits/${ref.auditId} does not exist` });
+      if (ref.itemId && !state.auditItems?.[ref.itemId]) problems.push({ table: "submissions", id: s.id, field, problem: `→ auditItems/${ref.itemId} does not exist` });
+    }
   }
   const logins = new Set<string>();
   for (const a of Object.values(state.accounts)) {

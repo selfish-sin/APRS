@@ -13,6 +13,9 @@ import { EXTRA_KIND_LABEL, EXTRA_KIND_TEXT, cutCode } from "./naming";
 import { tagText } from "./rules";
 import { stageText } from "./templates";
 import { phraseText, type Phrase } from "./text";
+import { memoryReadModel } from "./readmodel";
+import { auditInputs, checkAudit } from "./audit/check";
+import { auditsOfProject, deliveriesOf } from "./audit/deliveries";
 
 export type Lang = "zh" | "en";
 export type CellStyle = "header" | "plan" | "actual" | "over" | "today" | "phase" | "total";
@@ -34,7 +37,7 @@ export interface ReportTable {
   freezeCols: number;
 }
 
-export const REPORT_KEYS = ["progress", "plan", "grid", "hours", "reviews"] as const;
+export const REPORT_KEYS = ["progress", "plan", "grid", "hours", "reviews", "audit", "remaining"] as const;
 export type ReportKey = (typeof REPORT_KEYS)[number];
 
 const L = {
@@ -43,18 +46,22 @@ const L = {
   grid: { zh: "卡 × 环节", en: "Cuts x stages" },
   hours: { zh: "必要劳动时间统计表", en: "Labor hours" },
   reviews: { zh: "审核记录", en: "Reviews" },
+  audit: { zh: "交付物盘点", en: "Deliverables audit" },
+  remaining: { zh: "还差多少", en: "What's missing" },
   myTasks: { zh: "我的任务", en: "My tasks" },
   myHours: { zh: "工时", en: "Hours" },
   myLedger: { zh: "活力点流水", en: "Points ledger" },
 } satisfies Record<string, Record<Lang, string>>;
 
-export const REPORT_LABEL: Record<ReportKey, Record<Lang, string>> = { progress: L.progress, plan: L.plan, grid: L.grid, hours: L.hours, reviews: L.reviews };
+export const REPORT_LABEL: Record<ReportKey, Record<Lang, string>> = { progress: L.progress, plan: L.plan, grid: L.grid, hours: L.hours, reviews: L.reviews, audit: L.audit, remaining: L.remaining };
 
 const H = {
   progress: { zh: ["序号", "项目", "类型", "预计开始", "预计结束", "计划天数", "进度", "剩余天数", "状态", "实际结束"], en: ["No.", "Item", "Phase", "Planned start", "Planned end", "Planned days", "Progress", "Days left", "Status", "Actual end"] },
   plan: { zh: ["环节", "阶段", "负责人", "计划开始", "计划工期（周）", "实际开始", "实际工期（周）", "完成"], en: ["Stage", "Phase", "Owner", "Planned start", "Planned weeks", "Actual start", "Actual weeks", "Done"] },
   hours: { zh: ["人员", "导演 / 监制", "剧本 / 分镜", "LO", "原画", "中割 / 清线", "填色", "后期", "其他", "总计工时", "活力点"], en: ["Member", "Director / producer", "Script / storyboard", "Layout", "Key animation", "In-between / cleanup", "Coloring", "Post", "Other", "Total hours", "Points"] },
   reviews: { zh: ["时间", "卡", "环节", "版本", "交的人", "谁审", "结论", "质量系数", "意见"], en: ["When", "Cut", "Stage", "Version", "Submitted by", "Reviewed by", "Verdict", "Quality", "Comments"] },
+  audit: { zh: ["卡", "环节", "层", "结果", "文件名", "版本", "问题", "复查人", "结论"], en: ["Cut", "Stage", "Layer", "Result", "File name", "Version", "Problems", "Checked by", "Conclusion"] },
+  remaining: { zh: ["环节", "应交", "已核实", "待复查", "没文件", "有问题", "缺"], en: ["Stage", "Due", "Verified", "To check", "No file", "Problem", "Missing"] },
   myTasks: { zh: ["项目", "任务", "状态", "最新版本", "交的时间", "通过时间", "活力点"], en: ["Project", "Task", "Status", "Latest version", "Submitted", "Passed", "Points"] },
   myHours: { zh: ["环节", "通过几张", "工时", "活力点"], en: ["Stage", "Tasks passed", "Hours", "Points"] },
   myLedger: { zh: ["时间", "种类", "任务", "工时", "系数", "质量", "活力点", "说明"], en: ["When", "Kind", "Task", "Hours", "Factor", "Quality", "Points", "Note"] },
@@ -266,6 +273,29 @@ export function reviewsTable(state: WorldState, projectId: Id, lang: Lang): Repo
       });
     }
   }
+  // 盘点时补录的版本（没有审核，结论写「补录」）
+  for (const t of idx.tasks) {
+    if (t.projectId !== projectId) continue;
+    const v = taskView(state, t);
+    if (!v) continue;
+    for (const sub of submissionsOf(state, t.id)) {
+      if (!sub.backfill) continue;
+      rows.push({
+        at: sub.at,
+        row: [
+          localDate(sub.at),
+          v.cut ? cutCode(v.cut, v.project.group, lang) : null,
+          `${stageName(state, v.stage, lang)}${t.layer ? ` ${t.layer}` : ""}`,
+          v2(sub.versionNo),
+          sub.byMemberId ? memberById(state, sub.byMemberId)?.nickname ?? null : t.outsourceName,
+          sub.recordedById ? memberById(state, sub.recordedById)?.nickname ?? null : null,
+          lang === "en" ? "Backfill" : "补录",
+          null,
+          sub.fileName,
+        ],
+      });
+    }
+  }
   rows.sort((a, b) => cmp(a.at, b.at));
   return { key: "reviews", name: sheetName(L.reviews[lang]), header: H.reviews[lang], rows: rows.map((x) => x.row), widths: [12, 8, 22, 8, 10, 10, 12, 8, 50], styles: [], freezeCols: 0 };
 }
@@ -283,11 +313,107 @@ export function buildReport(state: WorldState, projectId: Id, keys: readonly Rep
             ? gridTable(state, projectId, lang)
             : k === "hours"
               ? hoursTable(state, projectId, lang, opts.month ?? null)
-              : reviewsTable(state, projectId, lang);
+              : k === "audit"
+                ? auditTable(state, projectId, lang)
+                : k === "remaining"
+                  ? remainingTable(state, projectId, lang)
+                  : reviewsTable(state, projectId, lang);
     if (t) out.push(t);
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// 交付物盘点（SPEC §18.9）：最近一次盘点的每一条 · 按环节的「还差多少」
+// ---------------------------------------------------------------------------
+
+const OUTCOME_TEXT: Record<string, Record<Lang, string>> = {
+  matched: { zh: "对上了", en: "Matched" },
+  unrecorded: { zh: "有文件、系统里没记", en: "File, not in system" },
+  nofile: { zh: "系统说交了、没找到文件", en: "In system, file not found" },
+  newer: { zh: "文件比系统新", en: "File newer than system" },
+  missing: { zh: "缺", en: "Missing" },
+  older: { zh: "旧版本", en: "Older version" },
+  foreign: { zh: "不是这个项目的", en: "Not this project" },
+  none: { zh: "认不出", en: "Not recognized" },
+};
+const VERDICT_AUDIT: Record<string, Record<Lang, string>> = {
+  ok: { zh: "确认", en: "Confirmed" },
+  wrong: { zh: "不对", en: "Not right" },
+  skip: { zh: "跳过", en: "Skipped" },
+  add_cut: { zh: "加这一卡", en: "Add this cut" },
+  drop: { zh: "不要", en: "Dropped" },
+  elsewhere: { zh: "文件在别处", en: "File elsewhere" },
+  missing: { zh: "确实没交", en: "Not delivered" },
+};
+const ISSUE_TEXT: Record<string, Record<Lang, string>> = {
+  project_typo: { zh: "项目代号差一个字母", en: "Project code off by a letter" },
+  not_project: { zh: "不是这个项目的", en: "Not this project" },
+  no_pad: { zh: "没补零", en: "Not zero-padded" },
+  case: { zh: "大小写不统一", en: "Inconsistent case" },
+  unknown_code: { zh: "不认识的流程代码", en: "Unknown process code" },
+  unknown_layer: { zh: "不认识的层", en: "Unknown layer" },
+  order: { zh: "顺序不对", en: "Order is wrong" },
+  missing: { zh: "少一段", en: "A part is missing" },
+  version_note: { zh: "版本号后面带了字", en: "Text after the version" },
+  extra_segment: { zh: "多出来一段", en: "Extra part" },
+  no_cut: { zh: "卡不在卡表里", en: "Cut not in the cut list" },
+  no_layer: { zh: "层不在这一卡里", en: "Layer not in this cut" },
+  need_layer: { zh: "少了层", en: "Layer missing" },
+  no_stage: { zh: "这个项目没有这个流程", en: "No stage for this code" },
+  wrong_folder: { zh: "放错文件夹", en: "Wrong folder" },
+  wrong_folder_code: { zh: "放错文件夹", en: "Wrong folder" },
+  duplicate: { zh: "同一版有两个文件", en: "Two files for one version" },
+};
+const MARK_TEXT: Record<string, Record<Lang, string>> = {
+  verified: { zh: "已核实", en: "Verified" },
+  pending: { zh: "待复查", en: "To check" },
+  nofile: { zh: "没文件", en: "No file" },
+  issue: { zh: "有问题", en: "Problem" },
+  missing: { zh: "缺", en: "Missing" },
+};
+
+export function auditTable(state: WorldState, projectId: Id, lang: Lang): ReportTable | null {
+  const rm = memoryReadModel(state);
+  const audit = auditsOfProject(rm, projectId)[0];
+  if (!audit) return { key: "audit", name: sheetName(L.audit[lang]), header: H.audit[lang], rows: [], widths: [8, 16, 6, 18, 44, 8, 30, 10, 12], styles: [], freezeCols: 0 };
+  const inputs = auditInputs(rm, audit.id);
+  if (!inputs) return null;
+  const c = checkAudit(inputs);
+  const group = c.facts.project.group;
+  const rows: CellValue[][] = [];
+  const by = (id: Id | null | undefined) => (id ? memberById(state, id)?.nickname ?? null : null);
+  for (const e of c.entries) {
+    const kind = e.kind === "foreign" ? "foreign" : e.kind === "none" ? "none" : e.superseded ? "older" : e.outcome ?? "none";
+    rows.push([
+      e.cut ? cutCode(e.cut, group, lang) : e.place.cutNumber !== null ? `CUT${String(e.place.cutNumber).padStart(3, "0")}${e.place.cutSuffix}` : null,
+      e.stage ? stageName(state, e.stage, lang) : null,
+      e.place.layer,
+      OUTCOME_TEXT[kind]?.[lang] ?? kind,
+      e.items.map((i) => i.name).join(" + "),
+      e.place.version != null ? v2(e.place.version) : null,
+      Array.from(new Set(e.issues.map((x) => ISSUE_TEXT[x.code]?.[lang] ?? x.code))).join(lang === "en" ? "; " : "；") || null,
+      by(e.review?.byMemberId),
+      e.review ? VERDICT_AUDIT[e.review.verdict][lang] : null,
+    ]);
+  }
+  for (const cell of c.cells) {
+    if (!cell.inScope || cell.top || cell.outcome !== "nofile") continue;
+    const r = cell.decision?.review ?? null;
+    rows.push([cell.cut ? cutCode(cell.cut, group, lang) : null, stageName(state, cell.stage, lang), cell.layer, OUTCOME_TEXT.nofile[lang], null, cell.sysVersion ? v2(cell.sysVersion) : null, null, by(r?.byMemberId), r ? VERDICT_AUDIT[r.verdict][lang] : null]);
+  }
+  return { key: "audit", name: sheetName(L.audit[lang]), header: H.audit[lang], rows, widths: [8, 16, 6, 18, 44, 8, 30, 10, 12], styles: [], freezeCols: 0 };
+}
+
+export function remainingTable(state: WorldState, projectId: Id, lang: Lang): ReportTable | null {
+  const d = deliveriesOf(memoryReadModel(state), projectId);
+  if (!d) return null;
+  const line = (name: string, r: { due: number; verified: number; pending: number; nofile: number; issue: number; missing: number }): CellValue[] => [name, r.due, r.verified, r.pending, r.nofile, r.issue, r.missing];
+  const rows: CellValue[][] = [line(lang === "en" ? "Whole project" : "全项目合计", d.total), ...d.stages.map((r) => line(stageName(state, r.stage!, lang), r))];
+  return { key: "remaining", name: sheetName(L.remaining[lang]), header: H.remaining[lang], rows, widths: [20, 8, 8, 8, 8, 8, 8], styles: [{ r: 0, c: 0, s: "total" }], freezeCols: 1 };
+}
+
+export { MARK_TEXT };
 
 /** 成员页「导出我的记录」：我的任务 · 工时 · 活力点流水。 */
 export function memberRecord(state: WorldState, memberId: Id, lang: Lang = "zh"): ReportTable[] {

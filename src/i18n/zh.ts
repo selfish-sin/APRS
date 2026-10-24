@@ -3,6 +3,7 @@
  * 参数写 {name}；英文那边要分单复数的写 { one, other }。
  */
 import { zh as nav } from "./ns/nav";
+import { zh as audit } from "./ns/audit";
 import { zh as wizard } from "./ns/wizard";
 import { zh as profile } from "./ns/profile";
 import { zh as stagePage } from "./ns/stagePage";
@@ -29,6 +30,7 @@ import { zh as entry } from "./ns/entry";
 
 export const zh = {
   nav,
+  audit,
   wizard,
   profile,
   stagePage,

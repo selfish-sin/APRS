@@ -945,7 +945,12 @@ export function timelineOfCut(state: WorldState, cutId: Id): TimelineItem[] {
         memberId: s.byMemberId,
         task: t,
         stage: stageOfTask(t),
-        phrase: s.selfFix
+        phrase: s.backfill
+          ? // 盘点时补录的一版（SPEC §18.8）：时间线里标「补录」
+            s.byMemberId || t.outsourceName
+            ? phrase("补录：{who} 交的 {task} {v}（{by} 盘点时补录）", "Backfill: {task} {v} by {who} (entered by {by} during an audit)", { who, task: labelOf(t), v, by: name(s.recordedById) })
+            : phrase("补录：{task} {v}（{by} 盘点时补录 · 不记人）", "Backfill: {task} {v} (entered by {by} during an audit · nobody recorded)", { task: labelOf(t), v, by: name(s.recordedById) })
+          : s.selfFix
           ? phrase("{who} 自修出 {v}", "{who} self-fixed {v}", { who, v })
           : s.recordedById
             ? phrase("{who} 交了 {task} {v}（{by} 代交）", "{who} submitted {task} {v} (entered by {by})", { who, task: labelOf(t), v, by: name(s.recordedById) })
@@ -1400,6 +1405,18 @@ export function feedPhrase(state: WorldState, e: JournalEntry): Phrase | null {
       return P("{who} 建了资料页「{title}」", "{who} created the page “{title}”", { title: uc(String(p.title ?? "")) });
     case "stage.set_reviewer":
       return P("{who} 指定了「{stage}」的审核员", "{who} set the reviewer for “{stage}”", { stage: stageP(state, p.stageId) });
+    case "audit.write": {
+      // 整批写回在项目动态里是一条（SPEC §18.8）
+      const ch = e.changes.find((c) => c.table === "audits" && c.op === "update") as { patch?: { written?: { counts?: Record<string, number> } } } | undefined;
+      const n = ch?.patch?.written?.counts ?? {};
+      const a = state.audits?.[String(p.auditId)];
+      const date = a ? localDate(a.at).slice(5) : "";
+      return P("{who} 写回 {date} 盘点：核实 {verify} · 补录 {backfill} · 打回 {redo} · 加卡 {addCut}", "{who} wrote back the {date} audit: verified {verify} · backfilled {backfill} · sent back {redo} · cuts added {addCut}", { date, verify: n.verify ?? 0, backfill: n.backfill ?? 0, redo: n.redo ?? 0, addCut: n.addCut ?? 0 });
+    }
+    case "audit.undo": {
+      const a = state.audits?.[String(p.auditId)];
+      return P("{who} 撤销了 {date} 的盘点（退回写回的东西）", "{who} undid the {date} audit (rolled back what it wrote)", { date: a ? localDate(a.at).slice(5) : "" });
+    }
     default:
       return null;
   }
@@ -1451,6 +1468,8 @@ const PROJECT_COMMANDS = new Set([
   "cut.add",
   "cut.update",
   "cut.archive",
+  "audit.write",
+  "audit.undo",
 ]);
 
 export interface ProjectTimelineItem {
@@ -1474,6 +1493,7 @@ function projectOfEntry(state: WorldState, e: JournalEntry): Id | null {
   if (typeof p.taskId === "string" && state.tasks[p.taskId]) return state.tasks[p.taskId].projectId;
   if (Array.isArray(p.taskIds) && typeof p.taskIds[0] === "string" && state.tasks[p.taskIds[0]]) return state.tasks[p.taskIds[0]].projectId;
   if (typeof p.cutId === "string" && state.cuts[p.cutId]) return state.cuts[p.cutId].projectId;
+  if (typeof p.auditId === "string" && state.audits?.[p.auditId]) return state.audits[p.auditId].projectId;
   return null;
 }
 
@@ -1866,6 +1886,12 @@ export function libraryBytes(state: WorldState): { files: number; bytes: number 
 export function usedShas(state: WorldState): { sha256: string; size: number; mime: string; name: string }[] {
   const seen = new Map<string, { sha256: string; size: number; mime: string; name: string }>();
   for (const f of Object.values(state.files ?? {})) if (!seen.has(f.sha256)) seen.set(f.sha256, { sha256: f.sha256, size: f.size, mime: f.mime, name: f.name });
+  // 盘点的缩略图 · 连原图一起存的原图（SPEC §18.3）
+  for (const it of Object.values(state.auditItems ?? {})) {
+    if (it.archivedAt) continue;
+    if (it.thumb && !seen.has(it.thumb.sha256)) seen.set(it.thumb.sha256, { sha256: it.thumb.sha256, size: 0, mime: it.thumb.mime, name: it.name });
+    if (it.originalSha && !seen.has(it.originalSha)) seen.set(it.originalSha, { sha256: it.originalSha, size: it.size ?? 0, mime: "", name: it.name });
+  }
   return Array.from(seen.values());
 }
 

@@ -16,6 +16,7 @@ import { acceptStage, addCuts, addStage, archiveCut, disableStage, extendProject
 import { assignRole, publishTask, setStageLock, setStagePeriod, setStageRate, unassignRole } from "./flex";
 import { addBlock, archivePage, createPage, moveBlock, removeBlock, renamePage, updateBlock } from "./page";
 import { assignStagePerson, setSetupStep, unassignStagePerson } from "./route";
+import { addAuditItems, decideAuditCell, regroupAudit, reviewAudit, setAuditStep, startAudit, undoAudit, writeAudit } from "./audit";
 
 export const COMMANDS = {
   "guild.create": createGuild,
@@ -89,6 +90,14 @@ export const COMMANDS = {
   "block.update": updateBlock,
   "block.move": moveBlock,
   "block.remove": removeBlock,
+  "audit.start": startAudit,
+  "audit.add": addAuditItems,
+  "audit.step": setAuditStep,
+  "audit.review": reviewAudit,
+  "audit.decide": decideAuditCell,
+  "audit.regroup": regroupAudit,
+  "audit.write": writeAudit,
+  "audit.undo": undoAudit,
 } as const;
 
 export type CommandName = keyof typeof COMMANDS;

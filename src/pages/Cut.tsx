@@ -3,6 +3,7 @@
  * 在任何环节留意见 / 问上游 · 当前任务的动作。
  */
 import { useMemo, useState } from "react";
+import { CutFilmstrip, useDeliveries } from "@/components/audit/wall";
 import { Button } from "@/components/ui/Button";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Empty, MemberAvatar, MemberLink, SelectField, Tag } from "@/components/app/bits";
@@ -41,6 +42,7 @@ export function CutPage() {
   const project = cut ? projectById(world, cut.projectId) : undefined;
   const timeline = useMemo(() => (cut ? timelineOfCut(world, cut.id) : []), [world, cut]);
   const [viewer, setViewer] = useState<{ start: Id; pin: Id | null } | null>(null);
+  const deliveries = useDeliveries(cut?.projectId ?? "");
   if (!cut || !project) return <NotFound what="cut" />;
   const cutFiles = filesOfCut(world, cut.id);
   const stages = stagesOf(world, project.id).filter((s) => s.grain !== "project");
@@ -78,6 +80,8 @@ export function CutPage() {
           </span>
         </div>
       </div>
+
+      {deliveries ? <CutFilmstrip d={deliveries} cut={cut} group={project.group} /> : null}
 
       {todos.length ? (
         <section className="card" data-tone="muted" aria-label={L.cut.todos}>

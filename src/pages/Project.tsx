@@ -18,7 +18,10 @@ import { ProjectTimelineCard } from "./ProjectSetup";
 import { ProjectProfile } from "./ProjectProfile";
 import { ZeroWizard } from "./ZeroWizard";
 import { LibraryPage } from "./Library";
-import { isAdmin } from "@/domain/commands/core";
+import { isAdmin, isReviewer } from "@/domain/commands/core";
+import { AuditTab } from "./Audit";
+import { DeliveryWall, useDeliveries, WallViewer, type WallPick } from "@/components/audit/wall";
+import type { DeliveryMark } from "@/domain/audit/deliveries";
 import type { ProjectRow, TaskRow } from "@/domain/model";
 import { gridOf, pipelineOf, projectById, type GridFilter } from "@/domain/queries";
 import { U, useI18n } from "@/i18n/I18n";
@@ -27,7 +30,7 @@ import { useGuild } from "@/lib/store";
 import { NotFound } from "./NotFound";
 
 const FILTERS: GridFilter[] = ["all", "mine", "review", "stuck"];
-export const PROJECT_TABS = ["route", "grid", "schedule", "library", "activity", "profile"] as const;
+export const PROJECT_TABS = ["route", "grid", "schedule", "library", "activity", "profile", "audit"] as const;
 export type ProjectTab = (typeof PROJECT_TABS)[number];
 
 export function ProjectPage() {
@@ -41,9 +44,14 @@ export function ProjectPage() {
   if (!project || !pipeline) return <NotFound what="project" />;
   if (project.status === "zero") return <ZeroWizard project={project} />;
   const q = route.query.get("tab");
-  const tab: ProjectTab = PROJECT_TABS.find((t) => t === q) ?? (route.query.get("view") === "schedule" ? "schedule" : "route");
+  const inAudit = route.segments[2] === "audit";
+  const auditId = inAudit ? route.segments[3] ?? null : null;
+  const tab: ProjectTab = inAudit ? "audit" : PROJECT_TABS.find((t) => t === q) ?? (route.query.get("view") === "schedule" ? "schedule" : "route");
   const admin = isAdmin(me);
-  const label: Record<ProjectTab, string> = { route: L.route.tabs.route, grid: L.route.tabs.grid, schedule: L.route.tabs.schedule, library: L.route.tabs.library, activity: L.route.tabs.activity, profile: L.route.tabs.profile };
+  // 「盘点」管理员 · 审核员看得到（SPEC §18.2）
+  const tabs = PROJECT_TABS.filter((t) => t !== "audit" || isReviewer(me));
+  const label: Record<ProjectTab, string> = { route: L.route.tabs.route, grid: L.route.tabs.grid, schedule: L.route.tabs.schedule, library: L.route.tabs.library, activity: L.route.tabs.activity, profile: L.route.tabs.profile, audit: L.audit.tab };
+  const tabHref = (t: ProjectTab) => (t === "route" ? `/project/${project.id}` : t === "audit" ? `/project/${project.id}/audit` : `/project/${project.id}?tab=${t}`);
 
   return (
     <>
@@ -79,8 +87,8 @@ export function ProjectPage() {
       </div>
 
       <div className="tabs project-tabs" role="tablist" aria-label={L.project.views}>
-        {PROJECT_TABS.map((t) => (
-          <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => navigate(t === "route" ? `/project/${project.id}` : `/project/${project.id}?tab=${t}`, { replace: true })} data-testid={`ptab-${t}`}>
+        {tabs.map((t) => (
+          <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => navigate(tabHref(t), { replace: !(t === "audit" || inAudit) })} data-testid={`ptab-${t}`}>
             {label[t]}
           </button>
         ))}
@@ -103,6 +111,7 @@ export function ProjectPage() {
       {tab === "library" ? <LibraryPage projectId={project.id} embedded /> : null}
       {tab === "activity" ? <ActivityTab project={project} /> : null}
       {tab === "profile" ? <ProjectProfile project={project} /> : null}
+      {tab === "audit" ? <AuditTab project={project} auditId={auditId} /> : null}
 
       {reporting ? <ReportDialog projectId={project.id} onClose={() => setReporting(false)} /> : null}
     </>
@@ -117,11 +126,36 @@ function GridTab({ project }: { project: ProjectRow }) {
   const [task, setTask] = useState<TaskRow | null>(null);
   const pipeline = useMemo(() => pipelineOf(world, project.id), [world, project.id]);
   const grid = useMemo(() => gridOf(world, project.id, filter, me.id), [world, project.id, filter, me.id]);
+  const route = useRoute();
+  const deliveries = useDeliveries(project.id);
+  const [mark, setMark] = useState<DeliveryMark | "all">("all");
+  const [viewer, setViewer] = useState<WallPick | null>(null);
   if (!pipeline || !grid) return null;
+  // 「卡 × 环节」默认是交付物墙（SPEC §18.6），能切回原来的文字网格
+  const textGrid = route.query.get("grid") === "text";
+  const switcher = (
+    <div className="chips grid-switch" role="group" aria-label={L.audit.wallTitle}>
+      <button type="button" className="ui-chip" aria-pressed={!textGrid} onClick={() => navigate(`/project/${project.id}?tab=grid`, { replace: true })} data-testid="grid-wall">
+        {L.audit.wallView}
+      </button>
+      <button type="button" className="ui-chip" aria-pressed={textGrid} onClick={() => navigate(`/project/${project.id}?tab=grid&grid=text`, { replace: true })} data-testid="grid-text">
+        {L.audit.textGrid}
+      </button>
+    </div>
+  );
+  if (!textGrid && deliveries)
+    return (
+      <>
+        {switcher}
+        <DeliveryWall d={deliveries} group={project.group} filter={mark} onFilter={setMark} onOpen={setViewer} initialSize="m" testId="project-wall" />
+        {viewer ? <WallViewer d={deliveries} group={project.group} pick={viewer} onClose={() => setViewer(null)} /> : null}
+      </>
+    );
   const liveTask = task ? world.tasks[task.id] ?? null : null;
   const filterLabel: Record<GridFilter, string> = { all: L.project.filterAll, mine: L.project.filterMine, review: L.project.filterReview, stuck: L.project.filterStuck };
   return (
     <>
+      {switcher}
       <section className="stack" data-gap="small" aria-labelledby="map-title">
         <div className="card-head">
           <h2 id="map-title" className="t-section-24">

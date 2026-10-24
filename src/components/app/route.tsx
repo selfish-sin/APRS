@@ -8,7 +8,9 @@
  */
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { isAdmin } from "@/domain/commands/core";
+import { isAdmin, isReviewer } from "@/domain/commands/core";
+import { StageThumbStrip, useDeliveries, WallViewer, type WallPick } from "@/components/audit/wall";
+import type { Deliveries } from "@/domain/audit/deliveries";
 import { GRAIN, PHASE, STAGE_KIND, UNIT, type Grain, type Id, type Phase, type StageKind, type Unit } from "@/domain/model";
 import { ROUTE_STATUS, memberById, projectById, stageRouteOf, type RouteCounts, type RoutePerson, type RoutePhase, type RouteRow, type RouteStatus, type StageRoute } from "@/domain/queries";
 import { useI18n, type I18n } from "@/i18n/I18n";
@@ -208,6 +210,8 @@ export function StageRouteView({ projectId }: { projectId: Id }) {
   const route = stageRouteOf(world, projectId);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [insertAt, setInsertAt] = useState<string | null>(null);
+  const [viewer, setViewer] = useState<WallPick | null>(null);
+  const deliveries = useDeliveries(projectId);
   if (!route) return null;
   const group = route.project.group;
   const admin = isAdmin(me) && route.project.status === "active";
@@ -233,6 +237,19 @@ export function StageRouteView({ projectId }: { projectId: Id }) {
             )}
           </h2>
           <p className="label">{summary.join(" · ")}</p>
+          {deliveries ? (
+            <p className="label" data-testid="route-deliveries">
+              {f(L.audit.summaryLine, { missing: deliveries.total.missing, pending: deliveries.total.pending })}
+              {isReviewer(me) ? (
+                <>
+                  {" · "}
+                  <Link to={`/project/${projectId}/audit`} className="inline-link" data-testid="route-go-audit">
+                    {L.audit.goAudit}
+                  </Link>
+                </>
+              ) : null}
+            </p>
+          ) : null}
         </div>
         <div className="route-phase-bars">
           {phases.map((ph) => {
@@ -308,7 +325,7 @@ export function StageRouteView({ projectId }: { projectId: Id }) {
                 </div>
                 <ol className="route-list">
                   {ph.rows.map((row) => (
-                    <RouteRowView key={row.stage.id} route={route} row={row} admin={admin} inserting={insertAt === row.stage.id} onInsert={(on) => setInsertAt(on ? row.stage.id : null)} />
+                    <RouteRowView key={row.stage.id} route={route} row={row} admin={admin} inserting={insertAt === row.stage.id} onInsert={(on) => setInsertAt(on ? row.stage.id : null)} deliveries={deliveries} onOpen={setViewer} />
                   ))}
                 </ol>
               </div>
@@ -316,16 +333,18 @@ export function StageRouteView({ projectId }: { projectId: Id }) {
           })}
         </section>
       )}
+      {viewer && deliveries ? <WallViewer d={deliveries} group={group} pick={viewer} onClose={() => setViewer(null)} /> : null}
     </section>
   );
 }
 
-function RouteRowView({ route, row, admin, inserting, onInsert }: { route: StageRoute; row: RouteRow; admin: boolean; inserting: boolean; onInsert: (on: boolean) => void }) {
+function RouteRowView({ route, row, admin, inserting, onInsert, deliveries, onOpen }: { route: StageRoute; row: RouteRow; admin: boolean; inserting: boolean; onInsert: (on: boolean) => void; deliveries: Deliveries | null; onOpen: (p: WallPick) => void }) {
   const i18n = useI18n();
   const { L, f, stage: stageEl, stageName } = i18n;
   const group = route.project.group;
   const next = route.rows[row.no] ?? null;
   const urgent = row.status === "ready" || row.status === "active" || row.status === "review";
+  const rem = deliveries?.stages.find((x) => x.stage?.id === row.stage.id) ?? null;
   return (
     <li className="route-item">
       <Link
@@ -356,6 +375,23 @@ function RouteRowView({ route, row, admin, inserting, onInsert }: { route: Stage
         <span className="route-prog">
           <RouteBar counts={row.counts} />
           <span className="label">{progressCaption(i18n, route, row)}</span>
+          <span className="route-alerts" data-testid="route-alerts">
+            {row.alerts.pending ? <Tag tone="warning">{f(L.route.alertPending, { n: row.alerts.pending })}</Tag> : null}
+            {row.alerts.returned ? <Tag tone="danger">{f(L.route.alertReturned, { n: row.alerts.returned })}</Tag> : null}
+            {row.alerts.nearDue ? <Tag tone="danger">{f(L.route.alertNearDue, { n: row.alerts.nearDue })}</Tag> : null}
+            {row.alerts.noPeople && urgent ? <Tag tone="danger">{L.route.noPeople}</Tag> : null}
+            {row.extrasOpen ? <Tag tone="lilac">{f(L.route.alertExtras, { n: row.extrasOpen })}</Tag> : null}
+            {rem?.missingCuts && (row.status !== "done" || Object.entries(row.counts).some(([k, n]) => k !== "passed" && n > 0)) ? (
+              <span className="tag" data-tone="danger" data-testid="route-missing">
+                {f(L.audit.missingCuts, { n: rem.missingCuts })}
+              </span>
+            ) : null}
+            {rem?.pending ? (
+              <span className="tag" data-tone="info" data-testid="route-pending">
+                {f(L.audit.pendingN, { n: rem.pending })}
+              </span>
+            ) : null}
+          </span>
         </span>
         <span className="route-who">
           <PeopleStack people={row.people} urgent={urgent} />
@@ -367,13 +403,7 @@ function RouteRowView({ route, row, admin, inserting, onInsert }: { route: Stage
             {row.overrun ? <span className="route-over"> {f(L.route.over, { n: row.overrun })}</span> : null}
           </span>
         </span>
-        <span className="route-alerts">
-          {row.alerts.pending ? <Tag tone="warning">{f(L.route.alertPending, { n: row.alerts.pending })}</Tag> : null}
-          {row.alerts.returned ? <Tag tone="danger">{f(L.route.alertReturned, { n: row.alerts.returned })}</Tag> : null}
-          {row.alerts.nearDue ? <Tag tone="danger">{f(L.route.alertNearDue, { n: row.alerts.nearDue })}</Tag> : null}
-          {row.alerts.noPeople && urgent ? <Tag tone="danger">{L.route.noPeople}</Tag> : null}
-          {row.extrasOpen ? <Tag tone="lilac">{f(L.route.alertExtras, { n: row.extrasOpen })}</Tag> : null}
-        </span>
+        <span className="route-strip">{deliveries ? <StageThumbStrip d={deliveries} stage={row.stage} onOpen={onOpen} /> : null}</span>
         <span className="route-chev" aria-hidden="true">
           ›
         </span>

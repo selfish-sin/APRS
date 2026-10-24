@@ -12,7 +12,8 @@ import { Empty, MemberAvatar, SelectField, Tag, TextField } from "@/components/a
 import { ExtrasList, PublishForm } from "@/components/app/flex";
 import { Pop } from "@/components/app/popover";
 import { actualLine, planLine, RouteBar, RouteStatusBadge, RouteStatusIcon } from "@/components/app/route";
-import { FileImage } from "@/components/library/tiles";
+import { StageWall, useDeliveries } from "@/components/audit/wall";
+import { localDate } from "@/domain/clock";
 import { isAdmin, isReviewer } from "@/domain/commands/core";
 import { GRAIN, STAGE_KIND, type Id, type StageRow, type TaskStatus } from "@/domain/model";
 import {
@@ -56,6 +57,8 @@ export function StagePage() {
   const key = route.segments[3];
   const page = useMemo(() => stagePageOf(world, projectId, key ?? ""), [world, projectId, key]);
   const [filter, setFilter] = useState<Bucket | null>(null);
+  // 派发表先收起（照设计 v7-8）；点概况里的一个数、或者「展开派发表」才展开
+  const [dispatchOpen, setDispatchOpen] = useState(false);
   if (!page) return <NotFound what="project" />;
   const { project, row } = page;
   const stage = row.stage;
@@ -136,15 +139,22 @@ export function StagePage() {
 
       <div className="sp-layout">
         <div className="sp-col">
-          <Overview page={page} filter={filter} setFilter={setFilter} />
+          <Overview
+            page={page}
+            filter={filter}
+            setFilter={(b) => {
+              setFilter(b);
+              setDispatchOpen(true);
+            }}
+          />
+          <DeliverBlock page={page} admin={admin} />
           {stage.hub && admin && project.status === "active" ? <HubBlock page={page} /> : null}
-          <DispatchBlock page={page} admin={admin} filter={filter} setFilter={setFilter} />
-          <ActivityBlock stageId={stage.id} />
+          <DispatchBlock page={page} admin={admin} filter={filter} setFilter={setFilter} open={dispatchOpen} setOpen={setDispatchOpen} />
         </div>
         <div className="sp-col">
           <PeopleBlock page={page} admin={admin} />
-          <DeliverBlock page={page} admin={admin} />
           <ConfigBlock page={page} admin={admin} />
+          <ActivityBlock stageId={stage.id} />
         </div>
       </div>
     </>
@@ -452,7 +462,7 @@ function foldPassed(rows: StageTaskView[], cutLabel: (v: StageTaskView) => strin
   return out;
 }
 
-function DispatchBlock({ page, admin, filter, setFilter }: { page: StagePageData; admin: boolean; filter: Bucket | null; setFilter: (b: Bucket | null) => void }) {
+function DispatchBlock({ page, admin, filter, setFilter, open, setOpen }: { page: StagePageData; admin: boolean; filter: Bucket | null; setFilter: (b: Bucket | null) => void; open: boolean; setOpen: (v: boolean) => void }) {
   const { me } = useGuild();
   const { L, f, cut: cutOf } = useI18n();
   const stage = page.row.stage;
@@ -480,8 +490,15 @@ function DispatchBlock({ page, admin, filter, setFilter }: { page: StagePageData
           <h2 id="sp-dispatch" className="t-heading-18">
             {L.stagePage.dispatch} <span className="label">{f(L.stagePage.dispatchMeta, { n: page.tasks.length })}</span>
           </h2>
-          {canPublish ? <Button Label={L.project.publish} Size="Small" Style="Primary" onClick={() => setPublishing(!publishing)} aria-expanded={publishing} data-testid="publish-open" /> : null}
+          <span className="row">
+            {canPublish ? <Button Label={L.project.publish} Size="Small" Style="Primary" onClick={() => setPublishing(!publishing)} aria-expanded={publishing} data-testid="publish-open" /> : null}
+            <button type="button" className="inline-link t-body-14m" aria-expanded={open} onClick={() => setOpen(!open)} data-testid="dispatch-expand">
+              {open ? L.stagePage.dispatchFold : L.stagePage.dispatchUnfold}
+            </button>
+          </span>
         </div>
+        {open ? (
+        <>
         <div className="chips" role="group" aria-label={L.stagePage.countsAria}>
           <button type="button" className="ui-chip" aria-pressed={filter === null} onClick={() => setFilter(null)} data-testid="filter-all">
             {f(L.stagePage.chipAll, { n: counts.total })}
@@ -572,6 +589,8 @@ function DispatchBlock({ page, admin, filter, setFilter }: { page: StagePageData
         ) : (
           <Empty>{filter ? L.stagePage.filterEmpty : L.stagePage.noTasks}</Empty>
         )}
+        </>
+        ) : null}
         {page.extras.length ? (
           <div className="sp-extras">
             <ExtrasList stage={stage} />
@@ -826,47 +845,36 @@ function DispatchRow({ v, admin, picked, onPick, onExtend }: { v: StageTaskView;
 // 交付物
 // ---------------------------------------------------------------------------
 
-const DELIVER_SHOWN = 4;
-
+/** 交付物（SPEC §18.6）：默认是这一环节的交付物墙（一卡一张大缩略图，补录的标「补录」，核实过的标「已核实」）· 验收 · 加卡 · 盘点交付物。 */
 function DeliverBlock({ page, admin }: { page: StagePageData; admin: boolean }) {
-  const { world } = useGuild();
+  const { world, me } = useGuild();
   const { L, f, r: rich, monthDay, pt } = useI18n();
   const stage = page.row.stage;
+  const d = useDeliveries(page.project.id);
   const [sub, setSub] = useState<"accept" | "cuts" | null>(null);
-  const [all, setAll] = useState(false);
-  const delivered = page.tasks.filter((v) => v.latest).sort((a, b) => (a.latest!.at < b.latest!.at ? 1 : a.latest!.at > b.latest!.at ? -1 : 0));
   const list = page.tasks;
   const canAccept = !stage.acceptedAt && list.length > 0 && list.some((v) => v.task.status === "passed") && list.every((v) => v.task.status === "passed" || v.task.redo);
   const active = page.project.status === "active";
   const missing = list.filter((v) => v.task.status !== "passed" && !v.task.redo);
-  const shown = all ? delivered : delivered.slice(0, DELIVER_SHOWN);
   const acceptedBy = memberById(world, stage.acceptedById);
+  const audited = d?.audit ? monthDay(localDate(d.audit.at)) : null;
   return (
     <section className="card" aria-labelledby="sp-deliver" data-testid="stage-deliverables">
-      <h2 id="sp-deliver" className="t-heading-18">
-        {L.stagePage.deliverables} <span className="label">{f(L.stagePage.deliverMeta, { done: page.row.counts.passed, total: page.row.counts.total })}</span>
-      </h2>
-      {delivered.length ? (
-        <ul className="deliver-list">
-          {shown.map((v) => (
-            <DeliverCard key={v.task.id} v={v} />
-          ))}
-        </ul>
-      ) : (
-        <Empty>{L.stagePage.noDeliver}</Empty>
-      )}
-      <div className="row">
-        {delivered.length > DELIVER_SHOWN ? (
-          <button type="button" className="inline-link t-body-14m" onClick={() => setAll(!all)} data-testid="deliver-all">
-            {all ? L.route.collapse : f(L.stagePage.deliverAll, { n: delivered.length })}
-          </button>
-        ) : null}
-        {admin && active && stage.grain !== "project" ? (
-          <button type="button" className="inline-link t-body-14m" onClick={() => setSub(sub === "cuts" ? null : "cuts")} data-testid="stage-cuts-open">
-            + {L.edit.addCutsOpen}
-          </button>
+      <div className="card-head">
+        <h2 id="sp-deliver" className="t-heading-18">
+          {L.stagePage.deliverables}{" "}
+          <span className="label">
+            {f(L.audit.deliverLead, { passed: page.row.counts.passed, total: page.row.counts.total })}
+            {audited ? f(L.audit.deliverAudited, { date: audited }) : ""}
+          </span>
+        </h2>
+        {isReviewer(me) && page.project.status !== "zero" ? (
+          <Link to={`/project/${page.project.id}/audit?stage=${stage.templateKey}`} className="inline-link t-body-14m" data-testid="stage-audit-link">
+            {L.audit.auditLink}
+          </Link>
         ) : null}
       </div>
+      {d ? <StageWall d={d} stage={stage} group={page.project.group} /> : null}
       {sub === "cuts" ? <AddCutsForm projectId={page.project.id} onDone={() => setSub(null)} /> : null}
       {stage.acceptedAt ? (
         <p className="sp-accepted" data-testid="stage-accepted">
@@ -883,59 +891,20 @@ function DeliverBlock({ page, admin }: { page: StagePageData; admin: boolean }) 
                 ? f(L.stagePage.notYetAccept, { n: missing.length, which: missing.slice(0, 3).map((v) => pt(v.view.labelP)).join(L.common.listSep) + (missing.length > 3 ? "…" : "") })
                 : L.stagePage.noTasks}
           </p>
+          {admin && active && stage.grain !== "project" ? (
+            <button type="button" className="inline-link t-body-14m" onClick={() => setSub(sub === "cuts" ? null : "cuts")} data-testid="stage-cuts-open">
+              + {L.edit.addCutsOpen}
+            </button>
+          ) : null}
         </div>
       )}
+      {stage.acceptedAt && admin && active && stage.grain !== "project" ? (
+        <button type="button" className="inline-link t-body-14m" onClick={() => setSub(sub === "cuts" ? null : "cuts")} data-testid="stage-cuts-open">
+          + {L.edit.addCutsOpen}
+        </button>
+      ) : null}
       {sub === "accept" ? <AcceptDialog stage={stage} onClose={() => setSub(null)} /> : null}
     </section>
-  );
-}
-
-function DeliverCard({ v }: { v: StageTaskView }) {
-  const { world } = useGuild();
-  const { L, f, r: rich, pt, cut: cutOf } = useI18n();
-  const last = v.latest!;
-  const images = filesOn(world, "submission", last.id).filter((x) => !!x.width);
-  const passReview = v.review && v.review.verdict !== "return" ? v.review : null;
-  const group = v.view.project.group;
-  const links = submissionLinks(last);
-  return (
-    <li className="deliver-card" data-status={v.task.status} data-testid="deliver-card">
-      <div className="deliver-thumb">
-        {images[0] ? (
-          <FileImage file={images[0]} alt={pt(v.view.labelP)} />
-        ) : (
-          <svg viewBox="0 0 48 32" aria-hidden="true" className="deliver-ph">
-            <circle cx="30" cy="12" r="5" />
-            <path d="M6 26h36M10 26l8-10 7 8" />
-          </svg>
-        )}
-      </div>
-      <div className="deliver-text">
-        <span className="t-body-14m num">
-          {v.view.cut ? cutOf(v.view.cut, group) : L.stagePage.wholeProject}
-          {v.task.layer ? ` · ${f(L.labels.layerShort, { layer: v.task.layer })}` : ""} · {v.view.versionTag}
-        </span>
-        <span className="label">
-          {rich(L.stagePage.byLine, {
-            who: <U>{memberById(world, last.byMemberId)?.nickname ?? v.task.outsourceName ?? "—"}</U>,
-            reviewer: <U>{passReview ? memberById(world, passReview.byMemberId)?.nickname ?? "—" : "—"}</U>,
-            q: passReview?.quality ?? "—",
-          })}
-          {v.task.status !== "passed" ? ` · ${L.labels.taskStatus[v.task.status]}` : ""}
-        </span>
-        <span className="label num break deliver-file">
-          <U>{last.fileName}</U>
-          {links[0] ? (
-            <>
-              {" "}
-              <a href={links[0].url} target="_blank" rel="noreferrer noopener" className="deliver-link" aria-label={L.stagePage.openLink} title={links[0].url}>
-                ↗
-              </a>
-            </>
-          ) : null}
-        </span>
-      </div>
-    </li>
   );
 }
 

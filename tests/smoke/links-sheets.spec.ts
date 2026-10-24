@@ -157,6 +157,9 @@ test("链接检查 · 表格预览和检查 · 格子上的意见 · 导出汇�
   await open(page, "/projects");
   await page.locator("a.project-card").filter({ hasText: "安娜的旅程" }).click();
   await page.getByTestId("ptab-grid").click();
+  // 「卡 × 环节」默认是交付物墙（§18）；切回文字网格
+  await expect(page.getByTestId("project-wall")).toBeVisible();
+  await page.getByTestId("grid-text").click();
   await expect(page.getByTestId("board")).toBeVisible();
   await expect(page.locator("table.board tbody tr").first()).toBeVisible();
   const cutRows = await page.locator("table.board tbody tr").count();
@@ -169,10 +172,10 @@ test("链接检查 · 表格预览和检查 · 格子上的意见 · 导出汇�
   await page.getByTestId("report-go").click();
   const download = await dl;
   // 文件名跟着界面语言（中文）。测试机的系统编码不是 UTF-8 时，Chromium 会把中文文件名换成 download，所以看页面上的提示。
-  await expect(page.getByText("导出好了：ANDLC-汇报-2026-10-23.xlsx（5 张表）")).toBeVisible();
+  await expect(page.getByText("导出好了：ANDLC-汇报-2026-10-23.xlsx（7 张表）")).toBeVisible();
   expect(download.suggestedFilename()).toMatch(/^(ANDLC-汇报-2026-10-23\.xlsx|download)$/);
   const wb = XLSX.read(readFileSync((await download.path())!), { type: "buffer" });
-  expect(wb.SheetNames).toEqual(["进度总表", "项目规划表", "卡 × 环节", "必要劳动时间统计表", "审核记录"]);
+  expect(wb.SheetNames).toEqual(["进度总表", "项目规划表", "卡 × 环节", "必要劳动时间统计表", "审核记录", "交付物盘点", "还差多少"]);
   const rows = (name: string) => XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[name], { header: 1, blankrows: true, defval: null });
   expect(rows("进度总表")[0]).toEqual(["序号", "项目", "类型", "预计开始", "预计结束", "计划天数", "进度", "剩余天数", "状态", "实际结束"]);
   expect(rows("进度总表").length - 1).toBe(stageCount);

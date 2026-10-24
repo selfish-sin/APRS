@@ -23,6 +23,8 @@ export const ID_PREFIX = {
   pins: "pin",
   pages: "pag",
   blocks: "blk",
+  audits: "aud",
+  auditItems: "aui",
   journal: "jnl",
 } as const;
 

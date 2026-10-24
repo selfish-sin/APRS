@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import ACCOUNTS from "@/data/accounts.public.json";
 import { DEMO_NOW, DEMO_WORLD_ID, buildDemoWorld } from "@/data/demo";
 import { checkIntegrity } from "@/domain/integrity";
+import { demoThumbs } from "@/data/demoThumbs";
 import { demoImages } from "@/data/demoImages";
 import * as q from "@/domain/queries";
 
@@ -107,7 +108,12 @@ describe("示范工会", () => {
       expect(img.name).toContain("示范图");
     }
     const shas = new Set(imgs.map((i) => i.sha256));
+    // 示范盘点的缩略图也是代码画的占位图（标「示范」）
+    const thumbs = demoThumbs();
+    for (const t of thumbs) expect(t.svg).toContain("示范");
+    for (const t of thumbs) shas.add(t.sha256);
     for (const f of q.usedShas(s)) expect(shas.has(f.sha256)).toBe(true);
+    expect(Object.values(s.auditItems).every((i) => !i.thumb || i.demo)).toBe(true);
   });
 
   it("C005 A 的 v04 截图上有审核时钉的两处（退回带进等我处理）；C010 B 两版能对比", () => {

@@ -8,6 +8,17 @@ import type { Text2 } from "./text";
 export const WHAT_EN: Record<string, string> = {
   // 东西
   项目: "project",
+  盘点: "audit",
+  盘点的一条: "audit item",
+  放在哪的链接: "link to where the files are",
+  放在别处的链接: "link to where the file is",
+  放进来的方式: "how the files came in",
+  来源: "source",
+  复查的结论: "check result",
+  不对的原因: "reason",
+  质量系数: "quality",
+  写回项目: "write back an audit",
+  撤销盘点: "undo an audit",
   项目名字: "project name",
   环节: "stage",
   任务: "task",

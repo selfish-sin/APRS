@@ -3,6 +3,7 @@ import type { Shape } from "./core";
 import type { zh } from "./zh";
 
 import { en as nav } from "./ns/nav";
+import { en as audit } from "./ns/audit";
 import { en as wizard } from "./ns/wizard";
 import { en as profile } from "./ns/profile";
 import { en as stagePage } from "./ns/stagePage";
@@ -29,6 +30,7 @@ import { en as entry } from "./ns/entry";
 
 export const en: Shape<typeof zh> = {
   nav,
+  audit,
   wizard,
   profile,
   stagePage,

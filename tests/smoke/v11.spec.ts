@@ -10,7 +10,7 @@
  *   - 三套设置都跑（中文 · en-US 时区 · 375 宽不溢出）；控制台 0 报错。English 下没有汉字在 i18n.spec.ts 里扫。
  */
 import { expect, test, type Page } from "@playwright/test";
-import { HAS_PASS, enterDemo, expandRoute, expectClean, expectNoPageScrollX, login, noExternal, open, openStage, routeRow, watch } from "./helpers";
+import { HAS_PASS, enterDemo, expandDispatch, expandRoute, expectClean, expectNoPageScrollX, login, noExternal, open, openStage, routeRow, watch } from "./helpers";
 
 test.skip(!HAS_PASS, "没有设 ARPS_PASS_ADMIN / ARPS_PASS_MEMBER，跳过");
 
@@ -140,8 +140,9 @@ test("环节页：五块都在 · 指派一个人 · 多选 2 行派给某人 ·
   await open(page, andlc);
   expect(await peopleCount(page, "场景绘制")).toBe(before + 1);
 
-  // —— 多选 2 行（可接的）→ 派给木星 ——
+  // —— 多选 2 行（可接的）→ 派给木星（派发表默认收起，先展开）——
   await open(page, stagePath);
+  await expandDispatch(page);
   const dispatchBlock = page.getByTestId("stage-dispatch");
   const openRows = dispatchBlock.locator('[data-testid="dispatch-row"][data-status="open"]');
   const firstTwo = [await openRows.nth(0).getAttribute("data-task"), await openRows.nth(1).getAttribute("data-task")];
@@ -262,7 +263,7 @@ test("已结束的段折叠、能展开：从空白开始 → 加第一个环节
   await row.getByTestId("assign-tasks-name").fill("外面的老师");
   await row.getByTestId("assign-tasks-go").click();
   await expect(page.getByText("派了 1 张给 外面的老师")).toBeVisible();
-  await open(page, `${path}?tab=grid`);
+  await open(page, `${path}?tab=grid&grid=text`);
   await page.locator(".strip-item").first().click();
   await page.getByRole("button", { name: "代交" }).click();
   await page.getByLabel("说明").fill("外包交来的立项书");

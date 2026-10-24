@@ -192,8 +192,8 @@ test("零日与改项目：模板建项目 → 开局向导五步（离开再回
 
   // —— 验收 Layout（环节页的交付物里）：打回 C002 重做，其余验收通过 → 路线上变「已结束 ✓」——
   stage = await openStage(page, projectPath, "Layout");
-  await stage.getByTestId("deliver-all").click();
-  await expect(stage.getByTestId("deliver-card")).toHaveCount(5);
+  // 交付物块默认是这一环节的交付物墙（§18.6）：一卡一格
+  await expect(stage.getByTestId("stage-wall-cell")).toHaveCount(5);
   await stage.getByTestId("stage-accept-open").click();
   const accept = page.getByRole("dialog", { name: /验收 · Layout/ });
   await expect(accept.getByTestId("accept-row")).toHaveCount(5);

@@ -3,6 +3,8 @@ dist
 dist-single
 *.tsbuildinfo
 .DS_Store
+# 盘点测试用的假文件夹里故意放了一个 .DS_Store（§18.9，认不出的那一类）
+!tests/fixtures/audit/**/.DS_Store
 .env*
 .vercel
 # Playwright 的报告、截图（artifacts/shots 也在这里，不进仓库）
