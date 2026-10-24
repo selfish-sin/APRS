@@ -43,7 +43,12 @@ export interface DeliveryCell {
   version: number | null;
   /** 版本号后面带的字（「第一次修改后」）。 */
   note: string | null;
+  /** 显示的那一版自己的图（没有就是 null：不借别的版本、别的层、任务上附的参考图）。 */
   thumb: ThumbRef | null;
+  /** 系统里每一版自己的图（这一版附的 · 补录 / 核实时的那张），按交付 id。 */
+  subThumbs: Map<Id, ThumbRef | null>;
+  /** 显示的是哪边的那一版：盘点里找到的文件 · 系统里记的 · 都没有。 */
+  shownFrom: "audit" | "system" | null;
   /** 系统里最新的一版。 */
   sub: SubmissionRow | null;
   backfilled: boolean;
@@ -116,6 +121,14 @@ export function deliveriesOf(rm: ReadModel, projectId: Id): Deliveries | null {
     return itemCache.get(id);
   };
 
+  /** 系统里某一版自己的图：这一版附的图 → 补录 / 核实时盘点里那个文件的图（就是这一版的文件）。 */
+  const subThumbOf = (s: SubmissionRow): ThumbRef | null => {
+    const file = (filesBy.get(s.id) ?? [])[0];
+    if (file) return { sha256: file.sha256, mime: file.mime, name: file.name, from: "file", demo: file.tags.includes("示范图") };
+    const it = itemOf(s.backfill?.itemId ?? s.verified?.itemId ?? null);
+    return it?.thumb ? { sha256: it.thumb.sha256, mime: it.thumb.mime, name: it.name, from: "audit", demo: !!it.demo } : null;
+  };
+
   const cells: DeliveryCell[] = [];
   const cellByTask = new Map<Id, DeliveryCell>();
   for (const task of facts.tasks) {
@@ -126,21 +139,14 @@ export function deliveriesOf(rm: ReadModel, projectId: Id): Deliveries | null {
     const cell = check?.cellByTask.get(task.id) ?? null;
     const top = cell?.top ?? null;
     const mark = markOf(task, sub, cell);
-    // 缩略图：最新一版附的图 → 补录 / 核实时的那张 → 这次盘点读到的 → 任务上附的图
+    // 显示哪一版：盘点里找到的文件和系统里一样新或更新 → 文件那一版；不然 → 系统里最新的一版
+    const showTop = !!top && (top.place.version ?? 0) >= (sub?.versionNo ?? 0);
+    // 缩略图只用「显示的那一版」自己的图，不借别的版本（也不借任务上附的参考图）：
+    //   文件那一版 → 文件读出来的图；同一版系统里附了图也算 · 系统那一版 → 那一版附的图 → 补录 / 核实时的那张
+    const subThumbs = new Map<Id, ThumbRef | null>(subs.map((s) => [s.id, subThumbOf(s)]));
     let thumb: ThumbRef | null = null;
-    const subFile = sub ? (filesBy.get(sub.id) ?? [])[0] : undefined;
-    if (subFile) thumb = { sha256: subFile.sha256, mime: subFile.mime, name: subFile.name, from: "file", demo: subFile.tags.includes("示范图") };
-    if (!thumb && sub) {
-      const it = itemOf(sub.backfill?.itemId ?? sub.verified?.itemId ?? null);
-      if (it?.thumb) thumb = { sha256: it.thumb.sha256, mime: it.thumb.mime, name: it.name, from: "audit", demo: !!it.demo };
-    }
-    if (!thumb && top && (top.place.version ?? 0) >= (sub?.versionNo ?? 0)) thumb = entryThumb(top);
-    if (!thumb) {
-      const tf = (filesBy.get(task.id) ?? []).slice(-1)[0];
-      if (tf) thumb = { sha256: tf.sha256, mime: tf.mime, name: tf.name, from: "file", demo: tf.tags.includes("示范图") };
-    }
-    if (!thumb && top) thumb = entryThumb(top);
-    const showTop = top && (top.place.version ?? 0) >= (sub?.versionNo ?? 0);
+    if (showTop) thumb = entryThumb(top) ?? (sub && top!.place.version === sub.versionNo ? subThumbs.get(sub.id) ?? null : null);
+    else if (sub) thumb = subThumbs.get(sub.id) ?? null;
     const dc: DeliveryCell = {
       task,
       stage,
@@ -150,6 +156,8 @@ export function deliveriesOf(rm: ReadModel, projectId: Id): Deliveries | null {
       version: showTop ? top!.place.version : sub?.versionNo ?? null,
       note: showTop ? top!.parsed.note : null,
       thumb,
+      subThumbs,
+      shownFrom: showTop ? "audit" : sub ? "system" : null,
       sub,
       backfilled: !!sub?.backfill,
       verifiedAt: sub?.verified?.at ?? (sub?.backfill ? sub.at : null),
@@ -216,7 +224,7 @@ export interface WallCell {
   cut: CutRow | null;
   layers: DeliveryCell[];
   mark: DeliveryMark;
-  /** 显示的那一层（A 层；A 层没图就用有图的那层）。 */
+  /** 显示的那一层：A 层（A 层没图就是占位，不借 B 层的图；看图器里能切到 B）。 */
   shown: DeliveryCell | null;
 }
 
@@ -231,6 +239,6 @@ export function wallCell(d: Deliveries, stage: StageRow, cut: CutRow | null): Wa
   const layers = d.cells.filter((c) => c.stage.id === stage.id && (stage.grain === "project" ? true : c.cut?.id === cut?.id));
   const order = cut?.layers.map((l) => l.name) ?? [];
   layers.sort((a, b) => order.indexOf(a.layer ?? "") - order.indexOf(b.layer ?? ""));
-  const shown = layers.find((l) => l.thumb) ? (layers[0]?.thumb ? layers[0] : layers.find((l) => l.thumb)!) : layers[0] ?? null;
+  const shown = layers[0] ?? null;
   return { stage, cut, layers, mark: layers.length ? worstMark(layers.map((l) => l.mark)) : "missing", shown };
 }

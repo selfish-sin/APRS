@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { buildDemoWorld } from "@/data/demo";
 import { auditInputs, checkAudit, type AuditCheck } from "@/domain/audit/check";
 import { compareAudits } from "@/domain/audit/compare";
-import { deliveriesOf } from "@/domain/audit/deliveries";
+import { deliveriesOf, wallCell } from "@/domain/audit/deliveries";
 import { writePlan } from "@/domain/audit/plan";
 import { undoPreviewOf } from "@/domain/commands/audit";
 import { replay } from "@/domain/dispatch";
@@ -258,5 +258,62 @@ describe("再盘点一次 · 重放", () => {
     const r = replay(base, entries);
     expect(r.skipped).toEqual([]);
     for (const t of ["audits", "auditItems", "tasks", "submissions", "cuts", "reviews", "ledger"] as const) expect(r.state[t]).toEqual(d.state[t]);
+  });
+});
+
+describe("缩略图只用那一版自己的图", () => {
+  it("系统里的旧版本没附图 + 盘点里有更新的一版：墙格子是新版本的图，旧版本那张是空的（不借新版本的图）；A 层没图不借 B 层的", () => {
+    const d = new DemoRunner();
+    const p = d.project("ANDLC");
+    const t = taskOf(d, p, "inbetween", 9, "B");
+    const subs = Object.values(d.state.submissions).filter((s) => s.taskId === t.id && !s.archivedAt).sort((x, y) => x.versionNo - y.versionNo);
+    const last = subs[subs.length - 1];
+    // 前提：系统里这几版都没附图
+    expect(subs.length).toBeGreaterThan(0);
+    expect(Object.values(d.state.files).filter((f) => subs.some((s) => s.id === f.subjectId))).toHaveLength(0);
+    const sha = "ab".repeat(32);
+    const v = String(last.versionNo + 1).padStart(2, "0");
+    const name = `ANDLC_EP01_SC001_CUT009_B_ANI_v${v}.png`;
+    const a = d.run(d.admin, "audit.start", { projectId: p }).auditId;
+    d.run(d.admin, "audit.add", {
+      auditId: a,
+      source: { kind: "files", label: null },
+      items: [{ name, path: `EP01/ANI/SC001/CUT009/${name}`, size: 900, mtime: "2026-10-24T01:00:00.000Z", origin: "file", fingerprint: `900:x:${sha}:${name}`, thumb: { sha256: sha, mime: "image/png", width: 640, height: 360 }, info: { kind: "image" } }],
+    });
+    const dv = deliveriesOf(d.rm, p)!;
+    const cell = dv.cellByTask.get(t.id)!;
+    expect(cell.version).toBe(last.versionNo + 1);
+    expect(cell.shownFrom).toBe("audit");
+    expect(cell.thumb?.sha256).toBe(sha);
+    // 系统里的每一版：没有图（不是新版本那张）
+    for (const s of subs) expect(cell.subThumbs.get(s.id) ?? null).toBeNull();
+    // 墙上一格显示 A 层：A 层没图 → 占位，不借 B 层的图
+    const cut9 = Object.values(d.state.cuts).find((c) => c.projectId === p && c.number === 9 && !c.archivedAt)!;
+    const stage = Object.values(d.state.stages).find((s) => s.projectId === p && s.templateKey === "inbetween")!;
+    const wc = wallCell(dv, stage, cut9);
+    expect(wc.shown?.layer).toBe("A");
+    expect(wc.shown?.thumb ?? null).toBeNull();
+    expect(wc.layers.find((l) => l.layer === "B")?.thumb?.sha256).toBe(sha);
+  });
+
+  it("系统里的那一版附了图、盘点里是更新的一版但没有图（只有名字）：显示的是新版本 → 没有图，不借旧版本的图", () => {
+    const d = new DemoRunner();
+    const p = d.project("ANDLC");
+    const withFile = Object.values(d.state.files).find((f) => f.subjectType === "submission" && f.projectId === p)!;
+    const sub = d.state.submissions[withFile.subjectId];
+    const t = d.state.tasks[sub.taskId];
+    const cut = d.state.cuts[t.cutId!];
+    const stage = d.state.stages[t.stageId];
+    const latest = Object.values(d.state.submissions).filter((s) => s.taskId === t.id && !s.archivedAt).sort((x, y) => x.versionNo - y.versionNo).pop()!;
+    const before = deliveriesOf(d.rm, p)!.cellByTask.get(t.id)!;
+    expect(before.subThumbs.get(sub.id)?.sha256).toBe(withFile.sha256);
+    const code = { layout: "LO", key: "H", clean: "CLN", inbetween: "ANI", paint: "ANI", bg: "BG" }[stage.templateKey as "inbetween"] ?? "ANI";
+    const name = `ANDLC_EP01_SC001_CUT${String(cut.number).padStart(3, "0")}${t.layer ? `_${t.layer}` : ""}_${code}_v${String(latest.versionNo + 1).padStart(2, "0")}`;
+    const a = d.run(d.admin, "audit.start", { projectId: p }).auditId;
+    d.run(d.admin, "audit.add", { auditId: a, source: { kind: "paste", label: null }, items: [{ name, path: null, size: null, mtime: null, origin: "paste", fingerprint: null, thumb: null, info: { kind: "other" } }] });
+    const cell = deliveriesOf(d.rm, p)!.cellByTask.get(t.id)!;
+    expect(cell.version).toBe(latest.versionNo + 1);
+    expect(cell.thumb).toBeNull();
+    expect(cell.subThumbs.get(sub.id)?.sha256).toBe(withFile.sha256);
   });
 });

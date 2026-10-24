@@ -121,7 +121,8 @@ export function WallTile({ cell, size, onOpen, label, testId = "wall-cell" }: { 
         {size === "s" ? null : <span className="label">{L.audit.noFileFound}</span>}
       </span>
     ) : (
-      <Thumb thumb={shown?.thumb ?? null} alt={label} caption={size === "s" ? "" : undefined} />
+      // 没有图：系统里那一版没附图 →「没有图」；盘点里只有名字的文件 →「只有名字」（Thumb 的默认）
+      <Thumb thumb={shown?.thumb ?? null} alt={label} caption={size === "s" ? "" : !shown?.thumb && shown?.shownFrom === "system" ? L.audit.noPicture : undefined} />
     );
   return (
     <button

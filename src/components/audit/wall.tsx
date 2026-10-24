@@ -290,7 +290,8 @@ function versionsOf(d: Deliveries, c: DeliveryCell, i18n: ReturnType<typeof useI
   }
   for (const s of d.facts.subsByTask.get(c.task.id) ?? []) {
     if (seen.has(`v${s.versionNo}`)) continue;
-    out.push({ key: s.id, label: vLabel(s.versionNo), thumb: s.id === c.sub?.id && c.thumb ? c.thumb : null, name: s.fileName, info: i18n.f(i18n.L.audit.sysVersion, { version: vLabel(s.versionNo) }) });
+    // 系统里的这一版：只用它自己的图（没附图就是「没有图」的占位，不借盘点里新版本的图）
+    out.push({ key: s.id, label: vLabel(s.versionNo), thumb: c.subThumbs.get(s.id) ?? null, name: s.fileName, info: i18n.f(i18n.L.audit.sysVersion, { version: vLabel(s.versionNo) }) });
   }
   return out.sort((a, b) => a.label.localeCompare(b.label));
 }
@@ -366,7 +367,7 @@ export function WallViewer({ d, group, pick, onClose }: { d: Deliveries; group: 
           </div>
         ) : null}
         <div className="audit-viewer-body">
-          <Thumb thumb={cur?.thumb ?? shown?.thumb ?? null} alt={where} className="audit-viewer-img" caption={cur?.thumb || shown?.thumb ? undefined : L.audit.noPicture} />
+          <Thumb thumb={(cur ? cur.thumb : shown?.thumb) ?? null} alt={where} className="audit-viewer-img" caption={(cur ? cur.thumb : shown?.thumb) ? undefined : L.audit.noPicture} />
           <div className="stack" data-gap="small">
             {cur?.name ? (
               <span className="t-body-14m audit-file-name" data-uc="">
@@ -396,7 +397,7 @@ export function WallViewer({ d, group, pick, onClose }: { d: Deliveries; group: 
             <div className="audit-versions" role="group" aria-label={L.audit.versionsTitle}>
               {vs.map((v) => (
                 <button key={v.key} type="button" className="audit-version" aria-pressed={v === cur} onClick={() => setVersion(v.key)} data-testid="viewer-version">
-                  <Thumb thumb={v.thumb} alt={v.label} caption="" />
+                  <Thumb thumb={v.thumb} alt={v.label} caption={v.thumb ? undefined : L.audit.noPicture} />
                   <span className="num label">{v.label}</span>
                 </button>
               ))}

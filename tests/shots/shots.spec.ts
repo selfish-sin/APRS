@@ -86,8 +86,10 @@ async function auditShots(page: Page, shot: (name: string) => Promise<unknown>) 
   await open(page, `${projectPath}?tab=grid`);
   await expect(page.getByTestId("project-wall")).toBeVisible();
   await shot("p18-wall");
-  await page.getByTestId("project-wall").locator('[data-testid="wall-cell"][data-stage="layout"]').first().click();
+  // C010 中割 B 层：系统里 v01–v03 没附图（「没有图」的占位）· v04 附了图 · 盘点里找到 v05改（文件里的图）
+  await page.getByTestId("project-wall").locator('[data-testid="wall-cell"][data-stage="inbetween"][data-cut="10"]').click();
   await expect(page.getByTestId("wall-viewer")).toBeVisible();
+  await page.getByTestId("viewer-layer").filter({ hasText: "B" }).click();
   await page.screenshot({ path: shotPath(page, "p18-viewer"), fullPage: false });
   await page.keyboard.press("Escape");
   await open(page, projectPath);

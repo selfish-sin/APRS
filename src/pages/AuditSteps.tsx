@@ -155,9 +155,11 @@ export function ReviewStep({ project, audit, c, onWrite }: { project: ProjectRow
   const prev =
     d && stage && cut
       ? previousWithPicture(c.facts, stage, cut.id, (s): DeliveryCell | null => {
+          // 分层的环节只看同一层（不借别的层的图）；这一条本身不分层就看 A 层（和墙上一样）；不分层的环节就是它那一格
           const wc = wallCell(d, s, cut);
-          const same = wc.layers.find((l) => l.layer === layer && l.thumb) ?? wc.layers.find((l) => l.thumb);
-          return same ?? null;
+          const perLayer = wc.layers.some((l) => l.layer);
+          const same = perLayer ? (layer ? wc.layers.find((l) => l.layer === layer) : wc.shown) : wc.layers[0];
+          return same?.thumb ? same : null;
         })
       : null;
   const sys = cell?.sysSub ?? null;
@@ -184,7 +186,7 @@ export function ReviewStep({ project, audit, c, onWrite }: { project: ProjectRow
               {prev ? (
                 <>
                   <span className="label">
-                    {f(L.audit.prevPicture, { stage: `${i18n.stageName(group, prev.stage)}`, version: vTag(prev.picture.version, prev.picture.note) })}
+                    {f(L.audit.prevPicture, { stage: [i18n.stageName(group, prev.stage), prev.picture.layer ? f(L.audit.layerTab, { layer: prev.picture.layer }) : null].filter(Boolean).join(" · "), version: vTag(prev.picture.version, prev.picture.note) })}
                     {prev.skipped.length ? ` ${f(L.audit.prevSkipped, { names: prev.skipped.map((s) => i18n.stageName(group, s)).join(" · ") })}` : ""}
                   </span>
                   <Thumb thumb={prev.picture.thumb} alt={i18n.stageName(group, prev.stage)} className="audit-item-prev" />
