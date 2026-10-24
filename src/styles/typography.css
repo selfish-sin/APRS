@@ -1,0 +1,118 @@
+/* ==========================================================================
+   文字样式 13 个
+   字号能对上 token 的用 var(--font-size-*)；11 / 20 / 28 没有字号 token。
+   行高 12/18、18/26 用 tokens.css 的 --leading-*。其余行高仍按文字样式本身。
+   ========================================================================== */
+
+.t-display-48,
+.t-title-32,
+.t-section-24,
+.t-heading-18,
+.t-body-14,
+.t-body-14m,
+.t-caption-12,
+.t-eyebrow-12 {
+  font-family: "Noto Sans SC", var(--font-sans);
+}
+
+.t-display-48 {
+  font-size: var(--font-size-display);
+  font-weight: 700;
+  line-height: 56px;
+  letter-spacing: -0.02em;
+}
+
+.t-title-32 {
+  font-size: var(--font-size-title);
+  font-weight: 700;
+  line-height: 40px;
+  letter-spacing: -0.01em;
+}
+
+.t-section-24 {
+  font-size: var(--font-size-section);
+  font-weight: 700;
+  line-height: 32px;
+  letter-spacing: -0.005em;
+}
+
+.t-heading-18 {
+  font-size: var(--font-size-heading);
+  font-weight: 500;
+  line-height: var(--leading-heading-18);
+}
+
+.t-body-14 {
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.t-body-14m {
+  font-size: var(--font-size-body);
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.t-caption-12 {
+  font-size: var(--font-size-caption);
+  font-weight: 400;
+  line-height: var(--leading-caption-12);
+}
+
+.t-eyebrow-12 {
+  font-size: var(--font-size-caption);
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.t-num-32,
+.t-num-20,
+.t-label-11 {
+  font-family: Outfit, var(--font-sans);
+}
+
+.t-num-32 {
+  font-size: var(--font-size-title);
+  font-weight: 600;
+  line-height: 40px;
+  letter-spacing: -0.02em;
+}
+
+.t-num-20 {
+  /* Numeral/20 — 没有 font-size token */
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+
+.t-serif-48,
+.t-serif-28 {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+}
+
+.t-serif-48 {
+  font-size: var(--font-size-display);
+  font-weight: 700;
+  line-height: 56px;
+  letter-spacing: -0.02em;
+}
+
+.t-serif-28 {
+  /* Title/Serif 28 — 没有 font-size token */
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 36px;
+  letter-spacing: -0.01em;
+}
+
+.t-label-11 {
+  /* Label/11 Latin — 没有 font-size token；Figma textCase = ORIGINAL，不大写 */
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+}

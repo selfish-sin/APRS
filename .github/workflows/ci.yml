@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  NEXT_TELEMETRY_DISABLED: 1
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # pnpm 的版本读 package.json 的 packageManager
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Unit tests
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+      - name: Design checks (report only · LIA-12)
+        if: always()
+        continue-on-error: true
+        run: |
+          {
+            echo '## LIA-12 design checks (report only)'
+            echo '### hardcoded.mjs'
+            echo '```json'
+            node scripts/checks/hardcoded.mjs src/components src/app --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log(JSON.stringify({version:j.version,files:j.files,totals:j.totals,summary:j.summary},null,2))})"
+            echo '```'
+            echo '### figma-ref.mjs'
+            echo '```json'
+            node scripts/checks/figma-ref.mjs src/components src/app --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log(JSON.stringify({files:j.files,ok:j.ok,missingNode:j.missingNode,missingOntology:j.missingOntology},null,2))})"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY" || true
+
+  # 冒烟第一层：对着 CI 自己 build + start 的那一份，在浏览器里把每个入口点一遍（中文 · 上海 / 英文 · UTC）。
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      # PR 上是合并后的提交；push 到 main 就是 main 的提交。页面里的 <meta name="build"> 要等于它。
+      BUILD_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Build
+        run: pnpm build
+      - name: Smoke
+        run: pnpm smoke
+        env:
+          CI: 1
+          SMOKE_EXPECT_LAB: visible
+          SMOKE_EXPECT_BUILD: ${{ github.sha }}
+      - name: Smoke report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: |
+            artifacts/smoke/report
+            artifacts/smoke/results
+          retention-days: 7

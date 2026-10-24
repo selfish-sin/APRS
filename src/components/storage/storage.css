@@ -1,0 +1,135 @@
+/* 本机存储 · 备份和提示
+   每一块都是现有组件换字：菜单 = Menu 面板 855:29719，提示 = Toast 359:388，对话框 = Drawer 362:415。
+   颜色、字号、圆角、间距只用 tokens.css。 */
+
+/* —— 一 · 世界菜单（挂在侧栏世界胶囊下面） —— */
+.storage-menu {
+  position: relative;
+}
+
+.storage-menu-panel {
+  top: var(--space-2);
+  min-width: 232px; /* figma 964:33609 */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+}
+
+.storage-menu-title {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  color: var(--color-text-secondary);
+}
+
+.storage-menu-item {
+  width: 100%;
+}
+
+/* —— 二 · 没存上：页面顶上常驻的一条 —— */
+.storage-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px; /* figma 359:388 */
+  padding: 0 var(--space-5);
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger);
+  font-size: var(--font-size-body);
+  line-height: 22px;
+}
+
+.storage-banner-mark {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid currentColor;
+  font-size: var(--font-size-caption);
+  font-weight: 700;
+}
+
+.storage-banner-action {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.storage-banner-action:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* —— 三 · 四 · 提示：底部，叠在一起 —— */
+.storage-toast-host {
+  position: fixed;
+  z-index: 20;
+  left: 50%;
+  bottom: calc(var(--space-5) + 52px); /* 让出 store 的报错 Toast */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  transform: translateX(-50%);
+}
+
+/* —— 存储对话框里的几行 —— */
+.storage-facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.storage-facts > div {
+  display: flex;
+  gap: var(--space-4);
+  justify-content: space-between;
+}
+
+.storage-facts dt {
+  color: var(--color-text-secondary);
+}
+
+.storage-facts dd {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.storage-facts-meta {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+/* —— 没能恢复的那几步 —— */
+.storage-skipped {
+  max-height: 240px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.storage-skipped li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-0) var(--space-3);
+  padding: var(--space-1) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.storage-skipped li > span:last-child {
+  grid-column: 1 / -1;
+  color: var(--color-text-secondary);
+}

@@ -1,0 +1,654 @@
+/* 基础组件（设计系统 v0.3.1）· 只用 tokens.css */
+
+.ui-button,
+.ui-chip,
+.ui-identity,
+.ui-avatar,
+.ui-avatar-tile {
+  font-family: var(--font-noto-sc), var(--font-sans);
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-size: var(--font-size-body);
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.ui-button[data-size="Medium"] {
+  padding: var(--space-3) var(--space-5);
+}
+
+.ui-button[data-size="Small"] {
+  padding: var(--space-2) var(--space-4);
+}
+
+.ui-button[data-style="Primary"] {
+  background: var(--color-surface-inverse);
+  color: var(--color-text-on-inverse);
+}
+
+.ui-button[data-style="Primary"]:hover,
+.ui-button[data-style="Primary"][data-state="Hover"] {
+  /* figma 146:38 · Primary hover 是 inverse 的 82%，没有单独变量 */
+  background: color-mix(in srgb, var(--color-surface-inverse) 82%, transparent);
+}
+
+.ui-button[data-style="Secondary"] {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+
+.ui-button[data-style="Secondary"]:hover,
+.ui-button[data-style="Secondary"][data-state="Hover"] {
+  background: var(--color-surface-muted);
+}
+
+.ui-button[data-style="Ghost"] {
+  background: transparent;
+  color: var(--color-text-primary);
+}
+
+.ui-button[data-style="Ghost"]:hover,
+.ui-button[data-style="Ghost"][data-state="Hover"] {
+  background: var(--color-surface-muted);
+}
+
+.ui-button[data-style="Accent"] {
+  background: var(--color-accent-sage-strong);
+  color: var(--color-text-on-inverse);
+}
+
+.ui-button[data-style="Accent"]:hover,
+.ui-button[data-style="Accent"][data-state="Hover"] {
+  background: var(--color-accent-sage-hover);
+}
+
+.ui-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.ui-button:focus-visible,
+.ui-chip:focus-visible,
+.ui-identity:focus-visible,
+.ui-avatar:focus-visible,
+.ui-avatar-tile:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.ui-button:disabled,
+.ui-button[data-state="Disabled"] {
+  opacity: 0.4; /* figma 146:38 */
+  cursor: default;
+  transform: none;
+}
+
+.ui-button[data-style="Accent"]:disabled,
+.ui-button[data-style="Accent"][data-state="Disabled"] {
+  background: var(--color-accent-sage);
+  opacity: 0.45; /* figma 146:38 */
+}
+
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-size: var(--font-size-caption);
+  font-weight: 400;
+  line-height: var(--leading-caption-12);
+  color: var(--color-text-primary);
+  background: var(--color-surface-muted);
+}
+
+.ui-chip[data-tone="Selected"],
+.ui-chip[aria-pressed="true"] {
+  background: var(--color-surface-inverse);
+  color: var(--color-text-on-inverse);
+}
+
+.ui-chip[data-tone="Show"] {
+  background: var(--color-category-show-bg);
+  color: var(--color-category-show-fg);
+}
+
+.ui-chip[data-tone="Install"] {
+  background: var(--color-category-install-bg);
+  color: var(--color-category-install-fg);
+}
+
+.ui-chip[data-tone="Deinstall"] {
+  background: var(--color-category-deinstall-bg);
+  color: var(--color-category-deinstall-fg);
+}
+
+.ui-chip[data-tone="Matter"] {
+  background: var(--color-category-matter-bg);
+  color: var(--color-category-matter-fg);
+}
+
+.ui-chip[data-tone="Media"] {
+  background: var(--color-category-media-bg);
+  color: var(--color-category-media-fg);
+}
+
+.ui-chip:hover {
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+
+.ui-chip:active {
+  transform: scale(0.98);
+}
+
+.ui-chip:disabled {
+  color: var(--color-text-disabled);
+  cursor: default;
+  transform: none;
+}
+
+.ui-chip-dot {
+  width: var(--space-1);
+  height: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.ui-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 22px; /* figma 165:853 */
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-size-caption);
+  font-weight: 500;
+  line-height: 16px;
+  box-sizing: border-box;
+}
+
+.ui-pill-dot {
+  width: 6px; /* figma 165:853 */
+  height: 6px; /* figma 165:853 */
+  flex: none;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+/* 任务状态（SPEC §6）：锁住 surface-muted + 灰字 · 可接 sky · 已接 sand · 待审 warning · 退回 danger · 通过 success · 收回 灰 */
+.ui-pill[data-status="locked"],
+.ui-pill[data-status="reclaimed"] {
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+}
+
+.ui-pill[data-status="open"] {
+  background: var(--color-accent-sky);
+  color: var(--color-category-show-fg);
+}
+
+.ui-pill[data-status="claimed"] {
+  background: var(--color-accent-sand);
+  color: var(--color-category-deinstall-fg);
+}
+
+.ui-pill[data-status="submitted"] {
+  background: var(--color-status-warning-bg);
+  color: var(--color-status-warning);
+}
+
+.ui-pill[data-status="returned"] {
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger);
+}
+
+.ui-pill[data-status="passed"] {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success);
+}
+
+.ui-avatar,
+.ui-avatar-tile,
+.ui-avatar-more {
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  flex: none;
+  box-sizing: border-box;
+}
+
+.ui-avatar {
+  border: 2px solid var(--color-surface);
+  font-weight: 500;
+  line-height: 1;
+  padding: 0;
+  cursor: default;
+}
+
+.ui-avatar[data-size="20"] {
+  width: 20px; /* figma 163:352 */
+  height: 20px; /* figma 163:352 */
+  border-width: 1.5px; /* figma 163:352 */
+  font-size: 10px; /* figma 163:352 */
+}
+
+.ui-avatar[data-size="28"] {
+  width: 28px; /* figma 163:352 */
+  height: 28px; /* figma 163:352 */
+  font-size: var(--font-size-caption);
+}
+
+.ui-avatar[data-size="40"] {
+  width: 40px; /* figma 163:352 */
+  height: 40px; /* figma 163:352 */
+  font-size: 15px; /* figma 163:352 */
+}
+
+.ui-avatar[data-size="64"] {
+  width: var(--space-8);
+  height: var(--space-8);
+  font-size: var(--font-size-section);
+}
+
+.ui-avatar[data-tone="Peach"] { background: var(--avatar-peach); color: var(--color-text-primary); }
+.ui-avatar[data-tone="Lilac"] { background: var(--avatar-lilac); color: var(--color-text-primary); }
+.ui-avatar[data-tone="Sand"] { background: var(--avatar-sand); color: var(--color-text-primary); }
+.ui-avatar[data-tone="Sage"] { background: var(--avatar-sage); color: var(--color-text-primary); }
+.ui-avatar[data-tone="Slate"] { background: var(--avatar-slate); color: var(--color-text-primary); }
+.ui-avatar[data-tone="Neutral"] { background: var(--color-surface-muted); color: var(--color-text-primary); }
+
+.ui-stack {
+  display: flex;
+  align-items: center;
+}
+
+.ui-stack > * + * {
+  margin-left: calc(var(--space-2) * -1);
+}
+
+.ui-avatar-more {
+  width: 28px; /* figma 163:353 */
+  height: 28px; /* figma 163:353 */
+  background: var(--color-surface-muted);
+  color: var(--color-text-primary);
+  font-family: var(--font-outfit), var(--font-sans);
+  font-size: 11px; /* figma 163:353 */
+  font-weight: 500;
+  border: 2px solid var(--color-surface); /* figma 163:353 */
+}
+
+.ui-avatar-tile {
+  width: 56px; /* figma 163:364 */
+  height: 56px; /* figma 163:364 */
+  border: 0;
+  border-radius: 18px; /* figma 163:364 */
+  background: var(--color-surface-inverse);
+  color: var(--color-text-on-inverse);
+  font-size: var(--font-size-section);
+  font-weight: 700;
+  cursor: default;
+}
+
+.ui-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 38px; /* figma 178:1386 */
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.ui-identity:hover {
+  background: var(--color-surface-muted);
+}
+
+.ui-identity:active {
+  transform: scale(0.98);
+}
+
+.ui-identity-name {
+  font-size: var(--font-size-body);
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.ui-identity-role {
+  font-size: var(--font-size-caption);
+  font-weight: 400;
+  line-height: var(--leading-caption-12);
+  color: var(--color-text-label);
+}
+
+.ui-popover,
+.ui-dialog-back {
+  position: relative;
+}
+
+.ui-menu {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  min-width: 180px; /* figma 178:1386 */
+  margin: 0;
+  padding: var(--space-2);
+  list-style: none;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: 0 var(--space-2) var(--space-5) color-mix(in srgb, var(--color-surface-inverse) 12%, transparent);
+}
+
+.ui-menu [role="option"] {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.ui-menu [role="option"]:hover,
+.ui-menu [role="option"][data-active="true"],
+.ui-menu [role="option"]:focus-visible {
+  background: var(--color-surface-muted);
+}
+
+.ui-dialog-back {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--color-surface-inverse) 28%, transparent);
+}
+
+.ui-dialog {
+  width: min(360px, calc(100% - var(--space-6))); /* figma 178:1386 */
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.ui-dialog p {
+  margin: var(--space-3) 0 var(--space-5);
+}
+
+.ui-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+/* —— B45 Toast · figma 359:388 —— */
+.ui-toast {
+  height: 44px; /* figma 359:388 */
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-inverse);
+  color: var(--color-text-on-inverse);
+  font-size: var(--font-size-body);
+  line-height: 22px; /* figma 359:388 */
+}
+
+.ui-toast[data-tone="Error"] {
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger);
+}
+
+.ui-toast-action,
+.ui-toast-close {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.ui-toast-action:focus-visible,
+.ui-toast-close:focus-visible,
+.ui-select-trigger:focus-visible,
+.ui-drawer:focus-visible,
+.ui-dialog-card:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.ui-toast-host {
+  position: fixed;
+  z-index: 20;
+  left: 50%;
+  bottom: var(--space-5);
+  transform: translateX(-50%);
+}
+
+/* —— B46 EmptyState · figma 359:410 —— */
+.ui-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: 320px; /* figma 359:410 */
+  padding: var(--space-5);
+}
+
+.ui-empty[data-size="紧凑"] {
+  padding: var(--space-2) var(--space-5);
+}
+
+.ui-empty p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 22px; /* figma 359:410 */
+}
+
+/* —— B47 Input · figma 365:463 —— */
+.ui-input {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  width: min(100%, 320px); /* figma 365:463 */
+  font-size: var(--font-size-body);
+}
+
+.ui-input-label {
+  color: var(--color-text-label);
+  font-size: var(--font-size-caption);
+}
+
+.ui-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px; /* figma 365:463 */
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+}
+
+.ui-input textarea.ui-field {
+  min-height: 96px; /* figma 365:463 */
+  padding: var(--space-3);
+  resize: vertical;
+}
+
+.ui-field:focus,
+.ui-input[data-state="焦点"] .ui-field {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--color-focus); /* figma 365:463 */
+}
+
+.ui-input[data-state="出错"] .ui-field {
+  box-shadow: inset 0 0 0 1px var(--color-status-danger);
+}
+
+.ui-input[data-state="只读"] .ui-field {
+  background: var(--color-surface-muted);
+  color: var(--color-text-secondary);
+}
+
+.ui-input[data-state="禁用"] {
+  color: var(--color-text-disabled);
+}
+
+.ui-input-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+.ui-input[data-state="出错"] .ui-input-hint {
+  color: var(--color-status-danger);
+}
+
+.ui-input-unit {
+  color: var(--color-text-secondary);
+}
+
+.ui-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+/* —— B48 Menu · figma 361:424 · 361:390 —— */
+.ui-select {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ui-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 38px; /* figma 361:424 */
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.ui-select-label {
+  color: var(--color-text-secondary);
+}
+
+.ui-select-panel {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  min-width: 220px; /* figma 361:390 */
+  margin: 0;
+  padding: var(--space-2);
+  list-style: none;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: 0 var(--space-2) var(--space-5) color-mix(in srgb, var(--color-surface-inverse) 12%, transparent);
+}
+
+.ui-select-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-0);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm); /* figma 361:390 */
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ui-select-item[aria-selected="true"],
+.ui-select-item[data-active="true"],
+.ui-select-item:hover {
+  background: var(--color-surface-muted);
+}
+
+.ui-select-meta {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+/* —— B49 Drawer · figma 362:415 —— */
+.ui-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: color-mix(in srgb, var(--color-canvas) 65%, transparent); /* figma 362:415 · 对话框遮罩 */
+}
+
+.ui-drawer {
+  position: fixed;
+  z-index: 31;
+  top: 0;
+  right: 0;
+  width: min(400px, 100%); /* figma 362:415 */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.ui-dialog-card {
+  position: fixed;
+  z-index: 31;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(440px, calc(100% - var(--space-6))); /* figma 362:415 */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-md); /* figma 362:415 */
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.ui-overlay-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}

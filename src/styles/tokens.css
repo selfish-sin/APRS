@@ -1,0 +1,133 @@
+/* ==========================================================================
+   ARPS · design tokens v0.2.1（状态色按 v0.3.1）
+   来源：Figma 里的设计变量
+   命名：Figma 变量名的 `/` 换成 `-`，一一对应。
+   新代码一律用这里的变量；旧页面视觉迁移跟着 DSN-01 逐页做。
+   ========================================================================== */
+
+:root {
+  /* —— 画布与表面 —— */
+  --color-canvas: #f4f0e8; /* color/canvas */
+  --color-canvas-khaki: #e7dcc6; /* color/canvas-khaki */
+  --color-surface: #ffffff; /* color/surface */
+  --color-surface-muted: #ece7de; /* color/surface-muted */
+  --color-surface-inverse: #0d0d0d; /* color/surface-inverse */
+  --color-surface-inverse-hover: #2e2e2e; /* color/surface-inverse-hover */
+
+  /* —— 强调色（计数卡 / 点缀） —— */
+  --color-accent-sky: #e0f7fa; /* color/accent/sky */
+  --color-accent-mint: #d6f5d6; /* color/accent/mint */
+  --color-accent-peach: #fbe0c8; /* color/accent/peach */
+  --color-accent-lilac: #e9e1fa; /* color/accent/lilac */
+  --color-accent-yellow: #f6e6a0; /* color/accent/yellow */
+  --color-accent-pink: #f9c9d6; /* color/accent/pink */
+  --color-accent-sand: #f4e3c5; /* color/accent/sand */
+  --color-accent-sky-card: #e3eff3; /* color/accent/sky-card */
+  --color-accent-sage: #8fa38a; /* color/accent/sage */
+  --color-accent-sage-strong: #5f7359; /* color/accent/sage-strong */
+  --color-accent-sage-hover: #50624b; /* color/accent/sage-hover */
+
+  /* —— 头像色（只给人；Figma color/avatar/*） —— */
+  --avatar-peach: #fbe0c8; /* color/avatar/peach */
+  --avatar-lilac: #e9e1fa; /* color/avatar/lilac */
+  --avatar-sand: #f4e3c5; /* color/avatar/sand */
+  --avatar-sage: #e3eadf; /* color/avatar/sage */
+  --avatar-slate: #e2e6ec; /* color/avatar/slate */
+
+  /* —— 文字 —— */
+  --color-text-primary: #0d0d0d; /* color/text/primary */
+  --color-text-secondary: rgba(13, 13, 13, 0.62); /* color/text/secondary */
+  --color-text-disabled: rgba(13, 13, 13, 0.4); /* color/text/disabled */
+  --color-text-label: #72634e; /* color/text/label */
+  --color-text-nav: #746c60; /* color/text/nav */
+  --color-text-on-inverse: #fbfbfb; /* color/text/on-inverse */
+  --color-text-on-inverse-secondary: rgba(251, 251, 251, 0.62); /* color/text/on-inverse-secondary */
+
+  /* —— 描边与焦点 —— */
+  --color-border-subtle: rgba(13, 13, 13, 0.08); /* color/border/subtle */
+  --color-border-strong: rgba(13, 13, 13, 0.16); /* color/border/strong */
+  --color-border-on-inverse: rgba(251, 251, 251, 0.14); /* color/border/on-inverse */
+  --color-focus: #1f6feb; /* color/focus */
+
+  /* —— 状态 —— */
+  --color-status-success: #1c7439; /* color/status/success */
+  --color-status-success-bg: #e4f3e7; /* color/status/success-bg */
+  --color-status-warning: #955506; /* color/status/warning */
+  --color-status-warning-bg: #fcefd9; /* color/status/warning-bg */
+  --color-status-danger: #b42318; /* color/status/danger */
+  --color-status-danger-bg: #fbe3e0; /* color/status/danger-bg */
+  --color-status-info: #1f5fd1; /* color/status/info */
+  --color-status-info-bg: #e3ecfb; /* color/status/info-bg */
+
+  /* —— 事项类别（档期色条 / chip） —— */
+  --color-category-show-bg: #e0f7fa; /* color/category/show-bg */
+  --color-category-show-fg: #0b5563; /* color/category/show-fg */
+  --color-category-install-bg: #d6f5d6; /* color/category/install-bg */
+  --color-category-install-fg: #1d5e2c; /* color/category/install-fg */
+  --color-category-deinstall-bg: #fbe0c8; /* color/category/deinstall-bg */
+  --color-category-deinstall-fg: #8a4513; /* color/category/deinstall-fg */
+  --color-category-matter-bg: #e9e1fa; /* color/category/matter-bg */
+  --color-category-matter-fg: #563b99; /* color/category/matter-fg */
+  --color-category-media-bg: #e8e0d2; /* color/category/media-bg */
+  --color-category-media-fg: #585550; /* color/category/media-fg */
+
+  /* —— 工作流图（连线 / 网格） —— */
+  --color-workflow-edge: rgba(13, 13, 13, 0.28); /* color/workflow/edge */
+  --color-workflow-edge-active: #0d0d0d; /* color/workflow/edge-active */
+  --color-workflow-grid: rgba(13, 13, 13, 0.1); /* color/workflow/grid */
+
+  /* —— 档期（竖条以后再用） —— */
+  --color-calendar-half-hour: rgba(13, 13, 13, 0.05); /* color/calendar/half-hour */
+  --color-calendar-ended: #c9c2b6; /* color/calendar/ended */
+  --color-calendar-now: #a3326e; /* color/calendar/now */
+  --color-calendar-now-soft: #f7e4ee; /* color/calendar/now-soft */
+  --color-calendar-past: #f8f5ef; /* color/calendar/past */
+
+  /* —— 圆角 —— */
+  --radius-sm: 8px; /* radius/sm */
+  --radius-md: 20px; /* radius/md */
+  --radius-lg: 32px; /* radius/lg */
+  --radius-xl: 40px; /* radius/xl */
+  --radius-pill: 999px; /* radius/pill */
+
+  /* —— 间距（4 的倍数网格） —— */
+  --space-0: 2px; /* space/0 */
+  --space-1: 4px; /* space/1 */
+  --space-2: 8px; /* space/2 */
+  --space-3: 12px; /* space/3 */
+  --space-4: 16px; /* space/4 */
+  --space-5: 24px; /* space/5 */
+  --space-6: 32px; /* space/6 */
+  --space-7: 48px; /* space/7 */
+  --space-8: 64px; /* space/8 */
+
+  /* —— 字号 —— */
+  --font-size-caption: 12px; /* font-size/caption */
+  --font-size-body: 14px; /* font-size/body */
+  --font-size-body-lg: 16px; /* font-size/body-lg */
+  --font-size-heading: 18px; /* font-size/heading */
+  --font-size-section: 24px; /* font-size/section */
+  --font-size-title: 32px; /* font-size/title */
+  --font-size-display: 48px; /* font-size/display */
+
+  /* —— 行高（和字号成对：12/18 · 18/26） —— */
+  --leading-caption-12: 18px; /* leading/caption-12 */
+  --leading-heading-18: 26px; /* leading/heading-18 */
+
+  /* —— 字体栈（设计系统-v0.1 §9） —— */
+  --font-sans: Inter, "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+
+  /* —— 动效 —— */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
+}

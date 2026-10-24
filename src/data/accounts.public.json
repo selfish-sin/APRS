@@ -1,0 +1,16 @@
+[
+ {
+  "login": "admin",
+  "displayName": "工会管理员",
+  "role": "admin",
+  "salt": "d299fb0c72b96faf9ef8a2ace8bb5f1b",
+  "hash": "2eabcafee1637c5a25f833f74af904ac3971e38b6b6ff4c651832f07bdcc77d7"
+ },
+ {
+  "login": "member01",
+  "displayName": "成员 01",
+  "role": "member",
+  "salt": "0e77cadb033b9a78fc6c874132b4aba1",
+  "hash": "700d578cc391ed2f6380671b0e8789ca39481dbf104018ec632a0298e347b3c9"
+ }
+]
