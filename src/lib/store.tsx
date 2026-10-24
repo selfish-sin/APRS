@@ -197,6 +197,8 @@ export interface StoreApi {
   clearNotice: () => void;
   storage: StorageStatus;
   exportWorld: () => { ok: true; fileName: string } | { ok: false; message: string };
+  /** 同一份备份，给成文字（下载被挡住的地方——比如预览框——用复制代替）。也记一次「备份过」。 */
+  exportText: () => { ok: true; text: string; fileName: string } | { ok: false; message: string };
   worldFile: () => WorldFile | null;
   /** 导入一份备份：同一个工会在这台设备上就替换（先留 :bak），没有就加进来，然后打开它。 */
   importWorld: (file: WorldFile) => ImportReport;
@@ -464,24 +466,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const exportWorld = useCallback<StoreApi["exportWorld"]>(() => {
+  /** 备份的文字 + 文件名，并记一次「备份过」。导出文件和复制文字共用。 */
+  const prepareExport = useCallback(():
+    | { ok: true; text: string; fileName: string }
+    | { ok: false; message: string } => {
     const box = storageRef.current;
-    if (typeof document === "undefined") return { ok: false, message: "只能在浏览器里导出" };
     const file0 = worldFile();
     if (!file0) return { ok: false, message: "还没有打开工会" };
     try {
       const now = realNow();
       const file = buildExport(file0, now, buildId());
       const fileName = exportFileName(file.title ?? "", file.worldId, now);
-      const blob = new Blob([JSON.stringify(file, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const text = JSON.stringify(file, null, 2);
       if (box) {
         markBackedUp(box.storage, file.worldId, now);
         setStorageStatus((prev) => ({ ...prev, lastBackupAt: now, reminder: null }));
@@ -492,11 +488,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
         refreshGuilds();
       }
-      return { ok: true, fileName };
+      return { ok: true, text, fileName };
     } catch (e) {
       return { ok: false, message: errorMessage(e) };
     }
   }, [worldFile, refreshGuilds]);
+
+  const exportText = useCallback<StoreApi["exportText"]>(() => prepareExport(), [prepareExport]);
+
+  const exportWorld = useCallback<StoreApi["exportWorld"]>(() => {
+    if (typeof document === "undefined") return { ok: false, message: "只能在浏览器里导出" };
+    const r = prepareExport();
+    if (!r.ok) return r;
+    try {
+      const blob = new Blob([r.text], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = r.fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return { ok: true, fileName: r.fileName };
+    } catch (e) {
+      return { ok: false, message: errorMessage(e) };
+    }
+  }, [prepareExport]);
 
   const importWorld = useCallback<StoreApi["importWorld"]>(
     (file) => {
@@ -604,12 +622,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       clearNotice,
       storage: storageStatus,
       exportWorld,
+      exportText,
       worldFile,
       importWorld,
       dismissReminder,
       dismissSkipped,
     }),
-    [ready, guilds, world, current?.worldId, current?.base, session, now, me, account, dispatch, login, logout, openDemo, openGuild, leaveGuild, createGuild, resetDemo, lastError, clearError, notice, notify, clearNotice, storageStatus, exportWorld, worldFile, importWorld, dismissReminder, dismissSkipped]
+    [ready, guilds, world, current?.worldId, current?.base, session, now, me, account, dispatch, login, logout, openDemo, openGuild, leaveGuild, createGuild, resetDemo, lastError, clearError, notice, notify, clearNotice, storageStatus, exportWorld, exportText, worldFile, importWorld, dismissReminder, dismissSkipped]
   );
 
   return <StoreContext.Provider value={api}>{children}</StoreContext.Provider>;

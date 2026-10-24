@@ -239,3 +239,24 @@ test("备份页：导出，再导回同一个工会先问一句，替换前留�
   await expect(page.getByText("这不是工会导出的备份文件。")).toBeVisible();
   expectClean(errors, "备份页");
 });
+
+test("备份页：下载被挡住时，复制备份再粘贴回来", async ({ page }, info) => {
+  test.skip(info.project.name !== "zh-CN Asia/Shanghai", "只在一套设置里跑");
+  const errors = watch(page);
+  await createGuild(page, "smoke-pass-4");
+  await createProject(page, { name: "粘贴项目", code: "PST", count: 2, layers: "A", sheets: 4 });
+  await open(page, "/backup");
+  await page.getByTestId("export-copy").click();
+  const text = await page.locator("#backup-copy-text").inputValue();
+  expect(JSON.parse(text).format).toBe("arps-guild-world");
+  await page.getByTestId("import-paste").fill(text);
+  await page.getByTestId("import-paste-go").click();
+  await expect(page.getByRole("dialog", { name: /这台设备上已经有「冒烟小组」/ })).toBeVisible();
+  await page.getByTestId("storage-import-confirm").click();
+  await expect(page.getByText(/0 步没能恢复/)).toBeVisible();
+  await page.getByTestId("storage-import-done").click();
+  await page.getByTestId("import-paste").fill("不是备份");
+  await page.getByTestId("import-paste-go").click();
+  await expect(page.getByText(/读不了|不是工会导出的备份/).first()).toBeVisible();
+  expectClean(errors, "备份页·复制粘贴");
+});

@@ -10,9 +10,11 @@ import { navigate } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 
 export function BackupPage() {
-  const { world, me, base, storage, exportWorld, resetDemo, leaveGuild, notify } = useGuild();
+  const { world, me, base, storage, exportWorld, exportText, resetDemo, leaveGuild, notify } = useGuild();
   const ui = useStorageUi();
   const [confirmReset, setConfirmReset] = useState(false);
+  const [copyText, setCopyText] = useState<string | null>(null);
+  const [pasteText, setPasteText] = useState("");
   const title = theWorld(world)?.title ?? "工会";
   const days = daysSince(storage.lastBackupAt, new Date().toISOString());
   return (
@@ -47,6 +49,65 @@ export function BackupPage() {
           <p className="muted">选之前导出的文件。同一个工会会先问你要不要替换，替换前自动留一份。</p>
           <div className="form-actions">
             <Button Label="选备份文件" Style="Secondary" onClick={ui.pickImport} data-testid="import" />
+          </div>
+        </section>
+        <section className="card" aria-label="复制和粘贴备份">
+          <h2 className="t-heading-18">复制 / 粘贴备份</h2>
+          <p className="muted">点了「导出备份」没下载下来（有的预览页面不让下载）时用这个：把备份复制下来存好，要恢复时粘贴回来。</p>
+          <div className="form-actions">
+            <Button
+              Label="复制备份"
+              Style="Secondary"
+              data-testid="export-copy"
+              onClick={() => {
+                const r = exportText();
+                if (!r.ok) {
+                  ui.open({ kind: "error", message: r.message });
+                  return;
+                }
+                setCopyText(r.text);
+                const done = () => notify("备份复制好了，粘到一个文本文件里存起来");
+                const fallback = () => notify("没能自动复制。下面的框里就是备份，全选后复制", "Neutral");
+                try {
+                  navigator.clipboard.writeText(r.text).then(done, fallback);
+                } catch {
+                  fallback();
+                }
+              }}
+            />
+          </div>
+          {copyText !== null ? (
+            <textarea
+              id="backup-copy-text"
+              className="field-control"
+              aria-label="备份内容"
+              readOnly
+              rows={4}
+              value={copyText}
+              onFocus={(e) => e.currentTarget.select()}
+            />
+          ) : null}
+          <textarea
+            id="backup-paste-text"
+            className="field-control"
+            aria-label="粘贴备份"
+            placeholder="把之前复制的备份粘贴到这里"
+            rows={4}
+            value={pasteText}
+            onChange={(e) => setPasteText(e.target.value)}
+            data-testid="import-paste"
+          />
+          <div className="form-actions">
+            <Button
+              Label="从粘贴的内容导入"
+              Style="Secondary"
+              disabled={pasteText.trim() === ""}
+              data-testid="import-paste-go"
+              onClick={() => {
+                ui.importText(pasteText);
+                setPasteText("");
+              }}
+            />
           </div>
         </section>
         <section className="card" aria-label="存储">
