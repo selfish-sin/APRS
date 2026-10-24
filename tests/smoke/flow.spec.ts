@@ -7,7 +7,7 @@
  */
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { HAS_PASS, enterDemo, expectClean, login, logout, offlineFonts, open, watch } from "./helpers";
+import { HAS_PASS, enterDemo, expectClean, login, logout, noExternal, open, watch } from "./helpers";
 
 test.skip(!HAS_PASS, "没有设 ARPS_PASS_ADMIN / ARPS_PASS_MEMBER，跳过端到端");
 
@@ -33,7 +33,7 @@ async function cellOf(page: Page, projectPath: string, stageName: string): Promi
 
 test("主流程：开项目 → 派发 → 报到拿任务单 → 交 → 退回 → 再交 → 通过 → 活力点 → 下游解锁 → 刷新 → 导出导入", async ({ page, browser }, info) => {
   test.setTimeout(180_000);
-  await offlineFonts(page);
+  await noExternal(page);
   const errors = watch(page);
 
   // —— admin：开项目 ——
@@ -150,7 +150,7 @@ test("主流程：开项目 → 派发 → 报到拿任务单 → 交 → 退回
 
   const fresh = await browser.newContext({ baseURL: info.project.use.baseURL, locale: info.project.use.locale, timezoneId: info.project.use.timezoneId, serviceWorkers: "block" });
   const page2 = await fresh.newPage();
-  await offlineFonts(page2);
+  await noExternal(page2);
   const errors2 = watch(page2);
   await open(page2, "/");
   await page2.getByTestId("storage-import-file").setInputFiles({ name: "backup.json", mimeType: "application/json", buffer: Buffer.from(text) });

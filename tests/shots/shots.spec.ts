@@ -1,6 +1,6 @@
 /** 主要页面的截图：artifacts/shots/<页>-<desktop|mobile>.png。页面里的口令框都是空的。 */
 import { expect, test } from "@playwright/test";
-import { HAS_PASS, enterDemo, login, logout, offlineFonts, open } from "../smoke/helpers";
+import { HAS_PASS, enterDemo, login, logout, noExternal, open } from "../smoke/helpers";
 
 test.skip(!HAS_PASS, "没有设 ARPS_PASS_ADMIN / ARPS_PASS_MEMBER");
 
@@ -8,7 +8,7 @@ test("截图", async ({ page }, info) => {
   test.setTimeout(120_000);
   const tag = info.project.name;
   const shot = (name: string) => page.screenshot({ path: `artifacts/shots/${name}-${tag}.png`, fullPage: true });
-  await offlineFonts(page);
+  await noExternal(page);
   await open(page, "/");
   await shot("p1-entry");
   await enterDemo(page);

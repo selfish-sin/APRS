@@ -3,10 +3,10 @@
  * 不写死示范 id：项目、卡、成员都从页面里点进去。
  */
 import { expect, test } from "@playwright/test";
-import { HAS_PASS, createGuild, createProject, enterDemo, expectClean, expectNoPageScrollX, login, offlineFonts, open, watch } from "./helpers";
+import { HAS_PASS, createGuild, createProject, enterDemo, expectClean, expectNoPageScrollX, login, noExternal, open, watch } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
-  await offlineFonts(page);
+  await noExternal(page);
 });
 
 const PAGES = ["/hall", "/enroll", "/projects", "/review", "/admin?tab=new", "/admin?tab=dispatch", "/admin?tab=ruling", "/admin?tab=members", "/admin?tab=rates", "/members", "/me", "/backup"];
@@ -132,7 +132,8 @@ test("装到桌面以后断网也能打开（service worker）", async ({ browse
   void browserName;
   const context = await browser.newContext({ serviceWorkers: "allow", baseURL: info.project.use.baseURL });
   const page = await context.newPage();
-  await page.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/, (route) => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
+  // 这里不挂 page.route（挂了请求会绕过 service worker）；外网请求照样记下来，最后要求是 0。
+  const errors = watch(page);
   await page.goto("/", { waitUntil: "networkidle" });
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
@@ -141,7 +142,54 @@ test("装到桌面以后断网也能打开（service worker）", async ({ browse
   await context.setOffline(true);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("open-demo")).toBeVisible();
+  // 断网时数字字体也在（Outfit 打包在站里，离线缓存存下了）。
+  const offlineFont = await page.evaluate(async () => {
+    const loaded = await document.fonts.load("600 16px Outfit", "0123");
+    return loaded.map((f) => f.status);
+  });
+  expect(offlineFont).toEqual(["loaded"]);
+  expect(errors.external, "断网：有对外网的请求").toEqual([]);
   await context.close();
+});
+
+test("不连外网：字体、脚本、样式都从这个站自己来（SPEC §14.3）", async ({ page }) => {
+  const errors = watch(page);
+  await open(page, "/");
+  await expect(page.getByTestId("open-demo")).toBeVisible();
+  // 页面里没有指向外网的 <link> / <script>，样式里也没有外网的 @import / url()。
+  const refs = await page.evaluate(() => {
+    const out: string[] = [];
+    document.querySelectorAll<HTMLLinkElement | HTMLScriptElement>("link[href], script[src]").forEach((el) => out.push((el as HTMLLinkElement).href || (el as HTMLScriptElement).src));
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        for (const rule of Array.from(sheet.cssRules)) {
+          const m = rule.cssText.match(/url\(["']?(https?:[^"')]+)/g);
+          if (m) out.push(...m);
+        }
+      } catch {
+        out.push(`读不了的样式表 ${sheet.href}`);
+      }
+    }
+    return out.filter((u) => /^https?:/.test(u.replace(/^url\(["']?/, "")) && !u.includes(location.origin));
+  });
+  expect(refs).toEqual([]);
+  // 数字字体 Outfit 是自己带的；中文走系统字体。
+  const font = await page.evaluate(async () => {
+    await document.fonts.load("600 16px Outfit", "0123");
+    const outfit = Array.from(document.fonts).filter((f) => f.family.replace(/"/g, "") === "Outfit");
+    return { loaded: outfit.filter((f) => f.status === "loaded").map((f) => f.weight), body: getComputedStyle(document.body).fontFamily };
+  });
+  expect(font.loaded).toContain("600");
+  expect(font.body).toContain("PingFang SC");
+  expect(font.body).not.toContain("Inter");
+  if (HAS_PASS) {
+    await enterDemo(page);
+    await login(page, "admin");
+    for (const path of ["/hall", "/projects", "/review", "/members", "/backup"]) await open(page, path);
+  }
+  const resources = await page.evaluate(() => performance.getEntriesByType("resource").map((r) => r.name).filter((u) => /^https?:/.test(u) && !u.startsWith(location.origin)));
+  expect(resources).toEqual([]);
+  expectClean(errors, "不连外网");
 });
 
 test("管理员的其他操作：视频组项目、改项目、指派外包、拍板、改工时、加成员建账号、换人登录", async ({ page }, info) => {

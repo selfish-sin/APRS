@@ -12,7 +12,7 @@
 .t-body-14m,
 .t-caption-12,
 .t-eyebrow-12 {
-  font-family: "Noto Sans SC", var(--font-sans);
+  font-family: var(--font-sans);
 }
 
 .t-display-48 {

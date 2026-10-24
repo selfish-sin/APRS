@@ -2,17 +2,17 @@
  * 单文件预览（pnpm build:single → dist-single/index.html）：直接用 file:// 打开也能用。
  * 没构建单文件时跳过。
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
-import { HAS_PASS, PASS, expectClean, offlineFonts, watch } from "./helpers";
+import { HAS_PASS, PASS, expectClean, noExternal, watch } from "./helpers";
 
 const FILE = resolve(process.cwd(), "dist-single/index.html");
 
 test("单文件：直接打开，进示范工会，口令错有提示，对的能进", async ({ page }, info) => {
   test.skip(!existsSync(FILE), "没有 dist-single/index.html（先 pnpm build:single）");
   test.skip(info.project.name !== "zh-CN Asia/Shanghai", "只在一套设置里跑");
-  await offlineFonts(page);
+  await noExternal(page);
   const errors = watch(page);
   await page.goto(`file://${FILE}`, { waitUntil: "networkidle" });
   await expect(page.getByTestId("open-demo")).toBeVisible();
@@ -31,4 +31,21 @@ test("单文件：直接打开，进示范工会，口令错有提示，对的�
     await expect(page.getByTestId("board")).toBeVisible();
   }
   expectClean(errors, "单文件");
+});
+
+test("单文件：不连外网，数字字体内联在文件里", async ({ page }, info) => {
+  test.skip(!existsSync(FILE), "没有 dist-single/index.html（先 pnpm build:single）");
+  test.skip(info.project.name !== "zh-CN Asia/Shanghai", "只在一套设置里跑");
+  const html = readFileSync(FILE, "utf8");
+  expect(html).not.toMatch(/<link[^>]+href="https?:/);
+  expect(html).not.toMatch(/<script[^>]+src="https?:/);
+  expect(html).not.toMatch(/@import\s+url\(["']?https?:/);
+  expect(html).not.toContain("fonts.googleapis.com");
+  expect(html).toMatch(/font-family:\s*"?Outfit"?;[^}]*src:\s*url\(["']?data:font\/woff2/);
+  await noExternal(page);
+  const errors = watch(page);
+  await page.goto(`file://${FILE}`, { waitUntil: "networkidle" });
+  await expect(page.getByTestId("open-demo")).toBeVisible();
+  expect(await page.evaluate(async () => { await document.fonts.load("600 16px Outfit", "0123"); return document.fonts.check("600 16px Outfit"); })).toBe(true);
+  expectClean(errors, "单文件不连外网");
 });

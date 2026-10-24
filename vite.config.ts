@@ -66,8 +66,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   // 静态文件：缓存里有就用，没有就上网拿一份存下。
+  // ignoreVary：字体是 CORS 请求（带 Origin），服务器回 Vary: Origin 时也要认得预缓存的那一份（文件名带 hash，不会错）。
   event.respondWith(
-    caches.match(req).then(
+    caches.match(req, { ignoreVary: true }).then(
       (hit) =>
         hit ||
         fetch(req).then((res) => {

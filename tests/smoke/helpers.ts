@@ -1,14 +1,37 @@
-/** 冒烟共用：收报错、挡掉外网字体、登录、看有没有横向滚动。不写死示范数据里的 id。 */
+/** 冒烟共用：收报错、记下（并挡掉）对外网的请求、登录、看有没有横向滚动。不写死示范数据里的 id。 */
 import { expect, type Page } from "@playwright/test";
 
 export const PASS = { admin: process.env.ARPS_PASS_ADMIN ?? "", member01: process.env.ARPS_PASS_MEMBER ?? "" };
 export const HAS_PASS = !!PASS.admin && !!PASS.member01;
 
-export type Errors = { console: string[]; page: string[]; failed: string[] };
+export type Errors = { console: string[]; page: string[]; failed: string[]; external: string[] };
 
-/** 控制台报错、页面报错、同源请求 4xx / 5xx 都收起来，最后要求全是 0。 */
+const BASE_ORIGIN = new URL(process.env.SMOKE_BASE_URL ?? "http://localhost:4173").origin;
+
+/** 对外网的请求：http(s) 但不是这个站自己（境内打不开外网字体 / CDN，SPEC §14.3）。data: / blob: 不算。 */
+export function isExternal(page: Page, url: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  let pageOrigin = "null";
+  try {
+    pageOrigin = new URL(page.url()).origin;
+  } catch {
+    /* about:blank */
+  }
+  return u.origin !== BASE_ORIGIN && u.origin !== pageOrigin;
+}
+
+/** 控制台报错、页面报错、同源请求 4xx / 5xx、对外网的请求都收起来，最后要求全是 0。 */
 export function watch(page: Page): Errors {
-  const errors: Errors = { console: [], page: [], failed: [] };
+  const errors: Errors = { console: [], page: [], failed: [], external: [] };
+  page.on("request", (r) => {
+    if (isExternal(page, r.url())) errors.external.push(r.url().slice(0, 200));
+  });
   page.on("console", (m) => {
     if (m.type() === "error") errors.console.push(m.text().slice(0, 300));
   });
@@ -24,11 +47,15 @@ export function expectClean(errors: Errors, where: string) {
   expect(errors.page, `${where}：页面报错`).toEqual([]);
   expect(errors.console, `${where}：控制台报错`).toEqual([]);
   expect(errors.failed, `${where}：请求失败`).toEqual([]);
+  expect(errors.external, `${where}：有对外网的请求`).toEqual([]);
 }
 
-/** 字体走 Google Fonts；测试机不一定上得了外网，给个空的样式表（页面退回系统字体）。 */
-export async function offlineFonts(page: Page) {
-  await page.route(/https:\/\/fonts\.(googleapis|gstatic)\.com\/.*/, (route) => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
+/** 对外网的请求一律挡掉（测试机不一定上得了外网，也不该有这种请求；watch 会记下来让测试失败）。 */
+export async function noExternal(page: Page) {
+  await page.route(
+    (url) => isExternal(page, url.toString()),
+    (route) => route.abort("blockedbyclient")
+  );
 }
 
 export async function open(page: Page, path: string) {

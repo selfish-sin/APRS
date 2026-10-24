@@ -5,7 +5,7 @@
 .ui-identity,
 .ui-avatar,
 .ui-avatar-tile {
-  font-family: var(--font-noto-sc), var(--font-sans);
+  font-family: var(--font-sans);
   transition:
     background var(--motion-fast) var(--ease-standard),
     transform var(--motion-fast) var(--ease-standard);
