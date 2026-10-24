@@ -104,7 +104,7 @@ test.describe("搬过来的界面", () => {
     // 2 侧栏：项目下面列出每个项目，「14 卡」/「零日」，当前项目高亮；资料库带件数
     if (!mobile) {
       const list = page.getByTestId("nav-projects");
-      await expect(list.getByTestId("nav-project")).toHaveCount(3);
+      await expect(list.getByTestId("nav-project")).toHaveCount(4);
       await expect(list).toContainText("14 卡");
       await expect(list).toContainText("零日");
       await expect(page.getByTestId("nav-library")).toContainText(/\d+/);
@@ -134,11 +134,15 @@ test.describe("搬过来的界面", () => {
     // 5 零日页：开工检查 · 关键日时间轴
     await open(page, "/projects");
     await page.locator("main").getByRole("link", { name: /（模板）动画短片/ }).first().click();
+    // （v1.1：零日是开局向导；开工检查在第 ⑤ 步，关键日时间轴在第 ② 步）
+    await page.getByTestId("wizard-step-5").click();
     const check = page.getByTestId("start-check");
     await expect(check).toContainText("可以开工了");
     await expect(page.getByTestId("start-unfilled")).toContainText(/缺人的职位 \d+ 个：.+…等 \d+ 个（能开工，之后再补）/);
     await expect(check).toContainText(/开工 = 按环节生成 8 卡、\d+ 张任务/);
     await expect(check.getByTestId("zero-start")).toBeVisible();
+    await expectNoPageScrollX(page, "开局向导 ⑤");
+    await page.getByTestId("wizard-step-2").click();
     const tl = page.getByTestId("key-timeline");
     await expect(tl.locator("li")).toHaveCount(4);
     await expect(tl).toContainText("分镜定稿");

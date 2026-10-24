@@ -2025,6 +2025,14 @@ export interface StartPreview {
   unfilled: { key: string; name: Text2 | string; custom: boolean }[];
   /** 人员表里填了人的成员，开工时会自动报到的有几人。 */
   autoEnroll: number;
+  /** 开工会生成几个环节（照模板）。 */
+  stages: number;
+  /** 关键职位（每个环节对应的第一个职位）：一共几个、填了几个、空着的是哪几个。 */
+  keyPositions: { total: number; filled: number; empty: (Text2 | string)[] };
+  /** 外部名字（只记在人员表里，不报到）。 */
+  externals: number;
+  /** 文件名会是这样（拿第一个分层的环节和第一卡举例；还没有卡 = null）。 */
+  sampleFile: string | null;
   /** 能不能开工（结构至少一卡）。 */
   ready: boolean;
 }
@@ -2050,7 +2058,36 @@ export function startPreview(state: WorldState, projectId: Id): StartPreview | n
     });
   const members = new Set<Id>();
   for (const pos of staff) if (pos.stageKeys.length) for (const x of pos.people) if ("memberId" in x) members.add(x.memberId);
-  return { cuts: plan.length, tasks, unfilled, autoEnroll: members.size, ready: plan.length > 0 };
+  const seen = new Set<string>();
+  const keys: NonNullable<ProjectRow["staff"]> = [];
+  for (const pos of staff)
+    for (const k of pos.stageKeys)
+      if (!seen.has(k)) {
+        seen.add(k);
+        if (!keys.includes(pos)) keys.push(pos);
+      }
+  const tplStages = tpl.stages ? groupTemplate(p.group).stages : [];
+  const sampleStage = tplStages.find((t) => t.grain === "layer" && t.code) ?? tplStages.find((t) => t.grain === "cut") ?? null;
+  const first = plan[0];
+  const sampleFile =
+    sampleStage && first
+      ? fileNameFor(p, { code: sampleStage.code, fileCode: sampleStage.fileCode }, { number: first.number, episode: first.episode, scene: first.scene }, sampleStage.grain === "layer" ? first.layers[0]?.name ?? null : null, 1)
+      : null;
+  return {
+    cuts: plan.length,
+    tasks,
+    unfilled,
+    autoEnroll: members.size,
+    ready: plan.length > 0,
+    stages: tplStages.length,
+    keyPositions: {
+      total: keys.length,
+      filled: keys.filter((x) => x.people.length).length,
+      empty: keys.filter((x) => !x.people.length).map((pos) => (pos.custom ? pos.custom.name : positionTemplate(p.template, pos.key)?.name ?? pos.key)),
+    },
+    externals: staff.reduce((n, pos) => n + pos.people.filter((x) => "name" in x).length, 0),
+    sampleFile,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -2241,11 +2278,15 @@ export interface StagePerson extends RoutePerson {
   passed: number;
   /** 准时率（这个环节里交过的）；没交过 = null。 */
   onTime: number | null;
+  /** 熟练度（报到这个环节记的；外部名字 = null）。 */
+  skill: number | null;
 }
 
 export interface StagePage {
   project: ProjectRow;
   row: RouteRow;
+  /** 整条路线（页头的上游 / 下游写它们的状态）。 */
+  routeRows: RouteRow[];
   prev: RouteRow | null;
   next: RouteRow | null;
   upstream: StageRow[];
@@ -2256,6 +2297,8 @@ export interface StagePage {
   reviewer: MemberRow | null;
   /** 这个环节是枢纽：派发下游时管到哪些环节。 */
   hubScope: StageRow[];
+  /** 等审核的：几张、最早交的那一版是什么时候（审核员那一行写「最久等了多久」）。 */
+  pendingReview: { n: number; oldestAt: IsoDateTime | null };
 }
 
 function stageTaskView(state: WorldState, t: TaskRow): StageTaskView | null {
@@ -2299,11 +2342,14 @@ export function stagePageOf(state: WorldState, projectId: Id, key: string): Stag
       inHand: mine.filter((v) => v.task.status === "claimed" || v.task.status === "returned").length,
       passed: x.memberId ? all.filter((v) => v.task.status === "passed" && submissionsOf(state, v.task.id).some((s) => s.byMemberId === x.memberId && !s.selfFix)).length : mine.filter((v) => v.task.status === "passed").length,
       onTime: timed.length ? timed.filter((s) => s.onTime).length / timed.length : null,
+      skill: x.memberId ? idx.enrollments.find((e) => e.memberId === x.memberId && e.group === route.project.group && e.stageKey === stage.templateKey)?.skill ?? null : null,
     };
   });
+  const waiting = all.filter((v) => v.task.status === "submitted" && v.latest).map((v) => v.latest!.at).sort(cmp);
   return {
     project: route.project,
     row,
+    routeRows: route.rows,
     prev: route.rows[i - 1] ?? null,
     next: route.rows[i + 1] ?? null,
     upstream,
@@ -2313,6 +2359,7 @@ export function stagePageOf(state: WorldState, projectId: Id, key: string): Stag
     people,
     reviewer: stage.reviewerId ? idx.memberById.get(stage.reviewerId) ?? null : null,
     hubScope: stage.hub ? hubScope(stages, stage) : [],
+    pendingReview: { n: waiting.length, oldestAt: waiting[0] ?? null },
   };
 }
 

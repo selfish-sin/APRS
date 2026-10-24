@@ -3,6 +3,10 @@
  * 参数写 {name}；英文那边要分单复数的写 { one, other }。
  */
 import { zh as nav } from "./ns/nav";
+import { zh as wizard } from "./ns/wizard";
+import { zh as profile } from "./ns/profile";
+import { zh as stagePage } from "./ns/stagePage";
+import { zh as route } from "./ns/route";
 import { zh as doc } from "./ns/doc";
 import { zh as viewer } from "./ns/viewer";
 import { zh as library } from "./ns/library";
@@ -25,6 +29,10 @@ import { zh as entry } from "./ns/entry";
 
 export const zh = {
   nav,
+  wizard,
+  profile,
+  stagePage,
+  route,
   doc,
   viewer,
   library,
@@ -98,6 +106,7 @@ export const zh = {
     tlEnd: "计划结束",
     timeline: "关键日时间轴",
     statusTag: "零日 · 筹备中",
+    short: "零日",
     pageLead: "项目还没开工：先把介绍、日期、结构和人员填好，管理员点「开工」才按模板生成环节、卡和任务。",
     coverTitle: "项目介绍",
     name: "项目名字",
@@ -234,6 +243,7 @@ export const zh = {
     extendGo: "延期",
     extended: "延期好了",
     extendTask: "选一张",
+    extendN: "{n} 张任务",
     addCutsOpen: "加卡",
     timelineTitle: "项目时间线",
     timelineLead: "改项目的每一步：谁、改了什么、为什么。",

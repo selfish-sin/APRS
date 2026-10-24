@@ -3,7 +3,11 @@ import type { Shape } from "../core";
 
 export const zh = {
   projects: "项目",
-  newProject: "开新项目",
+  newProject: "新建项目",
+  stepOf: "第 {n} / {total} 步",
+  stepsSaved: "前 {n} 步已存 ✓",
+  rowProgress: "完成 {pct}% · 待审 {n}",
+  open: "打开",
   byGroup: "按组看",
   all: "全部",
   draftSuffix: "（草案）",
@@ -82,6 +86,10 @@ export const zh = {
 export const en: Shape<typeof zh> = {
   projects: "Projects",
   newProject: "New project",
+  stepOf: "Step {n} of {total}",
+  stepsSaved: "First {n} {n|step|steps} saved ✓",
+  rowProgress: "{pct}% done · {n} to review",
+  open: "Open",
   byGroup: "By group",
   all: "All",
   draftSuffix: " (draft)",

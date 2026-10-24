@@ -20,7 +20,7 @@ import { MemberLink, SelectField, Tag, TextArea, TextField } from "./bits";
 import { TaskActions } from "./task";
 
 /** 环节设置（管理员）：只给指派的人 · 计划周期 · 时限参数。 */
-export function StageSettings({ stage }: { stage: StageRow }) {
+export function StageSettings({ stage, lock = true }: { stage: StageRow; lock?: boolean }) {
   const { world, dispatch, notify } = useGuild();
   const { L, f, err, stageName, unit: unitOf } = useI18n();
   const group = world.projects[stage.projectId]?.group ?? "animation";
@@ -37,6 +37,7 @@ export function StageSettings({ stage }: { stage: StageRow }) {
   return (
     <div className="stack flex-box" data-gap="small" data-testid="stage-settings">
       <h3 className="t-body-14m">{L.flex.settings}</h3>
+      {lock ? (
       <label className="check-row">
         <input
           type="checkbox"
@@ -49,6 +50,7 @@ export function StageSettings({ stage }: { stage: StageRow }) {
         />
         <span>{L.flex.lockLabel}</span>
       </label>
+      ) : null}
       <form
         className="form-grid"
         onSubmit={(e) => {

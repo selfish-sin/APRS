@@ -3,6 +3,10 @@ import type { Shape } from "./core";
 import type { zh } from "./zh";
 
 import { en as nav } from "./ns/nav";
+import { en as wizard } from "./ns/wizard";
+import { en as profile } from "./ns/profile";
+import { en as stagePage } from "./ns/stagePage";
+import { en as route } from "./ns/route";
 import { en as doc } from "./ns/doc";
 import { en as viewer } from "./ns/viewer";
 import { en as library } from "./ns/library";
@@ -25,6 +29,10 @@ import { en as entry } from "./ns/entry";
 
 export const en: Shape<typeof zh> = {
   nav,
+  wizard,
+  profile,
+  stagePage,
+  route,
   doc,
   viewer,
   library,
@@ -98,6 +106,7 @@ export const en: Shape<typeof zh> = {
     tlEnd: "Planned end",
     timeline: "Key date timeline",
     statusTag: "Pre-start",
+    short: "Day zero",
     pageLead: "This project hasn't started yet. Fill in the intro, dates, structure and staff first. When an admin presses Start, stages, cuts and tasks are created from the template.",
     coverTitle: "About the project",
     name: "Project name",
@@ -234,6 +243,7 @@ export const en: Shape<typeof zh> = {
     extendGo: "Extend",
     extended: "Deadline extended",
     extendTask: "Pick a task",
+    extendN: "{n} {n|task|tasks}",
     addCutsOpen: "Add cuts",
     timelineTitle: "Project timeline",
     timelineLead: "Every change to the project: who, what, and why.",

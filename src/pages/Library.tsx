@@ -55,12 +55,13 @@ export function LibraryIndexPage() {
   );
 }
 
-export function LibraryPage() {
+/** 项目资料库。embedded = 放在项目页的「资料库」标签里（不要页头）。 */
+export function LibraryPage({ projectId, embedded = false }: { projectId?: string; embedded?: boolean } = {}) {
   const { world, notify } = useGuild();
   const { L, f, r: rich, stageName, cut: cutOf } = useI18n();
   const files = useFiles();
   const route = useRoute();
-  const project = projectById(world, route.segments[1]);
+  const project = projectById(world, projectId ?? route.segments[1]);
   const [cutId, setCutId] = useState("");
   const [stageKey, setStageKey] = useState("");
   const [kind, setKind] = useState<"" | FileKind>("");
@@ -106,6 +107,14 @@ export function LibraryPage() {
 
   return (
     <>
+      {embedded ? (
+        <div className="row" data-justify="between">
+          <span className="label">{f(L.library.stats, { n: libraryOf(world, project.id).length, pages: pages.length })}</span>
+          <Link to={`/library/${project.id}`} className="ui-button" data-style="Secondary" data-size="Small" data-testid="project-library">
+            {L.route.openLibrary}
+          </Link>
+        </div>
+      ) : (
       <div className="page-head">
         <div className="page-head-text">
           <div className="crumbs">
@@ -122,6 +131,7 @@ export function LibraryPage() {
           <Button Label={L.library.projectHome} Size="Small" Style="Secondary" onClick={() => navigate(`/project/${project.id}`)} />
         </div>
       </div>
+      )}
 
       <section className="card" aria-label={L.library.addFiles}>
         <DropZone onFiles={(fs) => void intake(fs)} testId="library-drop" hint={busy ? L.library.adding : L.library.dropHint} />

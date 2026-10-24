@@ -3,7 +3,7 @@
  * 不写死示范 id：项目、卡、成员都从页面里点进去。
  */
 import { expect, test } from "@playwright/test";
-import { HAS_PASS, createGuild, createProject, enterDemo, expectClean, expectNoPageScrollX, login, noExternal, open, watch } from "./helpers";
+import { HAS_PASS, createGuild, createProject, enterDemo, expectClean, expectNoPageScrollX, login, noExternal, open, openGrid, watch } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   await noExternal(page);
@@ -60,6 +60,8 @@ test("自己的工会：建好（建的人是管理员），开个项目，每�
   const e2 = watch(page);
   await open(page, projectPath);
   await expect(page.getByRole("heading", { name: "冒烟项目" })).toBeVisible();
+  await expect(page.getByTestId("stage-route")).toBeVisible();
+  await openGrid(page, projectPath);
   await page.locator("table.board tbody th a").first().click();
   await expect(page).toHaveURL(/#\/cut\//);
   await expect(page.getByRole("heading", { name: /SMK · C001/ })).toBeVisible();
@@ -78,17 +80,21 @@ test.describe("示范工会", () => {
     await login(page, "admin");
     expectClean(errors, "登录");
     await visitAll(page, "示范 admin");
-    // 项目列表 → 第一个项目 → 网格里的第一卡
+    // 项目列表 → 开工了的前两个项目 → 环节路线 → 卡 × 环节 → 地图上的环节进环节页 → 网格里的第一卡
     for (let i = 0; i < 2; i++) {
       const e = watch(page);
       await open(page, "/projects");
-      await page.locator("a.project-card").nth(i).click();
+      await page.locator("a.project-card:not([data-zero])").nth(i).click();
       await expect(page).toHaveURL(/#\/project\//);
+      await expect(page.getByTestId("stage-route")).toBeVisible();
+      await expectNoPageScrollX(page, "环节路线");
+      await page.getByTestId("ptab-grid").click();
       await expect(page.getByTestId("board")).toBeVisible();
       for (const f of ["只看我", "只看待审", "只看卡住的", "全部"]) await page.getByRole("button", { name: f, exact: true }).click();
       await page.locator(".map-node").first().click();
-      await expect(page.getByRole("link", { name: "申报这个环节" })).toBeVisible();
-      await page.getByRole("button", { name: "关上" }).click();
+      await expect(page.getByTestId("stage-title")).toBeVisible();
+      await page.goBack();
+      await expect(page.getByTestId("board")).toBeVisible();
       await expectNoPageScrollX(page, "项目总览");
       await page.locator("table.board tbody th a").first().click();
       await expect(page).toHaveURL(/#\/cut\//);
@@ -198,16 +204,17 @@ test("管理员的其他操作：视频组项目、改项目、指派外包、�
   await createGuild(page, "smoke-pass-2");
   // 视频组项目（不分层，按期）
   const jzPath = await createProject(page, { name: "讲座第一季", code: "JZ", count: 3, group: "video" });
+  await openGrid(page, jzPath);
   await expect(page.locator("table.board tbody tr")).toHaveCount(3);
   await expect(page.locator("table.board tbody th").first()).toContainText("第 1 期");
-  // 改项目
-  await page.getByTestId("project-settings").click();
-  await page.getByTestId("settings-tab-cover").click();
+  // 改项目（项目档案里「介绍」那一块：改 → 存）
+  await open(page, `${jzPath}?tab=profile`);
+  await page.getByTestId("profile-intro-edit").click();
   await page.getByLabel("飞书根文件夹的链接").fill("https://feishu.example.com/drive/jz");
-  await page.getByTestId("zero-cover-save").click();
+  await page.getByTestId("profile-save").click();
   await expect(page.getByText("存好了")).toBeVisible();
-  await open(page, jzPath);
-  await expect(page.getByRole("link", { name: "飞书根文件夹" })).toBeVisible();
+  await openGrid(page, jzPath);
+  await expect(page.getByRole("link", { name: "飞书根文件夹" }).first()).toBeVisible();
   // 项目级的「选题」：指派给外包，管理员代交
   await page.locator(".strip-item").first().click();
   await page.getByRole("button", { name: "指派" }).click();
@@ -220,7 +227,8 @@ test("管理员的其他操作：视频组项目、改项目、指派外包、�
   await page.getByTestId("submit-confirm").click();
   await expect(page.getByText(/等审核/).first()).toBeVisible();
   await page.getByRole("button", { name: "关上" }).click();
-  // 设定问题 → 拍板（要补第 2 期）
+  // 设定问题 → 拍板（要补第 2 期）（项目上的意见在「项目动态」标签里）
+  await page.getByTestId("ptab-activity").click();
   await page.getByRole("button", { name: "设定问题", exact: true }).click();
   await page.getByLabel("写意见").fill("片头用哪一版？");
   await page.getByRole("button", { name: "留下" }).click();

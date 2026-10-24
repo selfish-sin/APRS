@@ -79,20 +79,14 @@ export function AdminPage() {
 // ---------------------------------------------------------------------------
 
 function Dispatch() {
-  const { world, dispatch, notify } = useGuild();
-  const { L, f, r: rich, err, lang, stageName, stage: stageEl, rate, unit: unitOf, num } = useI18n();
+  const { world } = useGuild();
+  const { L, stageName } = useI18n();
   const route = useRoute();
   const all = projects(world);
   const [projectId, setProjectId] = useState<Id>(route.query.get("project") ?? all[0]?.id ?? "");
   const hubs = projectId ? hubStages(world, projectId) : [];
   const [hubId, setHubId] = useState<Id>(route.query.get("hub") ?? "");
   const hub = hubs.find((h) => h.id === hubId) ?? hubs[0] ?? null;
-  const plan = useMemo(() => (hub ? dispatchPlan(world, hub.id) : null), [world, hub]);
-  const [included, setIncluded] = useState<Record<string, boolean>>({});
-  const [loads, setLoads] = useState<Record<string, number>>({});
-  const [release, setRelease] = useState<"ready" | "all">("ready");
-  const [bulk, setBulk] = useState<Record<string, string>>({});
-  const [error, setError] = useState<string | null>(null);
 
   if (!all.length)
     return (
@@ -100,6 +94,42 @@ function Dispatch() {
         <Empty>{L.admin.noProjects}</Empty>
       </section>
     );
+
+  return (
+    <section className="card" aria-label={L.admin.dispatchTitle}>
+      <h2 className="t-heading-18">{L.admin.dispatchTitle}</h2>
+      <p className="muted">{L.admin.dispatchLead}</p>
+      <div className="form-grid">
+        <SelectField label={L.admin.project} value={projectId} onChange={(e) => { setProjectId(e.target.value); setHubId(""); }}>
+          {all.map((p) => (
+            <option key={p.id} value={p.id} data-uc="">
+              {p.name}（{p.code}）
+            </option>
+          ))}
+        </SelectField>
+        <SelectField label={L.admin.hub} value={hub?.id ?? ""} onChange={(e) => setHubId(e.target.value)} data-testid="dispatch-hub">
+          {hubs.map((h) => (
+            <option key={h.id} value={h.id}>
+              {stageName(world.projects[h.projectId]?.group ?? "animation", h)}
+            </option>
+          ))}
+        </SelectField>
+      </div>
+      {hub ? <HubDispatchForm key={hub.id} hubId={hub.id} /> : <Empty>{L.admin.noHub}</Empty>}
+    </section>
+  );
+}
+
+/** 枢纽派发下游（管理页和环节页共用）：填工作量 → 生成 / 解锁下游任务，显示大概要几个人、几天。 */
+export function HubDispatchForm({ hubId }: { hubId: Id }) {
+  const { world, dispatch, notify } = useGuild();
+  const { L, f, r: rich, err, lang, stageName, stage: stageEl, rate, unit: unitOf, num } = useI18n();
+  const plan = useMemo(() => dispatchPlan(world, hubId), [world, hubId]);
+  const [included, setIncluded] = useState<Record<string, boolean>>({});
+  const [loads, setLoads] = useState<Record<string, number>>({});
+  const [release, setRelease] = useState<"ready" | "all">("ready");
+  const [bulk, setBulk] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
 
   const isIn = (stageId: Id, direct: boolean) => included[stageId] ?? direct;
   const loadOf = (taskId: Id, fallback: number) => loads[taskId] ?? fallback;
@@ -119,134 +149,110 @@ function Dispatch() {
     notify(f(release === "all" ? L.admin.dispatchedAll : L.admin.dispatched, { stage: stageName(plan.project.group, plan.hub), n: rows.length }));
   };
 
+  if (!plan) return <Empty>{L.admin.noHub}</Empty>;
+  if (plan.scopes.length === 0) return <Empty>{rich(L.admin.hubLast, { stage: stageEl(plan.project.group, plan.hub) })}</Empty>;
   return (
-    <section className="card" aria-label={L.admin.dispatchTitle}>
-      <h2 className="t-heading-18">{L.admin.dispatchTitle}</h2>
-      <p className="muted">{L.admin.dispatchLead}</p>
-      <div className="form-grid">
-        <SelectField label={L.admin.project} value={projectId} onChange={(e) => { setProjectId(e.target.value); setHubId(""); setIncluded({}); setLoads({}); }}>
-          {all.map((p) => (
-            <option key={p.id} value={p.id} data-uc="">
-              {p.name}（{p.code}）
-            </option>
-          ))}
-        </SelectField>
-        <SelectField label={L.admin.hub} value={hub?.id ?? ""} onChange={(e) => { setHubId(e.target.value); setIncluded({}); setLoads({}); }} data-testid="dispatch-hub">
-          {hubs.map((h) => (
-            <option key={h.id} value={h.id}>
-              {stageName(world.projects[h.projectId]?.group ?? "animation", h)}
-            </option>
-          ))}
-        </SelectField>
-      </div>
-      {!plan ? (
-        <Empty>{L.admin.noHub}</Empty>
-      ) : plan.scopes.length === 0 ? (
-        <Empty>{rich(L.admin.hubLast, { stage: stageEl(plan.project.group, plan.hub) })}</Empty>
-      ) : (
-        <>
-          {plan.scopes.map((scope) => {
-            const on = isIn(scope.stage.id, scope.direct);
-            const editable = scope.rows.filter((r) => r.editable);
-            const hours = editable.reduce((n, r) => n + stageHours(scope.stage, loadOf(r.task.id, r.task.workload)), 0);
-            const est = estimateOf(hours, scope.enrolled, plan.daysLeft);
-            const unit = unitOf(scope.stage.unit, plan.project.group, 2);
-            return (
-              <div key={scope.stage.id} className="card" data-tone="muted" data-size="compact">
-                <div className="card-head">
-                  <label className="check">
-                    <input type="checkbox" checked={on} onChange={(e) => setIncluded({ ...included, [scope.stage.id]: e.target.checked })} data-testid={`dispatch-include-${scope.stage.templateKey}`} />
-                    <span className="t-body-14m">{stageEl(plan.project.group, scope.stage)}</span>
-                    <span className="label">{rate(scope.stage, plan.project.group)}</span>
-                  </label>
-                  <span className="label">{f(L.admin.editable, { n: editable.length, total: scope.rows.length })}</span>
+    <div className="stack" data-gap="small" data-testid="hub-dispatch">
+      {plan.scopes.map((scope) => {
+        const on = isIn(scope.stage.id, scope.direct);
+        const editable = scope.rows.filter((r) => r.editable);
+        const hours = editable.reduce((n, r) => n + stageHours(scope.stage, loadOf(r.task.id, r.task.workload)), 0);
+        const est = estimateOf(hours, scope.enrolled, plan.daysLeft);
+        const unit = unitOf(scope.stage.unit, plan.project.group, 2);
+        return (
+          <div key={scope.stage.id} className="card" data-tone="muted" data-size="compact">
+            <div className="card-head">
+              <label className="check">
+                <input type="checkbox" checked={on} onChange={(e) => setIncluded({ ...included, [scope.stage.id]: e.target.checked })} data-testid={`dispatch-include-${scope.stage.templateKey}`} />
+                <span className="t-body-14m">{stageEl(plan.project.group, scope.stage)}</span>
+                <span className="label">{rate(scope.stage, plan.project.group)}</span>
+              </label>
+              <span className="label">{f(L.admin.editable, { n: editable.length, total: scope.rows.length })}</span>
+            </div>
+            {on ? (
+              <>
+                <div className="row">
+                  <TextField label={f(L.admin.fillAll, { unit })} type="number" min={0.5} value={bulk[scope.stage.id] ?? ""} onChange={(e) => setBulk({ ...bulk, [scope.stage.id]: e.target.value })} style={{ maxWidth: 120 }} />
+                  <Button
+                    Label={L.admin.fillIn}
+                    Size="Small"
+                    Style="Secondary"
+                    onClick={() => {
+                      const v = Number(bulk[scope.stage.id]);
+                      if (!Number.isFinite(v) || v <= 0) return;
+                      const next = { ...loads };
+                      for (const r of editable) next[r.task.id] = v;
+                      setLoads(next);
+                    }}
+                  />
                 </div>
-                {on ? (
-                  <>
-                    <div className="row">
-                      <TextField label={f(L.admin.fillAll, { unit })} type="number" min={0.5} value={bulk[scope.stage.id] ?? ""} onChange={(e) => setBulk({ ...bulk, [scope.stage.id]: e.target.value })} style={{ maxWidth: 120 }} />
-                      <Button
-                        Label={L.admin.fillIn}
-                        Size="Small"
-                        Style="Secondary"
-                        onClick={() => {
-                          const v = Number(bulk[scope.stage.id]);
-                          if (!Number.isFinite(v) || v <= 0) return;
-                          const next = { ...loads };
-                          for (const r of editable) next[r.task.id] = v;
-                          setLoads(next);
-                        }}
-                      />
-                    </div>
-                    <div className="table-scroll">
-                      <table className="data">
-                        <thead>
-                          <tr>
-                            <th>{f("{^u}", { u: L.labels.cutLabel[plan.project.group] })}</th>
-                            <th>{L.admin.status}</th>
-                            <th>{f(L.admin.workloadCol, { unit })}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {scope.rows.map((r) => (
-                            <tr key={r.task.id}>
-                              <td className="num">
-                                {r.cut ? cutCode(r.cut, plan.project.group, lang) : L.admin.wholeProject}
-                                {r.task.layer ? ` · ${f(L.labels.layer, { layer: r.task.layer })}` : ""}
-                              </td>
-                              <td>
-                                <StatusPill Status={r.task.status} />
-                              </td>
-                              <td>
-                                {r.editable ? (
-                                  <input
-                                    className="field-control"
-                                    type="number"
-                                    min={0.5}
-                                    step={0.5}
-                                    aria-label={f(L.admin.workloadAria, { label: r.label })}
-                                    value={loadOf(r.task.id, r.task.workload)}
-                                    onChange={(e) => setLoads({ ...loads, [r.task.id]: Number(e.target.value) })}
-                                  />
-                                ) : (
-                                  <span className="num">{num(r.task.workload)}</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <p className="label">
-                      {rich(L.admin.estimate, { hours: <span className="num">{num(est.hours)}</span>, people: <span className="num">{scope.enrolled}</span>, days: <span className="num">{est.days}</span> })}
-                      {est.peopleByPlan !== null ? rich(L.admin.estimatePeople, { n: <span className="num">{est.peopleByPlan}</span> }) : L.admin.estimateLate}
-                    </p>
-                  </>
-                ) : null}
-              </div>
-            );
-          })}
-          <div className="stack" data-gap="small" role="radiogroup" aria-label={L.admin.howRelease}>
-            <label className="check">
-              <input type="radio" name="release" checked={release === "ready"} onChange={() => setRelease("ready")} />
-              {L.admin.releaseReady}
-            </label>
-            <label className="check">
-              <input type="radio" name="release" checked={release === "all"} onChange={() => setRelease("all")} data-testid="dispatch-release-all" />
-              {L.admin.releaseAll}
-            </label>
+                <div className="table-scroll">
+                  <table className="data">
+                    <thead>
+                      <tr>
+                        <th>{f("{^u}", { u: L.labels.cutLabel[plan.project.group] })}</th>
+                        <th>{L.admin.status}</th>
+                        <th>{f(L.admin.workloadCol, { unit })}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {scope.rows.map((r) => (
+                        <tr key={r.task.id}>
+                          <td className="num">
+                            {r.cut ? cutCode(r.cut, plan.project.group, lang) : L.admin.wholeProject}
+                            {r.task.layer ? ` · ${f(L.labels.layer, { layer: r.task.layer })}` : ""}
+                          </td>
+                          <td>
+                            <StatusPill Status={r.task.status} />
+                          </td>
+                          <td>
+                            {r.editable ? (
+                              <input
+                                className="field-control"
+                                type="number"
+                                min={0.5}
+                                step={0.5}
+                                aria-label={f(L.admin.workloadAria, { label: r.label })}
+                                value={loadOf(r.task.id, r.task.workload)}
+                                onChange={(e) => setLoads({ ...loads, [r.task.id]: Number(e.target.value) })}
+                              />
+                            ) : (
+                              <span className="num">{num(r.task.workload)}</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="label">
+                  {rich(L.admin.estimate, { hours: <span className="num">{num(est.hours)}</span>, people: <span className="num">{scope.enrolled}</span>, days: <span className="num">{est.days}</span> })}
+                  {est.peopleByPlan !== null ? rich(L.admin.estimatePeople, { n: <span className="num">{est.peopleByPlan}</span> }) : L.admin.estimateLate}
+                </p>
+              </>
+            ) : null}
           </div>
-          {error ? (
-            <p className="error-text" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="form-actions">
-            <Button Label={L.admin.dispatchGo} Style="Accent" onClick={send} data-testid="dispatch-submit" />
-          </div>
-        </>
-      )}
-    </section>
+        );
+      })}
+      <div className="stack" data-gap="small" role="radiogroup" aria-label={L.admin.howRelease}>
+        <label className="check">
+          <input type="radio" name="release" checked={release === "ready"} onChange={() => setRelease("ready")} />
+          {L.admin.releaseReady}
+        </label>
+        <label className="check">
+          <input type="radio" name="release" checked={release === "all"} onChange={() => setRelease("all")} data-testid="dispatch-release-all" />
+          {L.admin.releaseAll}
+        </label>
+      </div>
+      {error ? (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="form-actions">
+        <Button Label={L.admin.dispatchGo} Style="Accent" onClick={send} data-testid="dispatch-submit" />
+      </div>
+    </div>
   );
 }
 

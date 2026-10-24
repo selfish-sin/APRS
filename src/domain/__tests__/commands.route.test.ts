@@ -160,6 +160,40 @@ describe("环节页（SPEC §17.2）", () => {
     expect(q.stagePageOf(g.state, p, "nope")).toBeNull();
     // 枢纽环节：派发下游管到哪
     expect(q.stagePageOf(g.state, p, "storyboard")!.hubScope.map((s) => s.templateKey)).toContain("layout");
+    // 整条路线 · 熟练度 · 等审核的（几张、最早交的是哪一版）
+    expect(page.routeRows.map((x) => x.no)).toEqual(page.routeRows.map((_, i) => i + 1));
+    expect(page.people[0].skill).toBe(0);
+    expect(page.pendingReview).toEqual({ n: 0, oldestAt: null });
+    g.run(a, "enroll.add", { group: "animation", stageKey: "script", skill: 0.2, maxActive: 9 });
+    const script = g.task(p, "script");
+    if (g.state.tasks[script.id].status === "open") g.run(a, "task.claim", { taskId: script.id });
+    g.run(a, "task.submit", { taskId: script.id, note: "第一稿" });
+    const sp = q.stagePageOf(g.state, p, "script")!;
+    expect(sp.pendingReview.n).toBe(1);
+    expect(sp.pendingReview.oldestAt).toBe(sp.tasks[0].latest!.at);
+    expect(sp.people.find((x) => x.memberId === a)?.skill).toBe(0.2);
+  });
+});
+
+describe("开工检查（开局向导第 ⑤ 步，SPEC §17.4）", () => {
+  it("几个环节 · 关键职位填了几个、空着哪几个 · 外部名字 · 文件名会是这样", () => {
+    const g = new TestGuild();
+    const a = g.member("小甲");
+    const p = g.run(g.admin, "project.draft", { template: "anim_standard", name: "检查测试", code: "CHK" }).projectId;
+    g.run(g.admin, "project.set_structure", { projectId: p, structure: { episodes: 1, scenesPerEpisode: 1, cutsPerScene: 2, layers: ["A", "B"], sheetsPerLayer: 6, secondsPerCut: 3 } });
+    g.run(g.admin, "staff.set", { projectId: p, positionKey: "producer", people: [{ memberId: a }] });
+    g.run(g.admin, "staff.set", { projectId: p, positionKey: "sound", people: [{ name: "外面的录音老师" }] });
+    const pv = q.startPreview(g.state, p)!;
+    expect(pv.stages).toBe(20);
+    expect(pv.keyPositions.filled).toBe(2);
+    expect(pv.keyPositions.total).toBeGreaterThan(10);
+    expect(pv.keyPositions.empty.length).toBe(pv.keyPositions.total - 2);
+    // 监督（导演）没有对应环节，不是关键职位
+    expect(pv.keyPositions.empty.some((x) => typeof x !== "string" && x.zh.startsWith("监督"))).toBe(false);
+    expect(pv.externals).toBe(1);
+    expect(pv.autoEnroll).toBe(1);
+    // 拿第一个分层的环节（清线 CLN）和第一卡举例
+    expect(pv.sampleFile).toBe("CHK_EP01_SC001_CUT001_A_CLN_v01");
   });
 });
 

@@ -18,8 +18,8 @@ import { LibraryIndexPage, LibraryPage } from "@/pages/Library";
 import { MemberPage, MembersPage } from "@/pages/Member";
 import { NotFound } from "@/pages/NotFound";
 import { ProjectPage } from "@/pages/Project";
-import { ProjectSettingsPage } from "@/pages/ProjectSetup";
 import { ProjectsPage } from "@/pages/Projects";
+import { StagePage } from "@/pages/StagePage";
 import { ReviewPage } from "@/pages/Review";
 
 const TITLE_KEYS = ["hall", "enroll", "projects", "project", "cut", "review", "admin", "members", "member", "me", "backup", "library", "page", "login"] as const;
@@ -35,7 +35,9 @@ function Page() {
     case "projects":
       return <ProjectsPage />;
     case "project":
-      return route.segments[2] === "settings" ? <ProjectSettingsPage /> : <ProjectPage />;
+      if (route.segments[2] === "stage" && route.segments[3]) return <StagePage />;
+      if (route.segments[2] === "settings") return <SettingsRedirect id={route.segments[1]} />;
+      return <ProjectPage />;
     case "cut":
       return <CutPage />;
     case "review":
@@ -58,6 +60,14 @@ function Page() {
   }
 }
 
+/** 原来的「改项目」页（§17 去掉了）：旧链接转到项目档案。 */
+function SettingsRedirect({ id }: { id: string }) {
+  useEffect(() => {
+    navigate(`/project/${id}?tab=profile`, { replace: true });
+  }, [id]);
+  return null;
+}
+
 function Routes() {
   const { ready, world, session } = useStore();
   const { L } = useI18n();
@@ -66,7 +76,7 @@ function Routes() {
   const loggedIn = !!world && !!session?.memberId;
   const first = route.segments[0] ?? "";
 
-  const key = (route.segments[2] === "settings" ? "settings" : TITLE_KEYS.find((k) => k === first)) as TitleKey | "settings" | undefined;
+  const key = (route.segments[0] === "project" && route.segments[2] === "stage" ? "stage" : TITLE_KEYS.find((k) => k === first)) as TitleKey | "stage" | undefined;
   const pageTitle = key ? L.nav[key] : null;
   useEffect(() => {
     document.title = `${pageTitle ? `${pageTitle} · ` : ""}${L.nav.appName}`;

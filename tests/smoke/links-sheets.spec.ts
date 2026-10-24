@@ -156,10 +156,11 @@ test("链接检查 · 表格预览和检查 · 格子上的意见 · 导出汇�
   // —— 5. 导出汇报 5 张表，用同一个库读回来 ——
   await open(page, "/projects");
   await page.locator("a.project-card").filter({ hasText: "安娜的旅程" }).click();
+  await page.getByTestId("ptab-grid").click();
   await expect(page.getByTestId("board")).toBeVisible();
   await expect(page.locator("table.board tbody tr").first()).toBeVisible();
   const cutRows = await page.locator("table.board tbody tr").count();
-  await page.getByTestId("view-schedule").click();
+  await page.getByTestId("ptab-schedule").click();
   const stageCount = await page.getByTestId("schedule-row").count();
   expect(stageCount).toBeGreaterThan(10);
   await page.getByTestId("report-open").click();

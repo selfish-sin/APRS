@@ -1,12 +1,70 @@
 /** 主要页面的截图：artifacts/shots/<页>-<desktop|mobile>.png。页面里的口令框都是空的。 */
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { HAS_PASS, enterDemo, login, logout, noExternal, open } from "../smoke/helpers";
+
+/** v1.1（§17）：路线 · 环节页（含一行的动作、设置展开）· 插一个环节 · 卡 × 环节 · 项目档案（看 / 改）· 开局向导每一步 · 卡详情。 */
+async function v11Shots(page: Page, shot: (name: string) => Promise<unknown>) {
+  await page.locator("a.project-card").filter({ hasText: /安娜的旅程|Anna/ }).first().click();
+  await expect(page.getByTestId("stage-route")).toBeVisible();
+  const projectPath = new URL(page.url()).hash.slice(1);
+  await shot("p17-route");
+  await page.getByTestId("route-row").nth(2).hover();
+  await page.getByTestId("route-insert").nth(2).click();
+  await expect(page.getByTestId("insert-name")).toBeVisible();
+  await shot("p17-route-insert");
+  await page.keyboard.press("Escape");
+  await page.locator('[data-testid="route-row"][data-key="inbetween"]').click();
+  await expect(page.getByTestId("stage-title")).toBeVisible();
+  await shot("p17-stage");
+  await page.getByTestId("dispatch-menu").first().click();
+  await expect(page.getByTestId("dispatch-pop")).toBeVisible();
+  await page.screenshot({ path: shotPath(page, "p17-stage-menu"), fullPage: false });
+  await page.keyboard.press("Escape");
+  await page.getByTestId("stage-edit-open").click();
+  await page.getByTestId("stage-config").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: shotPath(page, "p17-stage-config"), fullPage: false });
+  await open(page, projectPath);
+  const plan = page.locator('[data-testid="route-row"][data-key="plan"]');
+  await plan.click();
+  await page.getByTestId("stage-accept-open").click();
+  await expect(page.getByTestId("accept-view")).toBeVisible();
+  await shot("p17-stage-accept");
+  await open(page, `${projectPath}?tab=grid`);
+  await expect(page.getByTestId("board")).toBeVisible();
+  await shot("p5-grid");
+  await page.locator("table.board tbody th a").nth(4).click();
+  await expect(page).toHaveURL(/#\/cut\//);
+  await shot("p6-cut");
+  await open(page, `${projectPath}?tab=profile`);
+  await shot("p17-profile");
+  await page.getByTestId("profile-intro-edit").click();
+  await shot("p17-profile-edit");
+  await open(page, `${projectPath}?tab=activity`);
+  await shot("p17-activity");
+  await open(page, "/projects");
+  await page.locator("a.project-card").filter({ hasText: /星期三的猫|Wednesday/ }).first().click();
+  await expect(page.getByTestId("stage-route")).toBeVisible();
+  await shot("p17-route-cat");
+  await open(page, "/projects");
+  await page.locator("main a.project-card[data-zero]").first().click();
+  for (let n = 1; n <= 5; n++) {
+    await page.getByTestId(`wizard-step-${n}`).click();
+    await expect(page.getByTestId(`wizard-step-${n}`)).toHaveAttribute("aria-current", "step");
+    await shot(`p17-wizard-${n}`);
+  }
+}
+
+let shotTag = "";
+function shotPath(_page: Page, name: string) {
+  return `artifacts/shots/${name}-${shotTag}.png`;
+}
 
 test.skip(!HAS_PASS, "没有设 ARPS_PASS_ADMIN / ARPS_PASS_MEMBER");
 
 test("截图", async ({ page }, info) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
   const tag = info.project.name;
+  shotTag = tag;
   const shot = (name: string) => page.screenshot({ path: `artifacts/shots/${name}-${tag}.png`, fullPage: true });
   await noExternal(page);
   await open(page, "/");
@@ -24,28 +82,7 @@ test("截图", async ({ page }, info) => {
   await shot("p2-hall-admin");
   await open(page, "/projects");
   await shot("p4-projects");
-  await page.locator("a.project-card").first().click();
-  await expect(page.getByTestId("board")).toBeVisible();
-  await shot("p5-project");
-  const projectPath = new URL(page.url()).hash.slice(1);
-  await page.getByTestId("project-settings").click();
-  await expect(page.getByTestId("stages-card")).toBeVisible();
-  await shot("p12-settings-stages");
-  await page.getByTestId("settings-tab-structure").click();
-  await shot("p12-settings-structure");
-  await open(page, projectPath);
-  await page.getByRole("button", { name: /^Layout，/ }).first().click();
-  await page.getByTestId("stage-accept-open").click();
-  await expect(page.getByTestId("accept-view")).toBeVisible();
-  await shot("p12-accept");
-  await open(page, "/projects");
-  await page.locator("main").getByRole("link", { name: /（模板）动画短片/ }).first().click();
-  await expect(page.getByTestId("staff-card")).toBeVisible();
-  await shot("p12-zero-day");
-  await open(page, projectPath);
-  await page.locator("table.board tbody th a").nth(4).click();
-  await expect(page).toHaveURL(/#\/cut\//);
-  await shot("p6-cut");
+  await v11Shots(page, shot);
   await open(page, "/review");
   await shot("p7-review");
   await open(page, "/admin?tab=dispatch");
@@ -81,8 +118,9 @@ test.describe("English", () => {
   test.use({ storageState: { cookies: [], origins: [{ origin: new URL(process.env.SMOKE_BASE_URL ?? "http://localhost:4173").origin, localStorage: [{ name: "arps:lang", value: "en" }] }] } });
 
   test("截图（English）", async ({ page }, info) => {
-    test.setTimeout(120_000);
+    test.setTimeout(240_000);
     const tag = `${info.project.name}-en`;
+    shotTag = tag;
     const shot = (name: string) => page.screenshot({ path: `artifacts/shots/${name}-${tag}.png`, fullPage: true });
     const signIn = async (who: "admin" | "member01") => {
       await page.getByTestId(`account-${who}`).click();
@@ -107,21 +145,7 @@ test.describe("English", () => {
     await signIn("admin");
     await open(page, "/projects");
     await shot("p4-projects");
-    await page.locator("a.project-card").first().click();
-    await expect(page.getByTestId("board")).toBeVisible();
-    await shot("p5-project");
-    const projectPath = new URL(page.url()).hash.slice(1);
-    await page.getByTestId("project-settings").click();
-    await expect(page.getByTestId("stages-card")).toBeVisible();
-    await shot("p12-settings-stages");
-    await open(page, "/projects");
-    await page.locator("main").getByRole("link", { name: /（模板）动画短片/ }).first().click();
-    await expect(page.getByTestId("staff-card")).toBeVisible();
-    await shot("p12-zero-day");
-    await open(page, projectPath);
-    await page.locator("table.board tbody th a").nth(4).click();
-    await expect(page).toHaveURL(/#\/cut\//);
-    await shot("p6-cut");
+    await v11Shots(page, shot);
     await open(page, "/review");
     await shot("p7-review");
     await open(page, "/admin?tab=dispatch");

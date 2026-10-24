@@ -100,7 +100,42 @@ const PAGES = [
   "/library",
 ];
 
-/** 项目列表里每个项目：总览（或零日页）· 设置的每个标签 · 第一卡 · 资料库 · 资料页 · 看图器。 */
+/** 扫一遍环节页：页面本身 · 改这个环节（展开）· 一行的动作 · 指派一个人 · 验收（有的话）。 */
+async function tourStage(page: Page, path: string, label: string) {
+  await visit(page, path, label);
+  const where = `${label} ${path}`;
+  const edit = page.getByTestId("stage-edit-open");
+  if (await edit.isVisible()) {
+    await edit.click();
+    await expectNoPageScrollX(page, `${where} 设置`);
+    await expectEnglish(page, `${where} 设置`);
+  }
+  const menu = page.getByTestId("dispatch-menu").first();
+  if (await menu.isVisible()) {
+    await menu.click();
+    await expectEnglish(page, `${where} 一行的动作`);
+    await page.keyboard.press("Escape");
+  }
+  const assign = page.getByTestId("assign-person-open");
+  if (await assign.isVisible()) {
+    await assign.click();
+    await expectEnglish(page, `${where} 指派一个人`);
+    await page.keyboard.press("Escape");
+  }
+  const hub = page.getByTestId("hub-open");
+  if (await hub.isVisible()) {
+    await hub.click();
+    await expectEnglish(page, `${where} 派发下游`);
+  }
+  const accept = page.getByTestId("stage-accept-open");
+  if ((await accept.isVisible()) && (await accept.isEnabled())) {
+    await accept.click();
+    await expectEnglish(page, `${where} 验收`);
+    await page.keyboard.press("Escape");
+  }
+}
+
+/** 项目列表里每个项目：环节路线（或开局向导的每一步）· 每个标签 · 每种状态的环节页 · 第一卡 · 资料库 · 资料页 · 看图器。 */
 async function tourProjects(page: Page, label: string) {
   for (const group of ["", "?group=video"]) {
     await open(page, `/projects${group}`);
@@ -108,34 +143,67 @@ async function tourProjects(page: Page, label: string) {
     for (const href of hrefs) {
       await visit(page, href, label);
       const id = href.split("/")[2];
-      const board = page.getByTestId("board");
-      if (await board.isVisible()) {
-        await page.getByTestId("view-schedule").click();
-        await expectNoPageScrollX(page, `${label} ${href} 排期`);
-        await expectEnglish(page, `${label} ${href} 排期`);
-        await page.getByTestId("view-flow").click();
+      if (await page.getByTestId("wizard-steps").isVisible()) {
+        // 开局向导：每一步都看（人员那一步把收起的职位也展开）
+        for (let n = 1; n <= 5; n++) {
+          const step = page.getByTestId(`wizard-step-${n}`);
+          if (!(await step.isEnabled())) break;
+          await step.click();
+          await expect(step).toHaveAttribute("aria-current", "step");
+          const rest = page.getByTestId("staff-rest");
+          if (await rest.isVisible()) await rest.locator("summary").click();
+          await expectNoPageScrollX(page, `${label} ${href} 开局第 ${n} 步`);
+          await expectEnglish(page, `${label} ${href} 开局第 ${n} 步`);
+        }
+        const start = page.getByTestId("zero-start");
+        if (await start.isVisible()) {
+          await start.click();
+          await expectEnglish(page, `${label} ${href} 开工确认`);
+          await page.keyboard.press("Escape");
+        }
+      } else {
+        // 环节路线：折起来的段展开、在两个环节之间插一个（弹层）
+        for (let i = 0; i < 3 && (await page.locator('[data-testid^="route-expand-"]').count()); i++) await page.locator('[data-testid^="route-expand-"]').first().click();
+        await expectEnglish(page, `${label} ${href} 路线（展开）`);
+        const insert = page.getByTestId("route-insert").first();
+        if (await insert.count()) {
+          await page.getByTestId("route-row").first().hover();
+          await insert.click();
+          await expectEnglish(page, `${label} ${href} 插一个环节`);
+          await page.keyboard.press("Escape");
+        }
+        // 每种状态的环节页各看一个
+        const stageHrefs: string[] = [];
+        for (const st of ["done", "review", "active", "ready", "locked"]) {
+          const row = page.locator(`[data-testid="route-row"][data-status="${st}"]`).first();
+          if (await row.count()) stageHrefs.push(((await row.getAttribute("href")) ?? "").replace(/^#/, ""));
+        }
+        const hub = page.locator('[data-testid="route-row"]', { has: page.locator(".kind-tag", { hasText: /hub/i }) }).first();
+        if (await hub.count()) stageHrefs.push(((await hub.getAttribute("href")) ?? "").replace(/^#/, ""));
+        for (const sh of Array.from(new Set(stageHrefs))) await tourStage(page, sh, label);
+        // 标签
+        for (const tab of ["grid", "schedule", "activity", "profile"]) await visit(page, `${href}?tab=${tab}`, label);
+        for (const block of ["intro", "dates", "structure", "staff"]) {
+          const edit = page.getByTestId(`profile-${block}-edit`);
+          if (await edit.isVisible()) {
+            await edit.click();
+            await expectNoPageScrollX(page, `${label} ${href} 档案 · 改 ${block}`);
+            await expectEnglish(page, `${label} ${href} 档案 · 改 ${block}`);
+            await page.getByTestId(`profile-${block}`).locator('[data-testid="profile-cancel"], [data-testid="profile-done"]').first().click();
+          }
+        }
+        await open(page, `${href}?tab=grid`);
         await page.getByTestId("report-open").click();
         await expect(page.getByTestId("report-dialog")).toBeVisible();
         await expectEnglish(page, `${label} ${href} 导出汇报`);
         await page.keyboard.press("Escape");
-        const node = page.locator(".map-node").first();
-        if (await node.isVisible()) {
-          await node.click();
-          await expectEnglish(page, `${label} ${href} 环节抽屉`);
-          const accept = page.getByTestId("stage-accept-open");
-          if (await accept.isVisible()) {
-            await accept.click();
-            await expectEnglish(page, `${label} ${href} 验收`);
-          }
-          await page.keyboard.press("Escape");
-        }
         const cut = page.locator("table.board tbody th a").first();
         if (await cut.count()) {
           const cutHref = ((await cut.getAttribute("href")) ?? "").replace(/^#/, "");
           await visit(page, cutHref, label);
         }
       }
-      for (const tab of ["cover", "dates", "structure", "staff", "stages"]) await visit(page, `/project/${id}/settings?tab=${tab}`, label);
+      await visit(page, `${href}?tab=library`, label);
       await visit(page, `/library/${id}`, label);
       const tile = page.getByTestId("file-tile").first();
       if (await tile.count()) {
@@ -197,6 +265,7 @@ test.describe("English", () => {
 
   test("自己的工会：建好、零日页、开工、每页都扫；被拒的原因两种语言；语言跟着账号记", async ({ page }, info) => {
     test.skip(info.project.name === "zh-CN Asia/Shanghai", "English 用 en-US 和手机 375 两套跑");
+    test.setTimeout(240_000);
     const errors = watch(page);
     await open(page, "/");
     await expectEnglish(page, "进门");
@@ -209,24 +278,32 @@ test.describe("English", () => {
     expectClean(errors, "建工会");
     await expectEnglish(page, "大厅（空的）");
 
-    // 零日页（还没开工）
+    // 开局向导（还没开工）：跳到结构填 3 卡 → 下一步 → 开工
     await open(page, "/admin?tab=new");
     await page.getByTestId("new-name").fill("Smoke project");
     await page.getByTestId("new-code").fill("SMK");
     await page.getByTestId("new-create").click();
     await expect(page).toHaveURL(/#\/project\//);
-    await expect(page.getByTestId("structure-card")).toBeVisible();
-    await expectNoPageScrollX(page, "零日页");
-    await expectEnglish(page, "零日页");
+    await expect(page.getByTestId("wizard-steps")).toBeVisible();
+    await expectNoPageScrollX(page, "开局向导");
+    await expectEnglish(page, "开局向导 · 介绍");
+    await page.getByTestId("wizard-step-3").click();
     await page.getByTestId("zero-episodes").fill("1");
     await page.getByTestId("zero-scenes").fill("1");
     await page.getByTestId("zero-cuts").fill("3");
-    await page.getByTestId("zero-structure-save").click();
-    await expect(page.getByTestId("structure-card")).toContainText(/3 cuts/);
+    await expect(page.getByTestId("cut-preview")).toHaveAttribute("data-count", "3");
+    await expectEnglish(page, "开局向导 · 结构");
+    await page.getByTestId("wizard-next").click();
+    await expect(page.getByTestId("wizard-staff")).toBeVisible();
+    await expectEnglish(page, "开局向导 · 人员");
+    await page.getByTestId("wizard-next").click();
+    await expect(page.getByTestId("start-check")).toContainText(/3 cuts/);
+    await expectEnglish(page, "开局向导 · 开工");
     await page.getByTestId("zero-start").click();
-    await expectEnglish(page, "零日页 · 开工确认");
+    await expectEnglish(page, "开局向导 · 开工确认");
     await page.getByTestId("zero-start-confirm").click();
-    await expect(page.getByTestId("board")).toBeVisible();
+    await expect(page.getByTestId("stage-route")).toBeVisible();
+    await expectEnglish(page, "环节路线");
     const projectPath = new URL(page.url()).hash.slice(1);
     const projectId = projectPath.split("/")[2];
 
@@ -261,9 +338,9 @@ test.describe("English", () => {
   test.describe("示范工会", () => {
     test.skip(!HAS_PASS, "没有设 ARPS_PASS_ADMIN / ARPS_PASS_MEMBER，跳过登录示范工会");
 
-    test("admin：每页、每个项目（含零日页）、设置、卡、资料库、看图器、审核台都扫", async ({ page }, info) => {
+    test("admin：每页、每个项目（路线 · 环节页 · 标签 · 档案 · 开局向导）、卡、资料库、看图器、审核台都扫", async ({ page }, info) => {
       test.skip(info.project.name === "zh-CN Asia/Shanghai", "English 用 en-US 和手机 375 两套跑");
-      test.setTimeout(240_000);
+      test.setTimeout(480_000);
       const errors = watch(page);
       await open(page, "/");
       await expectEnglish(page, "进门");

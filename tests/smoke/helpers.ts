@@ -114,17 +114,46 @@ export async function createProject(page: Page, opts: { name: string; code: stri
   return new URL(page.url()).hash.slice(1);
 }
 
-/** 在零日页填结构（1 集 1 场 n 卡）再开工。 */
+/** 开局向导（§17.4）：跳到「③ 结构」填（1 集 1 场 n 卡）→ 下一步 → 跳到「⑤ 开工」→ 开工 → 项目页是环节路线。 */
 export async function startFromZero(page: Page, opts: { count: number; layers?: string; sheets?: number }) {
-  await expect(page.getByTestId("structure-card")).toBeVisible();
+  await expect(page.getByTestId("wizard-steps")).toBeVisible();
+  await page.getByTestId("wizard-step-3").click();
+  await expect(page.getByTestId("structure-form")).toBeVisible();
   await page.getByTestId("zero-episodes").fill("1");
   await page.getByTestId("zero-scenes").fill("1");
   await page.getByTestId("zero-cuts").fill(String(opts.count));
   if (opts.layers !== undefined) await page.getByTestId("zero-layers").fill(opts.layers);
   if (opts.sheets !== undefined) await page.getByTestId("zero-sheets").fill(String(opts.sheets));
-  await page.getByTestId("zero-structure-save").click();
-  await expect(page.getByTestId("structure-card")).toContainText(new RegExp(`${opts.count} (卡|cuts?)`));
+  await page.getByTestId("wizard-next").click();
+  await expect(page.getByTestId("wizard-staff")).toBeVisible();
+  await page.getByTestId("wizard-step-5").click();
+  await expect(page.getByTestId("start-check")).toContainText(new RegExp(`${opts.count} (卡|期|cuts?|episodes?)`));
   await page.getByTestId("zero-start").click();
   await page.getByTestId("zero-start-confirm").click();
+  await expect(page.getByTestId("stage-route")).toBeVisible();
+}
+
+/** 路线上折起来的段（已经结束的 · 整段还没到的）都展开。 */
+export async function expandRoute(page: Page) {
+  for (let i = 0; i < 3 && (await page.locator('[data-testid^="route-expand-"]').count()); i++) await page.locator('[data-testid^="route-expand-"]').first().click();
+}
+
+/** 路线上按名字（完全一样）找一行；折起来的段先展开。 */
+export async function routeRow(page: Page, name: string) {
+  await expandRoute(page);
+  return page.getByTestId("route-row").filter({ has: page.locator(".route-name > .t-body-14m").getByText(name, { exact: true }) });
+}
+
+/** 打开项目里某个环节的环节页（从路线上点进去）。 */
+export async function openStage(page: Page, projectPath: string, name: string) {
+  await open(page, projectPath);
+  await (await routeRow(page, name)).first().click();
+  await expect(page.getByTestId("stage-title")).toContainText(name);
+  return page.locator("main");
+}
+
+/** 项目的「卡 × 环节」网格。 */
+export async function openGrid(page: Page, projectPath: string) {
+  await open(page, `${projectPath}?tab=grid`);
   await expect(page.getByTestId("board")).toBeVisible();
 }

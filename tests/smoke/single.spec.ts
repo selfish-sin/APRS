@@ -27,7 +27,9 @@ test("单文件：直接打开，进示范工会，口令错有提示，对的�
     await page.getByTestId("login-submit").click();
     await expect(page).toHaveURL(/#\/hall/);
     await page.goto(`file://${FILE}#/projects`, { waitUntil: "networkidle" });
-    await page.locator("a.project-card").first().click();
+    await page.locator("a.project-card:not([data-zero])").first().click();
+    await expect(page.getByTestId("stage-route")).toBeVisible();
+    await page.getByTestId("ptab-grid").click();
     await expect(page.getByTestId("board")).toBeVisible();
     // 资料库在单文件版里也能用（IndexedDB 不让用时退回内存，顶上有一条说明）
     await page.goto(`file://${FILE}#/library`, { waitUntil: "networkidle" });
