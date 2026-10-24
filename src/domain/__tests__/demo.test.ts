@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import ACCOUNTS from "@/data/accounts.public.json";
 import { DEMO_NOW, DEMO_WORLD_ID, buildDemoWorld } from "@/data/demo";
 import { checkIntegrity } from "@/domain/integrity";
+import { demoImages } from "@/data/demoImages";
 import * as q from "@/domain/queries";
 
 /** 示范工会照 SPEC §7 摆：项目是真的，人员是编的；时钟冻结在 2026-10-23。 */
@@ -82,6 +83,45 @@ describe("示范工会", () => {
     expect(node("key").progress).toBe(0.25);
     expect(node("key_check").progress).toBe(0.25);
     expect(node("inbetween").passed).toBe(0);
+  });
+
+  it("资料库：三页（设定集 · 文件命名规范 v1.0 · 后期流程规范），设定集 3 张图 2 个钉、一个已解决", () => {
+    const pages = q.pagesOf(s, andlc.id);
+    expect(pages.map((p) => p.title).sort()).toEqual(["后期流程规范", "文件命名规范 v1.0", "设定集"].sort());
+    const set = pages.find((p) => p.title === "设定集")!;
+    const gallery = q.blocksOf(s, set.id).find((b) => b.type === "gallery")!;
+    expect(gallery.fileIds).toHaveLength(3);
+    const pins = gallery.fileIds.flatMap((id) => q.pinsOf(s, id));
+    expect(pins).toHaveLength(2);
+    expect(pins.filter((p) => p.status === "resolved")).toHaveLength(1);
+    const naming = pages.find((p) => p.title === "文件命名规范 v1.0")!;
+    expect(q.blocksOf(s, naming.id).some((b) => b.text?.includes("[项目]_[集数]_[场景]_[镜头]_[层级]_[流程]_[版本]"))).toBe(true);
+    const post = pages.find((p) => p.title === "后期流程规范")!;
+    expect(q.blocksOf(s, post.id).find((b) => b.type === "checklist")!.items.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("示范图都是代码画的 SVG，标了「示范图」；记录里的 sha256 都对得上", () => {
+    const imgs = demoImages();
+    for (const img of imgs) {
+      expect(img.svg).toContain("示范图");
+      expect(img.name).toContain("示范图");
+    }
+    const shas = new Set(imgs.map((i) => i.sha256));
+    for (const f of q.usedShas(s)) expect(shas.has(f.sha256)).toBe(true);
+  });
+
+  it("C005 A 的 v04 截图上有审核时钉的两处（退回带进等我处理）；C010 B 两版能对比", () => {
+    const files = q.libraryOf(s, andlc.id, {});
+    const shot = files.find((f) => f.file.name.includes("CUT005_A"))!;
+    const pins = q.pinsOf(s, shot.file.id);
+    expect(pins.map((p) => p.tag)).toEqual(["漏色", "分层错误"]);
+    expect(pins.every((p) => p.reviewTaskId)).toBe(true);
+    const haiyan = q.members(s).find((m) => m.nickname === "海盐")!;
+    expect(q.inboxOf(s, haiyan.id).pins.length).toBe(2);
+    const v4 = files.find((f) => f.file.name.includes("CUT010_B_ANI_v04"))!;
+    expect(q.compareCandidates(s, v4.file.id).map((f) => f.name)).toContain("ANDLC_EP01_SC001_CUT010_B_ANI_v05（示范图）.svg");
+    const cut10 = q.cutsOf(s, andlc.id).find((c) => c.number === 10)!;
+    expect(q.timelineOfCut(s, cut10.id).some((t) => t.kind === "pin")).toBe(true);
   });
 
   it("视频组没有项目", () => {

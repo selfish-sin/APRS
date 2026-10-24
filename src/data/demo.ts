@@ -14,6 +14,7 @@ import { dispatch, type Actor } from "@/domain/dispatch";
 import { seededIds } from "@/domain/ids";
 import { emptyWorldState, type Id, type IsoDateTime, type Quality, type ReviewComment, type WorldState } from "@/domain/model";
 import ACCOUNTS from "./accounts.public.json";
+import { demoImage, type DemoImage } from "./demoImages";
 
 export const DEMO_WORLD_ID = "wld_demo-guild";
 export const DEMO_TITLE = "示范工会";
@@ -62,6 +63,17 @@ class SeedBuilder {
     const stage = Object.values(this.state.stages).find((s) => s.projectId === projectId && s.templateKey === key);
     if (!stage) throw new Error(`示范数据：没有环节 ${key}`);
     return stage.id;
+  }
+
+  submission(taskId: Id, versionNo: number) {
+    const sub = Object.values(this.state.submissions).find((x) => x.taskId === taskId && x.versionNo === versionNo);
+    if (!sub) throw new Error(`示范数据：没有 v${versionNo}`);
+    return sub;
+  }
+
+  /** 放一张示范图（文件本身在 demoImages.ts，打开示范工会时放进这台设备的文件仓）。 */
+  image(member: Id, img: DemoImage, subjectType: "project" | "cut" | "task" | "submission" | "page", subjectId: Id, when: IsoDateTime, tags: string[] = []): Id {
+    return this.run(member, "file.add", { sha256: img.sha256, name: img.name, mime: "image/svg+xml", size: img.size, width: img.width, height: img.height, thumb: img.thumb, subjectType, subjectId, tags: ["示范图", ...tags] }, when).fileId;
   }
 
   cutId(projectId: Id, n: number): Id {
@@ -283,6 +295,17 @@ export function buildDemoWorld(): WorldState {
       { comments: [c("第 18 张下巴的线断了，补一下", { layer: "B", sheets: "18", tag: "色线缺失或不闭合" })], reviewAfter: 20 },
     ],
   });
+  // C010 B 的 v04 / v05 各附一张截图（两版对比）；v04 上青柠钉了下巴，v05 补上以后木星点了解决。
+  {
+    const t = b.task(andlc, "inbetween", 10, "B");
+    const v4 = b.submission(t, 4);
+    const v5 = b.submission(t, 5);
+    const f4 = b.image(muxing, demoImage("ib4"), "submission", v4.id, v4.at, ["中割"]);
+    b.image(muxing, demoImage("ib5"), "submission", v5.id, v5.at, ["中割"]);
+    const pin = b.run(qingning, "pin.add", { fileId: f4, kind: "box", x: 0.4, y: 0.47, w: 0.2, h: 0.14, text: "第 18 张下巴的线断了，补一下", layer: "B", sheets: "18", tag: "色线缺失或不闭合", forReview: true }, plusHours(v4.at, 2)).pinId;
+    b.run(muxing, "pin.reply", { pinId: pin, text: "v05 补上了" }, v5.at);
+    b.run(muxing, "pin.resolve", { pinId: pin }, v5.at);
+  }
 
   // 中割检修 C001–C008 通过（C012–C014 中割通过了，检修还没人接）
   for (let n = 1; n <= 8; n++) {
@@ -319,7 +342,14 @@ export function buildDemoWorld(): WorldState {
       { comments: [c("第 11、12 张两个颜色涂反了", { layer: "A", sheets: "11、12", tag: "涂反" })], reviewAfter: 20 },
     ],
   });
-  // 上面最后一轮之后会再交一版（v04），这里把它退回（真实的四条意见）。
+  // 上面最后一轮之后会再交一版（v04），附了一张截图；青柠在图上钉了两处，再退回（真实的四条意见）。
+  {
+    const t = b.task(andlc, "paint", 5, "A");
+    const v4 = b.submission(t, 4);
+    const shot = b.image(haiyan, demoImage("colors"), "submission", v4.id, v4.at, ["上色"]);
+    b.run(qingning, "pin.add", { fileId: shot, kind: "point", x: 0.5, y: 0.53, text: "第 18 张下巴漏色", layer: "A", sheets: "18", tag: "漏色", forReview: true }, at("2026-10-23 08:50"));
+    b.run(qingning, "pin.add", { fileId: shot, kind: "box", x: 0.72, y: 0.23, w: 0.24, h: 0.33, text: "上色不用分这么细，整合到一个图层就行，分离的事后期也能做", tag: "分层错误", forReview: true }, at("2026-10-23 08:52"));
+  }
   b.run(
     qingning,
     "task.review",
@@ -361,6 +391,56 @@ export function buildDemoWorld(): WorldState {
   for (let n = 1; n <= 2; n++) {
     work(b, b.task(dmds, "key", n), { worker: lizi, reviewer: qingning, start: plusHours(at("2026-04-12 10:00"), (n - 1) * 50), workHours: 20, link: D("H", n) });
     work(b, b.task(dmds, "key_check", n), { worker: qingning, reviewer: bailu, start: plusHours(at("2026-04-22 10:00"), (n - 1) * 30), workHours: 1, link: D("H", n) });
+  }
+
+  // —— 资料页（SPEC §11.5）：设定集（3 张示范图，2 个钉，一个已解决）· 文件命名规范 v1.0 · 后期流程规范 ——
+  {
+    const when = at("2026-03-06 10:00");
+    const page = b.run(lizi, "page.create", { projectId: andlc, title: "设定集" }, when).pageId;
+    const fFront = b.image(lizi, demoImage("front"), "page", page, when, ["设定"]);
+    const fSide = b.image(lizi, demoImage("side"), "page", page, when, ["设定"]);
+    const fFaces = b.image(lizi, demoImage("faces"), "page", page, when, ["设定"]);
+    const block = (type: "heading" | "text" | "gallery" | "image" | "checklist" | "divider", extra: Record<string, unknown>, t: IsoDateTime) =>
+      b.run(lizi, "block.add", { pageId: page, type, ...extra } as never, t);
+    block("heading", { text: "人物设定" }, when);
+    block("text", { text: "这里放的是代码画的示范线稿（标了「示范图」），不是真的作品。把真的设定图拖进资料库，再换掉这几张。图上点一下能钉意见，拖一下能框一块。" }, when);
+    block("gallery", { fileIds: [fFront, fSide, fFaces] }, when);
+    block("heading", { text: "拍板以后要补的设定" }, when);
+    block("checklist", { items: [{ text: "耳饰（5、7、9、10 卡）", done: false }, { text: "皇冠上的宝石", done: false }, { text: "大人角色", done: false }] }, at("2026-10-17 10:30"));
+    const eye = b.run(qingning, "pin.add", { fileId: fFront, kind: "point", x: 0.447, y: 0.288, text: "小女孩瞳孔这里主线应该透过头发，照这张画", tag: "主线不透" }, at("2026-05-20 10:00")).pinId;
+    b.run(lizi, "pin.reply", { pinId: eye, text: "改好了，以这张为准" }, at("2026-05-20 15:00"));
+    b.run(qingning, "pin.resolve", { pinId: eye }, at("2026-05-21 10:00"));
+    b.run(bailu, "pin.add", { fileId: fFront, kind: "box", x: 0.4, y: 0.05, w: 0.2, h: 0.09, text: "皇冠上的宝石要画，别漏（拍板：照设定补）", tag: "设定没补", mentions: [muxing, beichuang] }, at("2026-10-17 10:20"));
+
+    const naming = b.run(bailu, "page.create", { projectId: andlc, title: "文件命名规范 v1.0" }, at("2026-03-02 09:00")).pageId;
+    const nb = (type: "heading" | "text" | "divider", text: string | null) => b.run(bailu, "block.add", { pageId: naming, type, ...(text === null ? {} : { text }) }, at("2026-03-02 09:00"));
+    nb("heading", "文件名");
+    nb("text", "[项目]_[集数]_[场景]_[镜头]_[层级]_[流程]_[版本]");
+    nb("text", "例：LTHJ_EP01_SC001_CUT005_A_ANI_v04.clip");
+    nb("heading", "流程代号");
+    nb("text", "LAY · LO · H（原画）· ANI（中割）· CLN · CMP · FIN");
+    nb("heading", "版本");
+    nb("text", "改了不覆盖，版本号 +1。进下一环节之前，上一环节的最终版锁定。");
+    nb("heading", "文件夹");
+    nb("text", "/EPxx/<流程>/SCxxx/CUTxxx/");
+    nb("divider", null);
+    nb("text", "大文件统一放飞书，系统里只存链接（QQ 闪传和群文件会过期）。");
+
+    const post = b.run(bailu, "page.create", { projectId: andlc, title: "后期流程规范" }, at("2026-03-02 09:30")).pageId;
+    const pb = (type: "heading" | "text" | "checklist" | "divider", extra: Record<string, unknown>) => b.run(bailu, "block.add", { pageId: post, type, ...extra } as never, at("2026-03-02 09:30"));
+    pb("heading", { text: "交接（监修完成以后）" });
+    pb("checklist", {
+      items: [
+        { text: "监修完成 → 发给「文件导出」的人", done: false },
+        { text: "导出的人把线稿、色彩、特殊分层单独导出", done: false },
+        { text: "整理成一个文件夹，按文件命名规范起名", done: false },
+        { text: "交给后期（影像合成）", done: false },
+      ],
+    });
+    pb("text", { text: "统筹问「1–14 有哪些已经交到导出了」时，看项目总览网格里「导出」那一列。" });
+    pb("divider", {});
+    pb("heading", { text: "常见退回原因" });
+    pb("text", { text: "漏色 · 色线缺失或不闭合 · 背涂填错图层 · 背涂涂到主线 · 主线不透 · 分层错误 · 涂反 · 漏轨目 · 设定没补" });
   }
 
   const state = b.state;
