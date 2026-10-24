@@ -28,7 +28,7 @@ export function TaskActions({ task, size = "Small" }: { task: TaskRow; size?: "S
     <div className="form-actions">
       {task.status === "open" ? (
         <Button
-          Label="接这张"
+          Label="认领"
           Size={size}
           Style="Accent"
           onClick={() => {
@@ -152,6 +152,16 @@ export function TaskDrawer({ task, onClose }: { task: TaskRow; onClose: () => vo
             </div>
           ) : null}
         </dl>
+        {task.extra ? (
+          <div className="stack" data-gap="small">
+            <span className="label">
+              {task.extra.blocking ? "这一卡要等它做完 · " : "不挡流程 · "}
+              {task.extra.fixedPoints !== null ? `固定 ${task.extra.fixedPoints} 活力点` : view.workloadLabel} · 时限 {task.extra.deadlineHours} 小时（从接的时候算）
+            </span>
+            {task.extra.description ? <p className="break">{task.extra.description}</p> : null}
+            {task.extra.fileIds.length ? <span className="label">附了 {task.extra.fileIds.length} 张图（在资料库里）</span> : null}
+          </div>
+        ) : null}
         <TaskActions task={task} />
         <h3 className="t-body-14m">版本</h3>
         {subs.length === 0 ? (

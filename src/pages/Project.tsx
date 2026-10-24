@@ -10,6 +10,7 @@ import { Empty, MemberAvatar, SelectField, Tag, TextField } from "@/components/a
 import { Board, StatusLegend } from "@/components/app/board";
 import { MapLegend, StageMap } from "@/components/app/stage";
 import { TaskDrawer } from "@/components/app/task";
+import { BatchAssign, ExtrasList, PublishForm, ScheduleView, StageSettings } from "@/components/app/flex";
 import { ThreadBody } from "@/components/app/thread";
 import { dateZh } from "@/domain/clock";
 import { isAdmin, isReviewer } from "@/domain/commands/core";
@@ -36,6 +37,7 @@ export function ProjectPage() {
   const [node, setNode] = useState<StageNode | null>(null);
   const [task, setTask] = useState<TaskRow | null>(null);
   const [editing, setEditing] = useState(false);
+  const [view, setView] = useState<"flow" | "schedule">(route.query.get("view") === "schedule" ? "schedule" : "flow");
   const project = projectById(world, id);
   const pipeline = useMemo(() => (project ? pipelineOf(world, project.id) : null), [world, project]);
   const grid = useMemo(() => (project ? gridOf(world, project.id, filter, me.id) : null), [world, project, filter, me.id]);
@@ -81,6 +83,25 @@ export function ProjectPage() {
         </div>
       </div>
 
+      <div className="chips" role="tablist" aria-label="看法">
+        <button type="button" role="tab" className="ui-chip" aria-selected={view === "flow"} aria-pressed={view === "flow"} onClick={() => setView("flow")} data-testid="view-flow">
+          流程
+        </button>
+        <button type="button" role="tab" className="ui-chip" aria-selected={view === "schedule"} aria-pressed={view === "schedule"} onClick={() => setView("schedule")} data-testid="view-schedule">
+          排期
+        </button>
+      </div>
+
+      {view === "schedule" ? (
+        <section className="card" aria-labelledby="schedule-title">
+          <h2 id="schedule-title" className="t-section-24">
+            排期 · 按周
+          </h2>
+          <p className="label">浅色条是计划，深色条是实际（从第一张被接到最后一张通过，没完就到今天），红色是超出计划的部分。{admin ? "点环节名字改计划周期，或者直接拖浅色条。" : ""}</p>
+          <ScheduleView projectId={project.id} />
+        </section>
+      ) : (
+      <>
       <section className="stack" data-gap="small" aria-labelledby="map-title">
         <div className="card-head">
           <h2 id="map-title" className="t-section-24">
@@ -110,10 +131,15 @@ export function ProjectPage() {
             <div className="project-strip">
               {grid.projectCells.map((c) =>
                 c.tasks.map((t) => (
-                  <button key={t.task.id} type="button" className="strip-item" onClick={() => setTask(t.task)} aria-label={`${c.stage.name}：${TASK_STATUS_LABEL[t.task.status]}`}>
+                  <button key={t.task.id} type="button" className="strip-item" onClick={() => setTask(t.task)} aria-label={`${c.stage.name}：${TASK_STATUS_LABEL[t.task.status]}${c.extras.length ? `，额外任务 ${c.extras.length} 件` : ""}`}>
                     <StatusPill Status={t.task.status} />
                     <span>{c.stage.name}</span>
                     {t.assignee ? <MemberAvatar member={t.assignee} size="20" /> : null}
+                    {c.extras.length ? (
+                      <span className="extra-count" title={`额外 / 修正任务 ${c.extras.length} 件`}>
+                        {c.extras.length}
+                      </span>
+                    ) : null}
                   </button>
                 ))
               )}
@@ -132,6 +158,8 @@ export function ProjectPage() {
           {grid.hidden ? <span className="label">筛掉了 {grid.hidden} 行</span> : null}
         </div>
       </section>
+      </>
+      )}
 
       <section className="card" aria-labelledby="pthreads-title">
         <h2 id="pthreads-title" className="t-heading-18">
@@ -206,6 +234,7 @@ function StageDrawer({ node, onClose }: { node: StageNode; onClose: () => void }
   const admin = isAdmin(me);
   const reviewer = memberById(world, stage.reviewerId);
   const reviewers = members(world).filter((m) => isReviewer(m));
+  const [publishing, setPublishing] = useState(false);
   return (
     <Drawer Type="Drawer" Title={stage.name} open onClose={onClose} actions={<Button Label="关上" Style="Secondary" onClick={onClose} />}>
       <div className="stack" data-gap="small" style={{ overflowY: "auto" }}>
@@ -264,7 +293,12 @@ function StageDrawer({ node, onClose }: { node: StageNode; onClose: () => void }
         ) : (
           <p className="label">审核：{reviewer ? reviewer.nickname : "审核员和管理员谁都能审"}</p>
         )}
+        <ExtrasList stage={stage} />
+        {publishing ? <PublishForm stage={stage} onDone={() => setPublishing(false)} /> : null}
+        {admin && stage.grain !== "project" ? <BatchAssign stage={stage} /> : null}
+        {admin ? <StageSettings stage={stage} /> : null}
         <div className="form-actions">
+          {(admin || (isReviewer(me) && stage.reviewerId === me.id)) && !publishing ? <Button Label="发新任务" Style="Secondary" onClick={() => setPublishing(true)} data-testid="publish-open" /> : null}
           <Link to={`/enroll?group=${project?.group ?? "animation"}&stage=${stage.templateKey}`} className="ui-button" data-style="Accent" data-size="Medium">
             申报这个环节
           </Link>
@@ -287,9 +321,10 @@ function ProjectEditDialog({ projectId, onClose }: { projectId: string; onClose:
   const [planEndOn, setPlanEndOn] = useState(p.planEndOn);
   const [feishuRoot, setFeishuRoot] = useState(p.feishuRoot ?? "");
   const [status, setStatus] = useState<ProjectStatus>(p.status);
+  const [cycleDays, setCycleDays] = useState(String(p.cycleDays ?? 7));
   const [error, setError] = useState<string | null>(null);
   const save = () => {
-    const r = dispatch("project.update", { projectId, name, code, planEndOn, feishuRoot: feishuRoot || null, status }, { quiet: true });
+    const r = dispatch("project.update", { projectId, name, code, planEndOn, feishuRoot: feishuRoot || null, status, cycleDays: Number(cycleDays) || 7 }, { quiet: true });
     if (!r.ok) {
       setError(r.error.message);
       return;
@@ -314,6 +349,7 @@ function ProjectEditDialog({ projectId, onClose }: { projectId: string; onClose:
         <TextField label="项目名字" value={name} onChange={(e) => setName(e.target.value)} />
         <TextField label="代号（2–6 位大写，用在文件名里）" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
         <TextField label="计划结束" type="date" value={planEndOn} onChange={(e) => setPlanEndOn(e.target.value)} />
+        <TextField label="一周期几天（排期按这个画格子）" type="number" min={1} max={31} value={cycleDays} onChange={(e) => setCycleDays(e.target.value)} />
         <TextField label="飞书根文件夹的链接" type="url" placeholder="https://…" value={feishuRoot} onChange={(e) => setFeishuRoot(e.target.value)} />
         <SelectField label="状态" value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)}>
           {PROJECT_STATUS.map((s) => (

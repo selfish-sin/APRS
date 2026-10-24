@@ -46,7 +46,10 @@ export function folderFor(
 }
 
 /** 任务的短名字：「C009 · 中割 · B 层」。 */
-export function taskLabel(stage: Pick<StageRow, "name">, cut: Pick<CutRow, "number"> | null, task: Pick<TaskRow, "layer">, group: Group = "animation"): string {
+export const EXTRA_KIND_LABEL: Record<NonNullable<TaskRow["extra"]>["kind"], string> = { extra: "额外任务", fix: "修正", setting: "补设定" };
+
+export function taskLabel(stage: Pick<StageRow, "name">, cut: Pick<CutRow, "number"> | null, task: Pick<TaskRow, "layer"> & Partial<Pick<TaskRow, "extra">>, group: Group = "animation"): string {
+  if (task.extra) return [cut ? cutCode(cut, group) : null, `${stage.name}${EXTRA_KIND_LABEL[task.extra.kind]}`, task.extra.title].filter(Boolean).join(" · ");
   const parts: string[] = [];
   if (cut) parts.push(cutCode(cut, group));
   parts.push(stage.name);

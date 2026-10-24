@@ -5,7 +5,7 @@
  */
 import { addHours } from "../clock";
 import { compareBy, layerKey, numberKey } from "../agenda";
-import { TaskPatches, unlockReady } from "../flow";
+import { TaskPatches, blockersOf, unlockReady } from "../flow";
 import { ACTIVE_STATUS, GROUP, QUALITY, SKILL, VERDICT, type Change, type EnrollmentRow, type Group, type Id, type MemberRow, type Quality, type ReviewComment, type Skill, type StageRow, type TaskRow, type WorldRules } from "../model";
 import { fileNameFor, taskLabel } from "../naming";
 import type { ReadModel } from "../readmodel";
@@ -19,6 +19,9 @@ import {
   deadlineHours,
   hoursOf,
   pointsOf,
+  stageLocked,
+  taskPoints,
+  taskRate,
 } from "../rules";
 import { stageTemplate } from "../templates";
 import { guarded, insert, isAdmin, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustMember, ok, optInteger, optText, reject, round1, update, type Ctx } from "./core";
@@ -61,23 +64,49 @@ function enrollmentFor(rm: ReadModel, memberId: Id, group: Group, stageKey: stri
   return rm.where("enrollments", { memberId, group, stageKey })[0];
 }
 
-function claimPatch(rm: ReadModel, ctx: Ctx, stage: StageRow, task: TaskRow, memberId: Id | null): Partial<TaskRow> {
+/** 接 / 派：记下现在的工时（之后改 Tn 不影响这张），按环节的时限参数算时限。 */
+function claimPatch(rm: ReadModel, ctx: Ctx, stage: StageRow, task: TaskRow, memberId: Id | null, assignedById: Id | null = null): Partial<TaskRow> {
+  const rate = { tn: stage.tn, per: stage.per };
   return {
     status: "claimed",
     assigneeId: memberId,
     claimedAt: ctx.worldNow,
-    dueAt: addHours(ctx.worldNow, deadlineHours(stage, task, rulesOf(rm, ctx))),
+    dueAt: addHours(ctx.worldNow, deadlineHours(stage, { ...task, rate }, rulesOf(rm, ctx))),
+    rate,
+    assignedById,
   };
+}
+
+/** 锁成「只给指派的人」的环节：没被指派的人不能接（SPEC §13.1）。 */
+export const LOCKED_STAGE_MESSAGE = "这个环节只给指派的人，找管理员";
+
+function mayWork(rm: ReadModel, memberId: Id, group: Group, stage: StageRow): boolean {
+  if (!stageLocked(stage)) return true;
+  return !!enrollmentFor(rm, memberId, group, stage.templateKey)?.assigned;
+}
+
+/** 第一次认领别的环节：自动加一条报到（熟练度 0，标「自己认领」）。 */
+function autoEnroll(rm: ReadModel, ctx: Ctx, memberId: Id, group: Group, stageKey: string, changes: Change[]): EnrollmentRow {
+  const e = insert(ctx, "enrollments", { memberId, group, stageKey, skill: 0 as Skill, maxActive: DEFAULT_MAX_ACTIVE, origin: "claimed" as const, assigned: false });
+  changes.push(e.change);
+  return e.row as EnrollmentRow;
 }
 
 /**
  * 按卡号顺序找下一张可接的：先按项目开始的日子，再按卡号、层、环节顺序（只比 ASCII，最后按 id）。
  */
-export function nextOpenTask(rm: ReadModel, group: Group, stageKey: string): TaskRow | undefined {
+export function nextOpenTask(rm: ReadModel, group: Group, stageKey: string, memberId: Id | null = null): TaskRow | undefined {
   const projects = new Map(rm.where("projects", { group }).filter((p) => p.status === "active").map((p) => [p.id, p]));
-  const stageIds = new Set(rm.where("stages", { templateKey: stageKey }).filter((s) => projects.has(s.projectId)).map((s) => s.id));
+  const stageIds = new Set(
+    rm
+      .where("stages", { templateKey: stageKey })
+      .filter((s) => projects.has(s.projectId))
+      .filter((s) => !memberId || mayWork(rm, memberId, group, s))
+      .map((s) => s.id)
+  );
   const cuts = new Map<Id, number>();
-  const open = rm.where("tasks", { status: "open" }).filter((t) => stageIds.has(t.stageId) && !t.outsourced);
+  // 随时发的新任务（额外 · 修正 · 补设定）不自动配，要点名认领。
+  const open = rm.where("tasks", { status: "open" }).filter((t) => stageIds.has(t.stageId) && !t.outsourced && !t.extra);
   for (const t of open) if (t.cutId && !cuts.has(t.cutId)) cuts.set(t.cutId, rm.get("cuts", t.cutId)?.number ?? 0);
   return open.sort(
     compareBy<TaskRow>(
@@ -119,19 +148,22 @@ export const enroll = guarded<EnrollInput>((rm, input, ctx) => {
   const maxActive = optInteger(input.maxActive, "同时最多几张", 1, 9) ?? DEFAULT_MAX_ACTIVE;
   const changes: Change[] = [];
   const existing = enrollmentFor(rm, member.id, group, t.key);
+  // 这个环节在所有项目里都锁成「只给指派的人」、他又没被指派：不让报到。
+  const stagesHere = rm.where("stages", { templateKey: t.key }).filter((s) => rm.get("projects", s.projectId)?.group === group);
+  if (!existing?.assigned && stagesHere.length > 0 && stagesHere.every((s) => stageLocked(s))) reject("forbidden", LOCKED_STAGE_MESSAGE);
   let enrollmentId: Id;
   if (existing) {
     enrollmentId = existing.id;
     const c = update("enrollments", existing, { skill, maxActive });
     if (c) changes.push(c);
   } else {
-    const e = insert(ctx, "enrollments", { memberId: member.id, group, stageKey: t.key, skill, maxActive });
+    const e = insert(ctx, "enrollments", { memberId: member.id, group, stageKey: t.key, skill, maxActive, origin: "self" as const, assigned: false });
     enrollmentId = e.row.id;
     changes.push(e.change);
   }
   const created: Record<string, Id> = { enrollmentId };
   if (activeCount(rm, member.id, group, t.key) < maxActive) {
-    const next = nextOpenTask(rm, group, t.key);
+    const next = nextOpenTask(rm, group, t.key, member.id);
     if (next) {
       const stage = stageOf(rm, ctx, next);
       const c = update("tasks", next, claimPatch(rm, ctx, stage, next, member.id));
@@ -174,14 +206,32 @@ export const claimTask = guarded<ClaimInput>((rm, input, ctx) => {
     const group = groupOf(rm, task);
     const label = labelOf(rm, task, stage);
     if (task.status !== "open") reject("state", `${label}现在不能接（${task.status === "locked" ? "上游还没完" : "已经有人接了或做完了"}）`);
-    const e = enrollmentFor(rm, me.id, group, stage.templateKey);
-    if (!e) reject("state", `先报到「${stage.name}」这个环节，才能接这张`);
+    if (!mayWork(rm, me.id, group, stage)) reject("forbidden", LOCKED_STAGE_MESSAGE);
+    const changes: Change[] = [];
+    // 不止能接自己报到的环节：第一次认领别的环节时自动报到（熟练度 0，「自己认领」）。
+    const had = enrollmentFor(rm, me.id, group, stage.templateKey);
+    const e = had ?? autoEnroll(rm, ctx, me.id, group, stage.templateKey, changes);
     if (activeCount(rm, me.id, group, stage.templateKey) >= e.maxActive) reject("state", `你手上已经有 ${e.maxActive} 张「${stage.name}」了，先交掉一张`);
     const c = update("tasks", task, claimPatch(rm, ctx, stage, task, me.id));
-    return ok(c ? [c] : [], { taskId: task.id });
+    if (c) changes.push(c);
+    return ok(changes, { taskId: task.id, ...(had ? {} : { enrollmentId: e.id }) });
   }
   let mine = rm.where("enrollments", { memberId: me.id });
   if (input.stageKey) mine = mine.filter((e) => e.stageKey === input.stageKey && (!input.group || e.group === input.group));
+  if (mine.length === 0 && input.stageKey && input.group) {
+    // 认领一个还没报到的环节：先看有没有能接的，有就自动报到再接。
+    const group = mustBeOneOf(input.group, GROUP, "组");
+    if (!stageTemplate(group, input.stageKey)) reject("not_found", "这个组里没有这个环节");
+    const anyOpen = rm.where("stages", { templateKey: input.stageKey }).filter((s) => rm.get("projects", s.projectId)?.group === group);
+    if (anyOpen.length && anyOpen.every((s) => !mayWork(rm, me.id, group, s))) reject("forbidden", LOCKED_STAGE_MESSAGE);
+    const next = nextOpenTask(rm, group, input.stageKey, me.id);
+    if (!next) reject("state", "这个环节现在没有可接的任务");
+    const changes: Change[] = [];
+    const e = autoEnroll(rm, ctx, me.id, group, input.stageKey, changes);
+    const c = update("tasks", next, claimPatch(rm, ctx, stageOf(rm, ctx, next), next, me.id));
+    if (c) changes.push(c);
+    return ok(changes, { taskId: next.id, enrollmentId: e.id });
+  }
   if (mine.length === 0) reject("state", input.stageKey ? "你还没有报到这个环节" : "你还没有报到任何环节，先去报到");
   mine.sort(compareBy<EnrollmentRow>((e) => e.createdAt));
   let full = 0;
@@ -190,7 +240,7 @@ export const claimTask = guarded<ClaimInput>((rm, input, ctx) => {
       full += 1;
       continue;
     }
-    const next = nextOpenTask(rm, e.group, e.stageKey);
+    const next = nextOpenTask(rm, e.group, e.stageKey, me.id);
     if (!next) continue;
     const stage = stageOf(rm, ctx, next);
     const c = update("tasks", next, claimPatch(rm, ctx, stage, next, me.id));
@@ -321,28 +371,36 @@ export const reopenTask = guarded<ReopenInput>((rm, input, ctx) => {
 });
 
 export interface AssignInput {
-  taskId: Id;
+  taskId?: Id;
+  /** 一批（选几卡）一起派给同一个人（SPEC §13.1）。 */
+  taskIds?: Id[];
   memberId?: Id | null;
   /** 外包：交的人不在工会里，写个名字，由管理员代交。 */
   outsourceName?: string | null;
 }
 
 export const assignTask = guarded<AssignInput>((rm, input, ctx) => {
-  mustAdmin(rm, ctx, "指派任务");
-  const task = mustGet(rm, ctx, "tasks", input.taskId, "任务");
-  const stage = stageOf(rm, ctx, task);
-  const label = labelOf(rm, task, stage);
-  if (task.status !== "open" && task.status !== "reclaimed") reject("state", `${label}现在不能指派（${task.status === "locked" ? "上游还没完" : "已经有人在做"}）`);
+  const me = mustAdmin(rm, ctx, "指派任务");
+  const ids = Array.from(new Set([...(input.taskId ? [input.taskId] : []), ...(Array.isArray(input.taskIds) ? input.taskIds : [])]));
+  if (ids.length === 0) reject("invalid", "选要派的任务");
+  if (ids.length > 60) reject("invalid", "一次最多派 60 张");
   const outsourceName = optText(input.outsourceName, 24);
   if (input.memberId && outsourceName) reject("invalid", "指派给成员和外包只能选一个");
   if (!input.memberId && !outsourceName) reject("invalid", "选一个成员，或写外包的名字");
-  if (input.memberId) {
-    const m = mustGet(rm, ctx, "members", input.memberId, "成员");
-    const c = update("tasks", task, { ...claimPatch(rm, ctx, stage, task, m.id), outsourced: false, outsourceName: null });
-    return ok(c ? [c] : [], { taskId: task.id });
+  const m = input.memberId ? mustGet(rm, ctx, "members", input.memberId, "成员") : null;
+  const changes: Change[] = [];
+  for (const id of ids) {
+    const task = mustGet(rm, ctx, "tasks", id, "任务");
+    const stage = stageOf(rm, ctx, task);
+    const label = labelOf(rm, task, stage);
+    if (task.status !== "open" && task.status !== "reclaimed") reject("state", `${label}现在不能指派（${task.status === "locked" ? "上游还没完" : "已经有人在做"}）`);
+    const patch = m
+      ? { ...claimPatch(rm, ctx, stage, task, m.id, me.id), outsourced: false, outsourceName: null }
+      : { ...claimPatch(rm, ctx, stage, task, null, me.id), outsourced: true, outsourceName };
+    const c = update("tasks", task, patch);
+    if (c) changes.push(c);
   }
-  const c = update("tasks", task, { ...claimPatch(rm, ctx, stage, task, null), outsourced: true, outsourceName });
-  return ok(c ? [c] : [], { taskId: task.id });
+  return ok(changes, { taskId: ids[0] });
 });
 
 // ---------------------------------------------------------------------------
@@ -393,9 +451,10 @@ export const reviewTask = guarded<ReviewInput>((rm, input, ctx) => {
   const stage = stageOf(rm, ctx, task);
   const label = labelOf(rm, task, stage);
   if (task.status !== "submitted") reject("state", `${label}现在没有等审核的版本`);
-  if (stage.reviewerId && stage.reviewerId !== me.id && !isAdmin(me)) {
-    const who = rm.get("members", stage.reviewerId)?.nickname ?? "指定的审核员";
-    reject("forbidden", `「${stage.name}」由${who}审核`);
+  const reviewerId = task.extra?.reviewerId ?? stage.reviewerId;
+  if (reviewerId && reviewerId !== me.id && !isAdmin(me)) {
+    const who = rm.get("members", reviewerId)?.nickname ?? "指定的审核员";
+    reject("forbidden", task.extra ? `「${task.extra.title}」由${who}审核` : `「${stage.name}」由${who}审核`);
   }
   const sub = rm.where("submissions", { taskId: task.id, versionNo: task.versions })[0];
   if (!sub) reject("state", "找不到要审的那一版");
@@ -468,7 +527,7 @@ export const reviewTask = guarded<ReviewInput>((rm, input, ctx) => {
   const group = groupOf(rm, task);
   if (sub.byMemberId && !task.outsourced) {
     const skill = enrollmentFor(rm, sub.byMemberId, group, stage.templateKey)?.skill ?? 0;
-    const hours = round1(hoursOf(stage, task.workload));
+    const hours = task.extra?.fixedPoints != null ? 0 : round1(hoursOf(taskRate(stage, task), task.workload));
     const l = insert(ctx, "ledger", {
       memberId: sub.byMemberId,
       taskId: task.id,
@@ -476,7 +535,7 @@ export const reviewTask = guarded<ReviewInput>((rm, input, ctx) => {
       hours,
       factor: round1(stage.control + skill),
       quality,
-      points: pointsOf(hoursOf(stage, task.workload), stage.control, skill, quality),
+      points: taskPoints(stage, task, skill, quality),
       at: ctx.worldNow,
       note: null,
     });
@@ -503,5 +562,15 @@ export const reviewTask = guarded<ReviewInput>((rm, input, ctx) => {
   const acc = new TaskPatches(rm);
   acc.set(task, { status: "passed", versions: version, passedAt: ctx.worldNow, dueAt: task.dueAt });
   unlockReady(rm, acc, task.projectId);
+  // 「要等它」的新任务通过了：发布时锁回去的那几张放回可接（别的新任务还挡着的除外）。
+  if (task.extra?.blocking && task.extra.relocked?.length) {
+    const stages = rm.where("stages", { projectId: task.projectId }).filter((s) => !s.archivedAt);
+    const all = acc.projectTasks(task.projectId);
+    for (const id of task.extra.relocked) {
+      const t = acc.get(id);
+      const st = t ? stages.find((s) => s.id === t.stageId) : undefined;
+      if (t && st && t.status === "locked" && blockersOf(t, st, stages, all).length === 0) acc.set(t, { status: "open" });
+    }
+  }
   return ok([...acc.changes(), ...changes], created);
 });

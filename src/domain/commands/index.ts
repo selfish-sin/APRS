@@ -10,6 +10,7 @@ import { assignTask, claimTask, enroll, expireTask, reclaimTask, releaseTask, re
 import { makeRuling, openThread, replyThread, resolveThread } from "./thread";
 import { addFile, archiveFile, moveFile, renameFile, tagFile } from "./file";
 import { addPin, reopenPin, replyPin, resolvePin } from "./pin";
+import { assignRole, publishTask, setStageLock, setStagePeriod, setStageRate, unassignRole } from "./flex";
 import { addBlock, archivePage, createPage, moveBlock, removeBlock, renamePage, updateBlock } from "./page";
 
 export const COMMANDS = {
@@ -30,6 +31,12 @@ export const COMMANDS = {
   "task.reopen": reopenTask,
   "task.assign": assignTask,
   "task.review": reviewTask,
+  "task.publish": publishTask,
+  "role.assign": assignRole,
+  "role.unassign": unassignRole,
+  "stage.set_lock": setStageLock,
+  "stage.set_period": setStagePeriod,
+  "stage.set_rate": setStageRate,
   "project.create": createProject,
   "project.update": updateProject,
   "stage.set_reviewer": setReviewer,

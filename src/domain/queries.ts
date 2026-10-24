@@ -39,7 +39,7 @@ import type {
 } from "./model";
 import { ACTIVE_STATUS, PHASE } from "./model";
 import { cutCode, fileNameFor, folderFor, taskLabel } from "./naming";
-import { HOURS_PER_DAY, deadlineFactorOf, hoursOf, levelOf, rateFor, rewardOf, type LevelInfo } from "./rules";
+import { HOURS_PER_DAY, deadlineFactorOf, hoursOf, levelOf, rateFor, rewardOf, stageLocked, type LevelInfo } from "./rules";
 import { GROUPS, groupTemplate, type StageTemplate } from "./templates";
 import { isAdmin, isReviewer } from "./commands/core";
 
@@ -64,6 +64,10 @@ interface Index {
   tasksByProject: Map<Id, TaskRow[]>;
   tasksByStage: Map<Id, TaskRow[]>;
   tasksByCut: Map<Id, TaskRow[]>;
+  /** 随时发的新任务（SPEC §13.3）。 */
+  extras: TaskRow[];
+  extrasByStage: Map<Id, TaskRow[]>;
+  extrasByCut: Map<Id, TaskRow[]>;
   subsByTask: Map<Id, SubmissionRow[]>;
   reviewsByTask: Map<Id, ReviewRow[]>;
   threads: ThreadRow[];
@@ -120,6 +124,9 @@ export function indexOf(state: WorldState): Index {
     tasksByProject: new Map(),
     tasksByStage: new Map(),
     tasksByCut: new Map(),
+    extras: [],
+    extrasByStage: new Map(),
+    extrasByCut: new Map(),
     subsByTask: new Map(),
     reviewsByTask: new Map(),
     threads: live(state.threads).sort(compareBy<ThreadRow>((t) => timeKey(t.at))),
@@ -143,6 +150,13 @@ export function indexOf(state: WorldState): Index {
   for (const c of cuts) push(idx.cutsByProject, c.projectId, c);
   for (const list of Array.from(idx.cutsByProject.values())) list.sort(byNumber);
   for (const t of tasks) {
+    if (t.extra) {
+      // 随时发的新任务（额外 · 修正 · 补设定）不进流程的统计；另外按环节、按挂着的卡收。
+      idx.extras.push(t);
+      push(idx.extrasByStage, t.stageId, t);
+      for (const cid of t.extra.cutIds) push(idx.extrasByCut, cid, t);
+      continue;
+    }
     push(idx.tasksByProject, t.projectId, t);
     push(idx.tasksByStage, t.stageId, t);
     if (t.cutId) push(idx.tasksByCut, t.cutId, t);
@@ -424,6 +438,8 @@ export interface GridCell {
   tasks: GridTask[];
   /** 合起来的状态（几层里最要紧的那个）。 */
   status: TaskStatus | null;
+  /** 挂在这一格上的额外 / 修正 / 补设定任务（格子右上角的小数字）。 */
+  extras: TaskRow[];
 }
 
 export interface GridRow {
@@ -478,15 +494,16 @@ export function gridOf(state: WorldState, projectId: Id, filter: GridFilter = "a
     .filter((s) => s.grain === "project")
     .map((stage) => {
       const tasks = (idx.tasksByStage.get(stage.id) ?? []).map((t) => gridTask(state, t, memberId));
-      return { stage, tasks, status: cellStatus(tasks) };
+      return { stage, tasks, status: cellStatus(tasks), extras: idx.extrasByStage.get(stage.id) ?? [] };
     });
   const openByCut = new Map<Id, number>();
   for (const t of idx.threads) if (t.cutId && t.status === "open" && (t.kind === "todo" || t.kind === "ask")) openByCut.set(t.cutId, (openByCut.get(t.cutId) ?? 0) + 1);
   const all: GridRow[] = (idx.cutsByProject.get(projectId) ?? []).map((cut) => {
     const cutTasks = idx.tasksByCut.get(cut.id) ?? [];
+    const cutExtras = idx.extrasByCut.get(cut.id) ?? [];
     const cells = columns.map((stage) => {
       const tasks = cutTasks.filter((t) => t.stageId === stage.id).map((t) => gridTask(state, t, memberId));
-      return { stage, tasks, status: cellStatus(tasks) };
+      return { stage, tasks, status: cellStatus(tasks), extras: cutExtras.filter((x) => x.stageId === stage.id) };
     });
     const openThreads = openByCut.get(cut.id) ?? 0;
     const stuck = openThreads > 0 || cells.some((c) => c.tasks.some((t) => t.stuck));
@@ -567,6 +584,8 @@ export interface Quest {
   countdown: ReturnType<typeof countdownZh> | null;
   /** 退回时最近一次的意见。 */
   lastReturn: ReviewRow | null;
+  /** 管理员直接派的：谁派的（「白鹭派给你的」）。 */
+  assignedBy: MemberRow | null;
 }
 
 export function skillOf(state: WorldState, memberId: Id | null, group: Group, stageKey: string): number {
@@ -586,7 +605,8 @@ export function questOf(state: WorldState, task: TaskRow, memberId: Id | null = 
   return {
     view,
     indicator,
-    reward: rewardOf(view.stage, task.workload, skillOf(state, memberId, view.project.group, view.stage.templateKey)),
+    reward: rewardOf(view.stage, task.workload, skillOf(state, memberId, view.project.group, view.stage.templateKey), task),
+    assignedBy: task.assignedById ? memberById(state, task.assignedById) ?? null : null,
     dueAt: task.status === "submitted" ? null : task.dueAt,
     remainingMs,
     countdown: remainingMs === null ? null : countdownZh(remainingMs),
@@ -620,8 +640,9 @@ export function canReview(state: WorldState, memberId: Id, task: TaskRow): { ok:
   if (!isReviewer(me)) return { ok: false, reason: "只有审核员和管理员可以审核" };
   if (task.status !== "submitted") return { ok: false, reason: "现在没有等审核的版本" };
   const stage = stageById(state, task.stageId);
-  if (stage?.reviewerId && stage.reviewerId !== memberId && !isAdmin(me)) {
-    return { ok: false, reason: `「${stage.name}」由${memberById(state, stage.reviewerId)?.nickname ?? "指定的审核员"}审核` };
+  const reviewerId = task.extra?.reviewerId ?? stage?.reviewerId ?? null;
+  if (stage && reviewerId && reviewerId !== memberId && !isAdmin(me)) {
+    return { ok: false, reason: `「${task.extra ? task.extra.title : stage.name}」由${memberById(state, reviewerId)?.nickname ?? "指定的审核员"}审核` };
   }
   const subs = submissionsOf(state, task.id);
   if (subs[subs.length - 1]?.byMemberId === memberId) return { ok: false, reason: "这一版是你交的，要别人来审" };
@@ -778,7 +799,7 @@ export function timelineOfCut(state: WorldState, cutId: Id): TimelineItem[] {
   const cut = idx.cutById.get(cutId);
   if (!cut) return [];
   const project = idx.projectById.get(cut.projectId);
-  const tasks = idx.tasksByCut.get(cutId) ?? [];
+  const tasks = [...(idx.tasksByCut.get(cutId) ?? []), ...(idx.extrasByCut.get(cutId) ?? [])];
   const taskIds = new Set(tasks.map((t) => t.id));
   const items: TimelineItem[] = [];
   const stageOfTask = (t: TaskRow | undefined) => (t ? idx.stageById.get(t.stageId) ?? null : null);
@@ -1008,8 +1029,31 @@ export function feedText(state: WorldState, e: JournalEntry): string | null {
       return `${who} 收回了 ${taskShort(state, p.taskId)}`;
     case "task.reopen":
       return `${who} 重新放出了 ${taskShort(state, p.taskId)}`;
-    case "task.assign":
-      return `${who} 把 ${taskShort(state, p.taskId)} 交给了 ${p.memberId ? memberById(state, p.memberId as Id)?.nickname ?? "成员" : `外包（${String(p.outsourceName ?? "")}）`}`;
+    case "task.assign": {
+      const ids = Array.isArray(p.taskIds) && p.taskIds.length ? (p.taskIds as Id[]) : [p.taskId as Id];
+      const what = ids.length > 1 ? `${taskShort(state, ids[0])} 等 ${ids.length} 张` : taskShort(state, ids[0]);
+      return `${who} 把 ${what} 派给了 ${p.memberId ? memberById(state, p.memberId as Id)?.nickname ?? "成员" : `外包（${String(p.outsourceName ?? "")}）`}`;
+    }
+    case "task.publish": {
+      const t = created.taskId ? state.tasks[created.taskId] : undefined;
+      const stage = t ? stageById(state, t.stageId) : undefined;
+      if (!t?.extra) return null;
+      const kind = { extra: "额外任务", fix: "修正", setting: "补设定" }[t.extra.kind];
+      const to = t.assigneeId ? `，派给 ${memberById(state, t.assigneeId)?.nickname ?? "成员"}` : "，等人认领";
+      return `${who} 在「${stage?.name ?? "环节"}」发了一张${kind}：${t.extra.title}${to}`;
+    }
+    case "role.assign":
+    case "role.unassign": {
+      const name = groupTemplate((p.group as Group) ?? "animation").stages.find((s) => s.key === p.stageKey)?.name ?? "环节";
+      const m = memberById(state, p.memberId as Id)?.nickname ?? "成员";
+      return e.command === "role.assign" ? `${who} 给 ${m} 指派了职位「${name}」` : `${who} 撤掉了 ${m} 的职位「${name}」`;
+    }
+    case "stage.set_lock":
+      return `${who} 把「${stageById(state, p.stageId as Id)?.name ?? "环节"}」${p.locked ? "锁成只给指派的人" : "放开给大家认领"}`;
+    case "stage.set_period":
+      return `${who} 改了「${stageById(state, p.stageId as Id)?.name ?? "环节"}」的计划周期（第 ${String(p.startWeek)} 周起，${String(p.weeks)} 周）`;
+    case "stage.set_rate":
+      return `${who} 改了「${stageById(state, p.stageId as Id)?.name ?? "环节"}」的时限参数`;
     case "project.create":
       return `${who} 开了项目「${projectById(state, created.projectId)?.name ?? String(p.name ?? "")}」`;
     case "project.update":
@@ -1088,6 +1132,10 @@ export interface EnrollOption {
   active: number;
   tn: number;
   per: number;
+  /** 进行中的项目里这个环节都锁成「只给指派的人」。 */
+  locked: boolean;
+  /** 锁着、我又没被指派。 */
+  lockedForMe: boolean;
 }
 
 export function enrollOptions(state: WorldState, memberId: Id | null, group: Group): EnrollOption[] {
@@ -1105,8 +1153,13 @@ export function enrollOptions(state: WorldState, memberId: Id | null, group: Gro
         if (memberId && task.assigneeId === memberId && ACTIVE_STATUS.includes(task.status)) active += 1;
       }
     const rate = rateFor(idx.world?.rules, group, t.key);
+    const mineRow = memberId ? idx.enrollments.find((e) => e.memberId === memberId && e.group === group && e.stageKey === t.key) ?? null : null;
+    const stagesHere = Array.from(stageIds).map((id) => idx.stageById.get(id)!).filter(Boolean);
+    const lockedAll = stagesHere.length > 0 && stagesHere.every((s) => stageLocked(s));
     return {
       template: t,
+      locked: lockedAll,
+      lockedForMe: lockedAll && !mineRow?.assigned,
       open,
       enrolled: new Set(idx.enrollments.filter((e) => e.group === group && e.stageKey === t.key).map((e) => e.memberId)).size,
       mine: memberId ? idx.enrollments.find((e) => e.memberId === memberId && e.group === group && e.stageKey === t.key) ?? null : null,
@@ -1412,4 +1465,144 @@ export function usedShas(state: WorldState): { sha256: string; size: number; mim
   const seen = new Map<string, { sha256: string; size: number; mime: string; name: string }>();
   for (const f of Object.values(state.files ?? {})) if (!seen.has(f.sha256)) seen.set(f.sha256, { sha256: f.sha256, size: f.size, mime: f.mime, name: f.name });
   return Array.from(seen.values());
+}
+
+// ---------------------------------------------------------------------------
+// 灵活性（SPEC §13）：随时发的新任务 · 职位 · 排期
+// ---------------------------------------------------------------------------
+
+/** 一个环节上发过的额外 / 修正 / 补设定任务（新的在前）。 */
+export function extrasOfStage(state: WorldState, stageId: Id): TaskRow[] {
+  return [...(indexOf(state).extrasByStage.get(stageId) ?? [])].sort(compareBy<TaskRow>((t) => timeKey(t.extra?.at ?? t.createdAt))).reverse();
+}
+
+export interface MemberRoles {
+  /** 管理员指派的职位。 */
+  assigned: { enrollment: EnrollmentRow; name: string }[];
+  /** 自己报到 / 自己认领做过的环节（没被指派的）。 */
+  own: { enrollment: EnrollmentRow; name: string; claimed: boolean; done: number }[];
+}
+
+export function memberRoles(state: WorldState, memberId: Id): MemberRoles {
+  const idx = indexOf(state);
+  const mine = idx.enrollments.filter((e) => e.memberId === memberId);
+  const nameOf = (e: EnrollmentRow) => groupTemplate(e.group).stages.find((t) => t.key === e.stageKey)?.name ?? e.stageKey;
+  const done = (e: EnrollmentRow) =>
+    idx.tasks.filter((t) => {
+      if (t.status !== "passed") return false;
+      const s = idx.stageById.get(t.stageId);
+      const p = idx.projectById.get(t.projectId);
+      return s?.templateKey === e.stageKey && p?.group === e.group && (idx.subsByTask.get(t.id) ?? []).some((x) => x.byMemberId === memberId);
+    }).length;
+  return {
+    assigned: mine.filter((e) => e.assigned).map((enrollment) => ({ enrollment, name: nameOf(enrollment) })),
+    own: mine.filter((e) => !e.assigned).map((enrollment) => ({ enrollment, name: nameOf(enrollment), claimed: (enrollment.origin ?? "self") === "claimed", done: done(enrollment) })),
+  };
+}
+
+export interface ScheduleRow {
+  stage: StageRow;
+  /** 计划（第几周开始、到第几周结束，1 起）。 */
+  plan: { start: number; end: number; custom: boolean };
+  /** 实际：从第一张被接到最后一张通过（没完就到今天）。没开始 = null。 */
+  actual: { start: number; end: number; done: boolean } | null;
+  progress: number;
+  /** 比计划多出来的周数（0 = 没超）。 */
+  overrun: number;
+  /** 下游计划开始早于上游计划结束：提醒一句（不拦）。 */
+  warning: string | null;
+}
+
+export interface Schedule {
+  project: ProjectRow;
+  cycleDays: number;
+  /** 一共画几周。 */
+  weeks: number;
+  /** 今天在第几周。 */
+  today: number;
+  /** 每一周的开始日子。 */
+  weekStarts: string[];
+  phases: { phase: Phase; rows: ScheduleRow[] }[];
+}
+
+/** 第几周（1 起）：从项目开始那天算，每 cycleDays 天一格。 */
+export function weekOf(project: ProjectRow, date: string): number {
+  const days = daysBetween(project.startOn, date);
+  return Math.floor(days / (project.cycleDays ?? 7)) + 1;
+}
+
+/** 没改过计划时的默认值：沿着上游往下排，一个环节一格接一格（最长那条路正好排满计划工期）。 */
+export function defaultPlans(stages: StageRow[], totalWeeks: number): Map<Id, { start: number; end: number }> {
+  const live = stages.filter((s) => !s.archivedAt).sort(bySort);
+  const byKey = new Map(live.map((s) => [s.templateKey, s]));
+  const depth = new Map<string, number>();
+  const depthOf = (s: StageRow, seen = new Set<string>()): number => {
+    const hit = depth.get(s.templateKey);
+    if (hit !== undefined) return hit;
+    if (seen.has(s.templateKey)) return 0;
+    seen.add(s.templateKey);
+    const ups = s.upstream.map((k) => byKey.get(k)).filter((x): x is StageRow => !!x);
+    const d = ups.length ? Math.max(...ups.map((u) => depthOf(u, seen))) + 1 : 0;
+    depth.set(s.templateKey, d);
+    return d;
+  };
+  for (const s of live) depthOf(s);
+  const levels = Math.max(1, ...Array.from(depth.values()).map((d) => d + 1));
+  const per = Math.max(1, Math.floor(totalWeeks / levels));
+  const out = new Map<Id, { start: number; end: number }>();
+  for (const s of live) {
+    const d = depth.get(s.templateKey) ?? 0;
+    const start = d * per + 1;
+    out.set(s.id, { start, end: start + per - 1 });
+  }
+  return out;
+}
+
+export function scheduleOf(state: WorldState, projectId: Id): Schedule | null {
+  const idx = indexOf(state);
+  const project = idx.projectById.get(projectId);
+  if (!project) return null;
+  const cycleDays = project.cycleDays ?? 7;
+  const stages = idx.stagesByProject.get(projectId) ?? [];
+  const planWeeks = Math.max(1, weekOf(project, project.planEndOn));
+  const defaults = defaultPlans(stages, planWeeks);
+  const today = weekOf(project, todayOf(state));
+  const plans = new Map<Id, { start: number; end: number; custom: boolean }>();
+  for (const s of stages) {
+    const d = defaults.get(s.id) ?? { start: 1, end: 1 };
+    plans.set(s.id, s.plan ? { start: s.plan.startWeek, end: s.plan.startWeek + s.plan.weeks - 1, custom: true } : { ...d, custom: false });
+  }
+  const byKey = new Map(stages.map((s) => [s.templateKey, s]));
+  const rows: ScheduleRow[] = stages.map((stage) => {
+    const tasks = idx.tasksByStage.get(stage.id) ?? [];
+    const plan = plans.get(stage.id)!;
+    const starts: string[] = [];
+    for (const t of tasks) {
+      const first = t.claimedAt ?? (idx.subsByTask.get(t.id) ?? [])[0]?.at ?? t.passedAt;
+      if (first) starts.push(localDate(first));
+    }
+    const passed = tasks.filter((t) => t.status === "passed");
+    const done = tasks.length > 0 && passed.length === tasks.length;
+    let actual: ScheduleRow["actual"] = null;
+    if (starts.length) {
+      starts.sort(cmp);
+      const endDate = done ? passed.map((t) => localDate(t.passedAt ?? t.updatedAt)).sort(cmp).pop()! : todayOf(state);
+      actual = { start: weekOf(project, starts[0]), end: Math.max(weekOf(project, starts[0]), weekOf(project, endDate)), done };
+    }
+    // 超出：实际条在计划结束以后的那一段有几周（图上画成红色的那几格）；还没开始、已经过了计划 = 晚了几周。
+    const overrun = actual ? Math.max(0, actual.end - Math.max(plan.end, actual.start - 1)) : Math.max(0, today - plan.end);
+    let warning: string | null = null;
+    for (const k of stage.upstream) {
+      const up = byKey.get(k);
+      const upPlan = up ? plans.get(up.id) : undefined;
+      if (up && upPlan && plan.start < upPlan.end) {
+        warning = `计划开始（第 ${plan.start} 周）早于上游「${up.name}」计划结束（第 ${upPlan.end} 周）`;
+        break;
+      }
+    }
+    return { stage, plan, actual, progress: tasks.length ? passed.length / tasks.length : 0, overrun, warning };
+  });
+  const weeks = Math.max(planWeeks, today, ...rows.map((r) => Math.max(r.plan.end, r.actual?.end ?? 0)));
+  const weekStarts = Array.from({ length: weeks }, (_, i) => addDays(project.startOn, i * cycleDays));
+  return { project, cycleDays, weeks, today, weekStarts, phases: PHASE.map((phase) => ({ phase, rows: rows.filter((r) => r.stage.phase === phase) })) };
 }

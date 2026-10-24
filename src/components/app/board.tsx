@@ -28,13 +28,19 @@ function Part({ t, stageName }: { t: GridTask; stageName: string }) {
 }
 
 function Cell({ cell, cutId, label }: { cell: GridCell; cutId: string; label: string }) {
-  if (!cell.tasks.length) return <span className="cell-empty" aria-hidden="true" />;
+  if (!cell.tasks.length && !cell.extras.length) return <span className="cell-empty" aria-hidden="true" />;
   const summary = cell.tasks.map((t) => partTitle(t, cell.stage.name)).join("；");
+  const extras = cell.extras.length ? `；额外 / 修正任务 ${cell.extras.length} 件` : "";
   return (
-    <Link to={`/cut/${cutId}`} className="cell" aria-label={`${label} · ${summary}`}>
+    <Link to={`/cut/${cutId}`} className="cell" aria-label={`${label} · ${summary}${extras}`} data-extras={cell.extras.length || undefined}>
       {cell.tasks.map((t) => (
         <Part key={t.task.id} t={t} stageName={cell.stage.name} />
       ))}
+      {cell.extras.length ? (
+        <span className="extra-count" data-testid="cell-extras" title={`额外 / 修正任务 ${cell.extras.length} 件`}>
+          {cell.extras.length}
+        </span>
+      ) : null}
     </Link>
   );
 }

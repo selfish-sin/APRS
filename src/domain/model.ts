@@ -161,6 +161,10 @@ export interface AccountRow extends RowHeader {
   hash: string;
 }
 
+/** 报到是怎么来的：自己报到 · 管理员指派职位 · 第一次认领别的环节时自动加的（SPEC §13.1）。 */
+export const ENROLL_ORIGIN = ["self", "assigned", "claimed"] as const;
+export type EnrollOrigin = (typeof ENROLL_ORIGIN)[number];
+
 export interface EnrollmentRow extends RowHeader {
   memberId: Id;
   group: Group;
@@ -169,6 +173,10 @@ export interface EnrollmentRow extends RowHeader {
   skill: Skill;
   /** 同时最多几张（默认 2）。 */
   maxActive: number;
+  /** 怎么来的（旧的记录没有 = 自己报到）。 */
+  origin?: EnrollOrigin;
+  /** 管理员指派了这个职位（成员卡上显示「指派」）。 */
+  assigned?: boolean;
 }
 
 export interface ProjectRow extends RowHeader {
@@ -183,6 +191,8 @@ export interface ProjectRow extends RowHeader {
   status: ProjectStatus;
   /** 飞书根文件夹（只存链接）。 */
   feishuRoot: string | null;
+  /** 一周期几天（排期按这个画格子，默认 7）。 */
+  cycleDays?: number;
 }
 
 export interface StageIndicator {
@@ -223,6 +233,18 @@ export interface StageRow extends RowHeader {
   /** 工时由管理员定（模板里是个占位数）。 */
   adminSet: boolean;
   note: string | null;
+  /** 只给指派的人（SPEC §13.1；没写 = 审核类环节锁、其余不锁）。 */
+  locked?: boolean;
+  /** 计划周期：从项目开始的第几个周期开始（1 起）、做几个周期（SPEC §13.2；没写 = 按阶段排的默认值）。 */
+  plan?: StagePlan | null;
+  /** 这个环节自己的时限系数 / 最短时限（没写 = 用工会的 1.5 / 4 小时）。 */
+  deadlineFactor?: number | null;
+  minDeadlineHours?: number | null;
+}
+
+export interface StagePlan {
+  startWeek: number;
+  weeks: number;
 }
 
 export interface CutLayer {
@@ -264,6 +286,37 @@ export interface TaskRow extends RowHeader {
   /** 枢纽派发过的时间。 */
   dispatchedAt: IsoDateTime | null;
   sort: number;
+  /** 管理员直接派的：谁派的（任务单上写「白鹭派给你的」）。 */
+  assignedById?: Id | null;
+  /** 接的时候的工时（之后改 Tn 不影响已经派出去的）。 */
+  rate?: { tn: number; per: number } | null;
+  /** 随时发的新任务（额外任务 · 修正 · 补设定，SPEC §13.3）；普通任务没有。 */
+  extra?: ExtraTask | null;
+}
+
+export const EXTRA_KIND = ["extra", "fix", "setting"] as const;
+export type ExtraKind = (typeof EXTRA_KIND)[number];
+
+export interface ExtraTask {
+  kind: ExtraKind;
+  title: string;
+  description: string | null;
+  /** 挂在哪几卡（可以不挂）。 */
+  cutIds: Id[];
+  /** 直接给一个固定活力点（不按工时算）。 */
+  fixedPoints: number | null;
+  /** 时限（小时，从接的时候算）。 */
+  deadlineHours: number;
+  /** 谁审（没写 = 这个环节的审核员）。 */
+  reviewerId: Id | null;
+  /** 勾了「这一卡要等它做完」：挂着的卡的下游等它通过。 */
+  blocking: boolean;
+  /** 附图（资料库里的文件）。 */
+  fileIds: Id[];
+  byMemberId: Id;
+  at: IsoDateTime;
+  /** 发布时因为「要等它」锁回去的任务（它通过以后放回去）。 */
+  relocked?: Id[];
 }
 
 export interface SubmissionRow extends RowHeader {

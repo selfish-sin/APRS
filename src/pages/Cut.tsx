@@ -13,6 +13,7 @@ import { FileDialog, FileTile } from "@/components/library/tiles";
 import { Viewer } from "@/components/library/Viewer";
 import { useFiles } from "@/lib/files/FilesProvider";
 import { cmp } from "@/domain/agenda";
+import { EXTRA_KIND_LABEL } from "@/domain/naming";
 import { dateTimeZh } from "@/domain/clock";
 import { formatNumber, VERDICT_LABEL } from "@/domain/labels";
 import type { Id, ThreadKind } from "@/domain/model";
@@ -41,7 +42,8 @@ export function CutPage() {
   if (!cut || !project) return <NotFound what="这一卡" />;
   const cutFiles = filesOfCut(world, cut.id);
   const stages = stagesOf(world, project.id).filter((s) => s.grain !== "project");
-  const tasks = Object.values(world.tasks).filter((t) => t.cutId === cut.id && !t.archivedAt);
+  const tasks = Object.values(world.tasks).filter((t) => t.cutId === cut.id && !t.archivedAt && !t.extra);
+  const extras = Object.values(world.tasks).filter((t) => !t.archivedAt && t.extra?.cutIds.includes(cut.id));
   const todos = Object.values(world.threads).filter((t) => t.cutId === cut.id && t.kind === "todo" && t.status === "open" && !t.archivedAt);
   const code = cutName(world, cut);
 
@@ -77,6 +79,29 @@ export function CutPage() {
                 <div className="list-main">
                   <ThreadBody thread={t} />
                 </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {extras.length ? (
+        <section className="card" aria-labelledby="extras-title" data-testid="cut-extras">
+          <h2 id="extras-title" className="t-heading-18">
+            额外 · 修正 · 补设定 <span className="count">{extras.length}</span>
+          </h2>
+          <ul className="list">
+            {extras.map((t) => (
+              <li key={t.id} style={{ flexDirection: "column", alignItems: "stretch" }}>
+                <div className="row">
+                  <Tag tone={t.extra!.kind === "fix" ? "danger" : t.extra!.kind === "setting" ? "lilac" : "sky"}>{EXTRA_KIND_LABEL[t.extra!.kind]}</Tag>
+                  <span className="t-body-14m break">{t.extra!.title}</span>
+                  <StatusPill Status={t.status} />
+                  {t.extra!.blocking ? <Tag tone="warning">这一卡要等它</Tag> : null}
+                  <span className="label">{world.stages[t.stageId]?.name}</span>
+                </div>
+                {t.extra!.description ? <span className="label break">{t.extra!.description}</span> : null}
+                <TaskActions task={t} />
               </li>
             ))}
           </ul>

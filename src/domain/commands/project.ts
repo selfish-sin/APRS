@@ -215,6 +215,8 @@ export interface UpdateProjectInput {
   planEndOn?: string;
   feishuRoot?: string | null;
   status?: ProjectStatus;
+  /** 一周期几天（排期用，默认 7）。 */
+  cycleDays?: number;
 }
 
 export const updateProject = guarded<UpdateProjectInput>((rm, input, ctx) => {
@@ -228,6 +230,7 @@ export const updateProject = guarded<UpdateProjectInput>((rm, input, ctx) => {
   if ((patch.planEndOn ?? p.planEndOn) < (patch.startOn ?? p.startOn)) reject("invalid", "计划结束不能早于开始");
   if (input.feishuRoot !== undefined) patch.feishuRoot = optLink(input.feishuRoot, "飞书根文件夹");
   if (input.status !== undefined) patch.status = mustBeOneOf(input.status, PROJECT_STATUS, "状态");
+  if (input.cycleDays !== undefined) patch.cycleDays = optInteger(input.cycleDays, "一周期几天", 1, 31) ?? 7;
   const ch = update("projects", p, patch);
   return ok(ch ? [ch] : []);
 });

@@ -104,9 +104,19 @@ export function checkIntegrity(state: WorldState): IntegrityProblem[] {
     if (stage && stage.projectId !== t.projectId) problems.push({ table: "tasks", id: t.id, field: "stageId", problem: "stage is in another project" });
     const cut = t.cutId ? state.cuts[t.cutId] : undefined;
     if (cut && cut.projectId !== t.projectId) problems.push({ table: "tasks", id: t.id, field: "cutId", problem: "cut is in another project" });
-    if (stage && stage.grain === "project" && t.cutId) problems.push({ table: "tasks", id: t.id, field: "cutId", problem: "project-level task has a cut" });
-    if (stage && stage.grain !== "project" && !t.cutId) problems.push({ table: "tasks", id: t.id, field: "cutId", problem: "per-cut task without a cut" });
-    if (stage && stage.grain === "layer" && !t.layer) problems.push({ table: "tasks", id: t.id, field: "layer", problem: "layer task without a layer" });
+    if (t.extra) {
+      // 随时发的新任务：挂几卡都行（挂一卡时 cutId 就是那一卡），卡要在这个项目里。
+      for (const cid of t.extra.cutIds) {
+        const c = state.cuts[cid];
+        if (!c || c.projectId !== t.projectId) problems.push({ table: "tasks", id: t.id, field: "extra.cutIds", problem: `missing or foreign cut ${cid}` });
+      }
+      if (t.cutId && !t.extra.cutIds.includes(t.cutId)) problems.push({ table: "tasks", id: t.id, field: "cutId", problem: "extra task cut not in cutIds" });
+      for (const fid of t.extra.fileIds) if (!state.files?.[fid]) problems.push({ table: "tasks", id: t.id, field: "extra.fileIds", problem: `missing file ${fid}` });
+    } else {
+      if (stage && stage.grain === "project" && t.cutId) problems.push({ table: "tasks", id: t.id, field: "cutId", problem: "project-level task has a cut" });
+      if (stage && stage.grain !== "project" && !t.cutId) problems.push({ table: "tasks", id: t.id, field: "cutId", problem: "per-cut task without a cut" });
+      if (stage && stage.grain === "layer" && !t.layer) problems.push({ table: "tasks", id: t.id, field: "layer", problem: "layer task without a layer" });
+    }
     const active = t.status === "claimed" || t.status === "returned";
     if (active && !t.assigneeId && !t.outsourced) problems.push({ table: "tasks", id: t.id, field: "assigneeId", problem: "task in hand without anyone" });
     if ((t.status === "open" || t.status === "locked") && t.assigneeId) problems.push({ table: "tasks", id: t.id, field: "assigneeId", problem: "free task still has an assignee" });

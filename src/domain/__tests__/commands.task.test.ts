@@ -71,13 +71,12 @@ describe("task.claim", () => {
     expect(g.reject(worker, "task.claim", {})).toBe("你手上的任务已经到上限了，先交掉一张再接");
   });
 
-  it("指定一张：要先报到，锁住的不能接", () => {
+  it("指定一张：没报到也能认领（第一次认领自动报到，标「自己认领」），锁住的不能接", () => {
     const { g, p, worker } = ready();
     const t = g.task(p, "inbetween", 2, "B");
-    expect(g.reject(worker, "task.claim", { taskId: t.id })).toBe("先报到「中割」这个环节，才能接这张");
-    g.run(worker, "enroll.add", { group: "animation", stageKey: "inbetween", skill: 0, maxActive: 3 });
-    g.run(worker, "task.claim", { taskId: t.id });
+    const r = g.run(worker, "task.claim", { taskId: t.id });
     expect(g.state.tasks[t.id].assigneeId).toBe(worker);
+    expect(g.state.enrollments[r.enrollmentId]).toMatchObject({ memberId: worker, stageKey: "inbetween", skill: 0, origin: "claimed", assigned: false });
     const locked = g.task(p, "paint", 1, "A");
     g.run(worker, "enroll.add", { group: "animation", stageKey: "paint", skill: 0 });
     expect(g.reject(worker, "task.claim", { taskId: locked.id })).toMatch(/上游还没完/);

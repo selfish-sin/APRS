@@ -33,6 +33,12 @@ export function QuestCard({ quest, eyebrow = "当前任务单", showCutLink = tr
       </div>
       <div className="stack" data-gap="small">
         <h2 className="quest-title">{view.label}</h2>
+        {quest.assignedBy ? (
+          <p className="quest-assigned" data-testid="quest-assigned-by">
+            {quest.assignedBy.nickname}派给你的
+          </p>
+        ) : null}
+        {task.extra?.description ? <p className="quest-sub break">{task.extra.description}</p> : null}
         <p className="quest-sub">
           {project.code} · {PHASE_LABEL[stage.phase]} · {STAGE_KIND_LABEL[stage.kind]}
           {stage.hub && stage.kind !== "hub" ? " · 枢纽" : ""}

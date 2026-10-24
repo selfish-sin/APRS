@@ -170,9 +170,11 @@ export function buildDemoWorld(): WorldState {
   enroll(bailu, "plan", 0.5, "2026-02-20 10:10");
   enroll(bailu, "script", 0.5, "2026-02-20 10:11");
   enroll(bailu, "storyboard", 0.5, "2026-02-20 10:12");
-  enroll(qingning, "key_check", 0.5, "2026-02-25 10:10");
-  enroll(qingning, "inbetween_check", 0.5, "2026-02-25 10:11");
-  enroll(qingning, "paint_check", 0.2, "2026-02-25 10:12");
+  // 把关的位置（原画监督 · 中割检修 · 检查色指定）锁成「只给指派的人」，由管理员指派（SPEC §13.1）。
+  const assignRole = (m: Id, key: string, skill: 0.5 | 0.2 | 0 | -0.2, when: string) => b.run(bailu, "role.assign", { memberId: m, group: "animation", stageKey: key, skill }, at(when));
+  assignRole(qingning, "key_check", 0.5, "2026-02-25 10:10");
+  assignRole(qingning, "inbetween_check", 0.5, "2026-02-25 10:11");
+  assignRole(qingning, "paint_check", 0.2, "2026-02-25 10:12");
   enroll(lizi, "art", 0.5, "2026-03-01 09:10");
   enroll(lizi, "layout", 0.5, "2026-03-01 09:11");
   enroll(lizi, "key", 0.5, "2026-03-01 09:12");
@@ -202,6 +204,12 @@ export function buildDemoWorld(): WorldState {
   work(b, b.task(andlc, "art", null), { worker: lizi, reviewer: bailu, start: at("2026-03-04 14:00"), workHours: 10, link: L("设定"), quality: 1.2 });
   work(b, b.task(andlc, "color_design", null), { worker: haiyan, reviewer: bailu, start: at("2026-03-16 10:00"), workHours: 5, link: L("色指定") });
   work(b, b.task(andlc, "storyboard", null), { worker: bailu, reviewer: qingning, start: at("2026-03-09 10:00"), workHours: 9, link: L("分镜") });
+  // 分镜节点上发的一张修正（SPEC §13.3，相当于リテイク）：挂在 C003、这一卡要等它做完 → 做完了。
+  {
+    const fix = b.run(bailu, "task.publish", { stageId: b.stageId(andlc, "storyboard"), kind: "fix", title: "C003 分镜加一个镜头", description: "女孩回头之前加一个看窗外的空镜（2 秒）", cutIds: [b.cutId(andlc, 3)], workload: 2, deadlineHours: 24, assigneeId: bailu, reviewerId: qingning, blocking: true }, at("2026-03-12 10:00")).taskId;
+    b.run(bailu, "task.submit", { taskId: fix, link: L("分镜", 3), note: "加了一个 2 秒的空镜" }, at("2026-03-13 10:00"));
+    b.run(qingning, "task.review", { taskId: fix, verdict: "pass", quality: 1 }, at("2026-03-13 15:00"));
+  }
 
   // Layout（14 卡）
   for (let n = 1; n <= 14; n++) {
@@ -392,6 +400,9 @@ export function buildDemoWorld(): WorldState {
     work(b, b.task(dmds, "key", n), { worker: lizi, reviewer: qingning, start: plusHours(at("2026-04-12 10:00"), (n - 1) * 50), workHours: 20, link: D("H", n) });
     work(b, b.task(dmds, "key_check", n), { worker: qingning, reviewer: bailu, start: plusHours(at("2026-04-22 10:00"), (n - 1) * 30), workHours: 1, link: D("H", n) });
   }
+
+  // 拍板以后在「美术设计」节点上放出来的一张额外任务，还没人认领（SPEC §13.3）。
+  b.run(bailu, "task.publish", { stageId: b.stageId(andlc, "art"), kind: "extra", title: "补一张道具设定（皇冠）", description: "拍板：皇冠上的宝石要画。补一张正面 + 侧面的道具设定，放进资料库的设定集。", cutIds: [], fixedPoints: 6, deadlineHours: 48 }, at("2026-10-22 11:00"));
 
   // —— 资料页（SPEC §11.5）：设定集（3 张示范图，2 个钉，一个已解决）· 文件命名规范 v1.0 · 后期流程规范 ——
   {

@@ -61,7 +61,8 @@ export function upstreamTasksOf(task: TaskRow, stage: StageRow, stagesByKey: Map
   for (const key of stage.upstream) {
     const up = stagesByKey.get(key);
     if (!up) continue;
-    const ups = byStage.get(up.id) ?? [];
+    // 随时发的新任务不算进流程（不挡下游），勾了「这一卡要等它做完」的另算（blockersOf）。
+    const ups = (byStage.get(up.id) ?? []).filter((t) => !t.extra);
     let relevant: TaskRow[];
     if (up.grain === "project" || !task.cutId) relevant = ups;
     else {
@@ -80,6 +81,38 @@ export function upstreamReady(task: TaskRow, stage: StageRow, stagesByKey: Map<s
   return upstreamTasksOf(task, stage, stagesByKey, byStage).every((g) => g.tasks.every((t) => t.status === "passed"));
 }
 
+/** 从一个环节往下游走到底（不含它自己）。 */
+export function downstreamKeys(stages: StageRow[], key: string): Set<string> {
+  const live = stages.filter((s) => !s.archivedAt);
+  const out = new Set<string>();
+  const queue = [key];
+  while (queue.length) {
+    const k = queue.shift()!;
+    for (const s of live) {
+      if (s.upstream.includes(k) && !out.has(s.templateKey)) {
+        out.add(s.templateKey);
+        queue.push(s.templateKey);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * 挡着这张任务的新任务：勾了「这一卡要等它做完」、还没通过、挂在同一卡上、在它的上游（SPEC §13.3）。
+ * 项目级的下游任务（没有卡）：上游任何一卡挂着的都挡。
+ */
+export function blockersOf(task: TaskRow, stage: StageRow, stages: StageRow[], tasks: TaskRow[]): TaskRow[] {
+  if (task.extra) return [];
+  const stageById = new Map(stages.map((s) => [s.id, s]));
+  return tasks.filter((x) => {
+    if (x.archivedAt || !x.extra?.blocking || x.status === "passed") return false;
+    if (task.cutId && !x.extra.cutIds.includes(task.cutId)) return false;
+    const from = stageById.get(x.stageId);
+    return !!from && downstreamKeys(stages, from.templateKey).has(stage.templateKey);
+  });
+}
+
 /**
  * 一个项目里哪些「锁住」的任务现在该放出来（纯函数：开项目时任务还没进读模型，也能用）。
  */
@@ -88,11 +121,15 @@ export function tasksToUnlock(stages: StageRow[], tasks: TaskRow[]): Id[] {
   const stagesById = new Map(stages.map((s) => [s.id, s]));
   const byStage = groupByStage(tasks);
   const out: Id[] = [];
+  const hasBlockers = tasks.some((t) => t.extra?.blocking && t.status !== "passed" && !t.archivedAt);
+  const live = stages.filter((s) => !s.archivedAt);
   for (const t of tasks) {
     if (t.archivedAt || t.status !== "locked") continue;
     const stage = stagesById.get(t.stageId);
     if (!stage) continue;
-    if (upstreamReady(t, stage, stagesByKey, byStage)) out.push(t.id);
+    if (!upstreamReady(t, stage, stagesByKey, byStage)) continue;
+    if (hasBlockers && blockersOf(t, stage, live, tasks).length) continue;
+    out.push(t.id);
   }
   return out;
 }

@@ -96,7 +96,8 @@ export function EnrollPage() {
                     <span className="role-card-top">
                       <StageShape kind={o.template.kind} hub={o.template.hub} state={o.open ? "open" : "locked"} size={28} />
                       <span className="role-card-name">{o.template.name}</span>
-                      {o.mine ? <Tag tone="inverse">已报到 {skillLabel(o.mine.skill)}</Tag> : null}
+                      {o.mine ? <Tag tone="inverse">{o.mine.assigned ? "指派" : (o.mine.origin ?? "self") === "claimed" ? "自己认领" : "已报到"} {skillLabel(o.mine.skill)}</Tag> : null}
+                      {o.locked ? <Tag tone="warning">只给指派的人</Tag> : null}
                     </span>
                     <span className="role-card-numbers">
                       <span>
@@ -146,7 +147,20 @@ export function EnrollPage() {
         <p className="label">熟练度会算进活力点：活力点 = 工时 ×（掌控系数 + 熟练度）× 质量。</p>
         <div className="form-actions">
           <Button Label={picked?.mine ? "更新报到，再配一张" : "报到"} Style="Accent" disabled={!picked} onClick={enroll} data-testid="enroll-submit" />
+          {picked && !picked.mine && picked.open ? (
+            <Button
+              Label={`直接认领一张「${picked.template.name}」`}
+              Style="Secondary"
+              data-testid="enroll-claim"
+              onClick={() => {
+                // 不是自己职位的环节也能认领：第一次认领自动报到（熟练度 0，标「自己认领」）。
+                const r = dispatch("task.claim", { group, stageKey: picked.template.key });
+                if (r.ok && r.created.taskId) setGotTaskId(r.created.taskId);
+              }}
+            />
+          ) : null}
         </div>
+        {picked?.lockedForMe ? <p className="label">这个环节只给指派的人，找管理员。</p> : null}
       </section>
 
       <section className="card" aria-labelledby="mine-title">
@@ -165,6 +179,7 @@ export function EnrollPage() {
                     <span className="t-body-14m">{t?.name ?? e.stageKey}</span>
                     <span className="label">
                       {GROUPS[e.group].name} · 熟练度 {skillLabel(e.skill)} · 同时最多 {e.maxActive} 张
+                      {e.assigned ? " · 指派" : (e.origin ?? "self") === "claimed" ? " · 自己认领" : ""}
                     </span>
                   </div>
                   <Button

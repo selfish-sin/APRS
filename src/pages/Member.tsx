@@ -6,7 +6,10 @@ import { Empty, Level, MemberAvatar, Stat, Tag, TextField, XpBar } from "@/compo
 import { dateTimeZh, dateZh, localDate } from "@/domain/clock";
 import { GROUP_LABEL, LEDGER_KIND_LABEL, ROLE_LABEL, formatNumber, formatPoints, skillLabel } from "@/domain/labels";
 import { AVATAR_TONE, type AvatarToneName } from "@/domain/model";
-import { accountOfMember, collaboratorsOf, enrollmentsOf, growthOf, members, memberById, taskViewById } from "@/domain/queries";
+import { accountOfMember, collaboratorsOf, enrollmentsOf, growthOf, memberRoles, members, memberById, taskViewById } from "@/domain/queries";
+import { isAdmin } from "@/domain/commands/core";
+import { SelectField } from "@/components/app/bits";
+import type { Group } from "@/domain/model";
 import { GROUPS } from "@/domain/templates";
 import { makePasscode, passcodeProblem } from "@/lib/passcode";
 import { Link, useRoute } from "@/lib/router";
@@ -176,27 +179,7 @@ export function MemberPage() {
             )}
           </section>
 
-          <section className="card" aria-labelledby="enrolled-title">
-            <h2 id="enrolled-title" className="t-heading-18">
-              报到的环节
-            </h2>
-            {enrollments.length === 0 ? (
-              <Empty action={self ? <Link to="/enroll">去报到</Link> : undefined}>还没有报到。</Empty>
-            ) : (
-              <ul className="list">
-                {enrollments.map((e) => (
-                  <li key={e.id}>
-                    <div className="list-main">
-                      <span>{GROUPS[e.group].stages.find((s) => s.key === e.stageKey)?.name ?? e.stageKey}</span>
-                      <span className="label">
-                        {GROUP_LABEL[e.group]} · 熟练度 {skillLabel(e.skill)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <MemberRolesCard memberId={member.id} self={self} />
         </div>
       </div>
       {editing === "profile" ? <ProfileDialog onClose={() => setEditing(null)} /> : null}
@@ -322,5 +305,103 @@ export function MembersPage() {
         ))}
       </div>
     </>
+  );
+}
+
+/** 成员的两部分（SPEC §13.1）：指派的职位 · 自己报到 / 认领做过的环节。管理员能在这里指派、撤掉职位。 */
+function MemberRolesCard({ memberId, self }: { memberId: string; self: boolean }) {
+  const { world, me, dispatch, notify } = useGuild();
+  const roles = memberRoles(world, memberId);
+  const admin = isAdmin(me);
+  const [pick, setPick] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const member = world.members[memberId];
+  const options = (Object.keys(GROUPS) as Group[]).flatMap((g) => GROUPS[g].stages.map((s) => ({ value: `${g}:${s.key}`, label: `${GROUPS[g].name} · ${s.name}` })));
+  return (
+    <section className="card" aria-labelledby="roles-title" data-testid="member-roles">
+      <h2 id="roles-title" className="t-heading-18">
+        职位和报到
+      </h2>
+      <div className="stack" data-gap="small">
+        <span className="label">指派的职位</span>
+        {roles.assigned.length === 0 ? (
+          <p className="muted">还没有被指派职位。</p>
+        ) : (
+          <ul className="list">
+            {roles.assigned.map((r) => (
+              <li key={r.enrollment.id} data-testid="role-assigned">
+                <div className="list-main">
+                  <span>
+                    {r.name} <Tag tone="inverse">指派</Tag>
+                  </span>
+                  <span className="label">
+                    {GROUP_LABEL[r.enrollment.group]} · 熟练度 {skillLabel(r.enrollment.skill)}
+                  </span>
+                </div>
+                {admin ? (
+                  <Button
+                    Label="撤掉"
+                    Size="Small"
+                    Style="Ghost"
+                    onClick={() => {
+                      const res = dispatch("role.unassign", { memberId, group: r.enrollment.group, stageKey: r.enrollment.stageKey });
+                      if (res.ok) notify(`撤掉了 ${member?.nickname ?? ""} 的「${r.name}」`, "Neutral");
+                    }}
+                  />
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        {admin ? (
+          <form
+            className="row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const [group, stageKey] = pick.split(":");
+              const res = dispatch("role.assign", { memberId, group: group as Group, stageKey }, { quiet: true });
+              if (!res.ok) setError(res.error.message);
+              else {
+                setError(null);
+                setPick("");
+                notify(`给 ${member?.nickname ?? ""} 指派了职位，他自动报到这个环节`);
+              }
+            }}
+          >
+            <SelectField label="指派一个职位" value={pick} onChange={(e) => setPick(e.target.value)} data-testid="role-pick">
+              <option value="">选环节</option>
+              {options.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </SelectField>
+            <Button Label="指派" Size="Small" Style="Accent" type="submit" disabled={!pick} data-testid="role-assign" />
+          </form>
+        ) : null}
+        {error ? <p className="error-text">{error}</p> : null}
+      </div>
+      <div className="stack" data-gap="small">
+        <span className="label">自己报到 / 自己认领做过的环节</span>
+        {roles.own.length === 0 ? (
+          <Empty action={self ? <Link to="/enroll">去报到</Link> : undefined}>还没有。</Empty>
+        ) : (
+          <ul className="list">
+            {roles.own.map((r) => (
+              <li key={r.enrollment.id} data-testid="role-own">
+                <div className="list-main">
+                  <span>
+                    {r.name} {r.claimed ? <Tag tone="sky">自己认领</Tag> : null}
+                  </span>
+                  <span className="label">
+                    {GROUP_LABEL[r.enrollment.group]} · 熟练度 {skillLabel(r.enrollment.skill)} · 做过 {r.done} 张
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
   );
 }

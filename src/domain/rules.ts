@@ -84,9 +84,28 @@ export function deadlineFactorOf(rules: WorldRules | undefined): number {
   return typeof f === "number" && f > 0 ? f : DEFAULT_DEADLINE_FACTOR;
 }
 
-/** 时限（小时）= 工作量 × Tn × 时限系数，最少 MIN_DEADLINE_HOURS。 */
-export function deadlineHours(stage: Pick<StageRow, "tn" | "per">, task: Pick<TaskRow, "workload">, rules: WorldRules | undefined): number {
-  return Math.max(MIN_DEADLINE_HOURS, hoursOf(stage, task.workload) * deadlineFactorOf(rules));
+type RateStage = Pick<StageRow, "tn" | "per"> & Partial<Pick<StageRow, "deadlineFactor" | "minDeadlineHours">>;
+type RateTask = Pick<TaskRow, "workload"> & Partial<Pick<TaskRow, "rate" | "extra">>;
+
+/** 这张任务按哪个工时算：接的时候记下的（之后改 Tn 不影响已经派出去的），没接过就用环节现在的。 */
+export function taskRate(stage: Pick<StageRow, "tn" | "per">, task: Partial<Pick<TaskRow, "rate">>): { tn: number; per: number } {
+  return task.rate ?? { tn: stage.tn, per: stage.per };
+}
+
+/**
+ * 时限（小时）= 工作量 × Tn × 时限系数，最少 MIN_DEADLINE_HOURS。
+ * 环节自己改过时限系数 / 最短时限（§13.2）就用环节的；随时发的新任务用发布时写的时限。
+ */
+export function deadlineHours(stage: RateStage, task: RateTask, rules: WorldRules | undefined): number {
+  if (task.extra) return Math.max(1, task.extra.deadlineHours);
+  const factor = typeof stage.deadlineFactor === "number" && stage.deadlineFactor > 0 ? stage.deadlineFactor : deadlineFactorOf(rules);
+  const min = typeof stage.minDeadlineHours === "number" && stage.minDeadlineHours > 0 ? stage.minDeadlineHours : MIN_DEADLINE_HOURS;
+  return Math.max(min, hoursOf(taskRate(stage, task), task.workload) * factor);
+}
+
+/** 只给指派的人（没写 = 审核类环节锁）。 */
+export function stageLocked(stage: Pick<StageRow, "kind"> & Partial<Pick<StageRow, "locked">>): boolean {
+  return stage.locked ?? stage.kind === "review";
 }
 
 export function pointsOf(hours: number, control: number, skill: number, quality: number): number {
@@ -94,8 +113,14 @@ export function pointsOf(hours: number, control: number, skill: number, quality:
 }
 
 /** 任务单上的奖励（按质量 1.0 估）。 */
-export function rewardOf(stage: Pick<StageRow, "tn" | "per" | "control">, workload: number, skill: number): number {
-  return pointsOf(hoursOf(stage, workload), stage.control, skill, 1);
+export function rewardOf(stage: Pick<StageRow, "tn" | "per" | "control">, workload: number, skill: number, task?: Partial<Pick<TaskRow, "rate" | "extra">>): number {
+  return taskPoints(stage, { workload, ...(task ?? {}) }, skill, 1);
+}
+
+/** 一张任务通过时记多少活力点：固定活力点的新任务 = 固定值 × 质量；别的照公式。 */
+export function taskPoints(stage: Pick<StageRow, "tn" | "per" | "control">, task: RateTask, skill: number, quality: number): number {
+  if (task.extra && task.extra.fixedPoints !== null) return round1(task.extra.fixedPoints * quality);
+  return pointsOf(hoursOf(taskRate(stage, task), task.workload), stage.control, skill, quality);
 }
 
 /** 管理员改过的工时盖在模板上。 */
