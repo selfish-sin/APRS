@@ -24,8 +24,8 @@ async function v11Shots(page: Page, shot: (name: string) => Promise<unknown>) {
   await page.getByTestId("stage-config").scrollIntoViewIfNeeded();
   await page.screenshot({ path: shotPath(page, "p17-stage-config"), fullPage: false });
   await open(page, projectPath);
-  const plan = page.locator('[data-testid="route-row"][data-key="plan"]');
-  await plan.click();
+  const clean = page.locator('[data-testid="route-row"][data-key="clean"]');
+  await clean.click();
   await page.getByTestId("stage-accept-open").click();
   await expect(page.getByTestId("accept-view")).toBeVisible();
   await shot("p17-stage-accept");

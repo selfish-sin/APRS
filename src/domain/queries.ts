@@ -2149,8 +2149,10 @@ export interface StageRoute {
   project: ProjectRow;
   rows: RouteRow[];
   phases: RoutePhase[];
-  /** 现在在第几个环节（最后一个开始了的；都没开始 = 第一个可以开始的）。 */
+  /** 现在在第几个环节：最早的那个还没结束、正在做的（卡住进度的）；没有在做的 = 最早等验收的；都没开始 = 第一个可以开始的。 */
   current: RouteRow | null;
+  /** 最远做到哪（开始了的环节里最后一个，比「现在」靠后时才有）。 */
+  farthest: RouteRow | null;
   total: number;
 }
 
@@ -2250,9 +2252,13 @@ export function stageRouteOf(state: WorldState, projectId: Id): StageRoute | nul
     };
   });
   const live = rows.filter((r) => !r.stage.disabled);
-  const started = live.filter((r) => r.status === "active" || r.status === "review");
-  const current = started.length ? started[started.length - 1] : live.find((r) => r.status === "ready") ?? null;
+  // 「现在」= 最早的那个还没结束、正在做的环节（卡住进度的那个）；没有在做的，就是最早等验收的，再没有就是第一个可以开始的。
+  const current = live.find((r) => r.status === "active") ?? live.find((r) => r.status === "review") ?? live.find((r) => r.status === "ready") ?? null;
   if (current) current.current = true;
+  // 最远做到哪：开始了的环节里最后一个（比「现在」靠后才说）。
+  const began = live.filter((r) => r.status === "active" || r.status === "review" || r.status === "done");
+  const last = began[began.length - 1] ?? null;
+  const farthest = last && current && last.no > current.no ? last : null;
   const phases: RoutePhase[] = PHASE.map((phase) => {
     const list = rows.filter((r) => r.stage.phase === phase);
     const active = list.filter((r) => !r.stage.disabled);
@@ -2260,7 +2266,7 @@ export function stageRouteOf(state: WorldState, projectId: Id): StageRoute | nul
     const began = active.filter((r) => r.status !== "locked" && r.status !== "ready");
     return { phase, rows: list, done, total: active.length, allDone: active.length > 0 && done === active.length, reached: began.length ? began[began.length - 1] : null, started: began.length > 0 };
   });
-  return { project, rows, phases, current, total: rows.length };
+  return { project, rows, phases, current, farthest, total: rows.length };
 }
 
 export interface StageTaskView {

@@ -528,6 +528,17 @@ export function buildDemoWorld(): WorldState {
     work(b, b.task(cat, "storyboard", null), { worker: songzhen, reviewer: bailu, start: at("2026-10-23 08:30"), workHours: 0, stopAt: "claimed" });
   }
 
+  // —— 安娜的旅程：真正做完的环节验收掉（前期 1–6 · 原画 · 原画监督），清线留着等验收（照设计 v6-1）——
+  // 验收放在各自最后一卡通过之后 1 小时。
+  for (const key of ["plan", "script", "storyboard", "art", "color_design", "layout", "key", "key_check"]) {
+    const stageId = b.stageId(andlc, key);
+    const passed = Object.values(b.state.tasks)
+      .filter((t) => t.stageId === stageId && !t.extra)
+      .map((t) => Date.parse(t.passedAt ?? ""));
+    if (!passed.length || passed.some((x) => Number.isNaN(x))) throw new Error(`示范数据：${key} 还有没通过的`);
+    b.run(bailu, "stage.accept", { stageId }, plusHours(new Date(Math.max(...passed)).toISOString(), 1));
+  }
+
   const state = b.state;
   // 示范世界的时钟冻结在 2026-10-23 10:00（底的一部分，不是一步操作）。
   const world = state.worlds[DEMO_WORLD_ID];

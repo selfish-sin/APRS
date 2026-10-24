@@ -50,6 +50,17 @@ test("路线：按顺序编号 · 五种状态 · 当前环节高亮 · 概要�
   }
   expect([...seen].sort()).toEqual(["active", "done", "locked", "ready", "review"]);
 
+  // —— 「安娜的旅程」：前期 1–6 全部已结束 ✓（整段折起来）· 7 原画 8 原画监督 已结束 · 9 清线 待验收 ·
+  //    「现在」= 最早的那个还没结束、正在做的（10 中割）· 概要行再写最远做到哪（13 上色）——
+  await open(page, await projectPath(page, "安娜的旅程"));
+  await expect(page.getByTestId("route-phase-pre")).toHaveAttribute("data-collapsed", "yes");
+  await expect(page.getByTestId("route-phase-pre")).toContainText("6 个环节已结束");
+  await expect(page.locator('[data-testid="route-row"][data-current="yes"]')).toHaveCount(1);
+  await expect(page.locator('[data-testid="route-row"][data-current="yes"]')).toHaveAttribute("data-key", "inbetween");
+  await expect(page.getByTestId("route-summary")).toContainText("现在在第 10 / 20 个环节 · 中割 · 最远做到 13 上色");
+  for (const key of ["key", "key_check"]) await expect(page.locator(`[data-testid="route-row"][data-key="${key}"]`)).toHaveAttribute("data-status", "done");
+  await expect(page.locator('[data-testid="route-row"][data-key="clean"]')).toHaveAttribute("data-status", "review");
+
   // —— 「（示范）星期三的猫」：编号 1…N，前 2 个已结束 ✓、第 3 个进行中（高亮）、其余还没到；概要行写第 3 / N 个 ——
   const cat = await projectPath(page, "星期三的猫");
   await open(page, cat);
@@ -186,21 +197,21 @@ test("环节页：五块都在 · 指派一个人 · 多选 2 行派给某人 ·
   await expect(inbetween.getByTestId("stage-activity").locator('[data-command="stage.set_rate"]')).toHaveCount(1);
   await expectNoPageScrollX(page, "环节页 · 设置");
 
-  // —— 验收这个环节（策划：全部通过、等验收）→ 回到路线上变「已结束 ✓」——
+  // —— 验收这个环节（清线：全部通过、等验收）→ 回到路线上变「已结束 ✓」——
   await open(page, andlc);
-  await expect(await routeRow(page, "策划")).toHaveAttribute("data-status", "review");
-  const plan = await openStage(page, andlc, "策划");
-  await expect(plan.getByTestId("stage-deliverables")).toContainText("全部通过了");
-  await plan.getByTestId("stage-accept-open").click();
-  const accept = page.getByRole("dialog", { name: /验收 · 策划/ });
+  await expect(await routeRow(page, "清线")).toHaveAttribute("data-status", "review");
+  const clean = await openStage(page, andlc, "清线");
+  await expect(clean.getByTestId("stage-deliverables")).toContainText("全部通过了");
+  await clean.getByTestId("stage-accept-open").click();
+  const accept = page.getByRole("dialog", { name: /验收 · 清线/ });
   await accept.getByTestId("accept-all").click();
-  await expect(page.getByText("「策划」验收通过了", { exact: true })).toBeVisible();
+  await expect(page.getByText("「清线」验收通过了", { exact: true })).toBeVisible();
   await accept.getByRole("button", { name: "关上" }).click();
-  await expect(plan.getByTestId("stage-accepted")).toContainText("验收 · 整体通过");
-  await plan.getByTestId("stage-back").click();
-  const planRow = await routeRow(page, "策划");
-  await expect(planRow).toHaveAttribute("data-status", "done");
-  await expect(planRow.getByTestId("route-status")).toContainText("已结束 ✓");
+  await expect(clean.getByTestId("stage-accepted")).toContainText("验收 · 整体通过");
+  await clean.getByTestId("stage-back").click();
+  const cleanRow = await routeRow(page, "清线");
+  await expect(cleanRow).toHaveAttribute("data-status", "done");
+  await expect(cleanRow.getByTestId("route-status")).toContainText("已结束 ✓");
   expectClean(errors, "环节页");
 });
 

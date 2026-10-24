@@ -221,6 +221,12 @@ export function StageRouteView({ projectId }: { projectId: Id }) {
             {route.current ? (
               <>
                 {f(L.route.atStage, { no: route.current.no, total: route.total })} · {stageEl(group, route.current.stage)}
+                {route.farthest ? (
+                  <span className="route-farthest" data-testid="route-farthest">
+                    {" · "}
+                    {f(L.route.farthest, { no: route.farthest.no })} {stageEl(group, route.farthest.stage)}
+                  </span>
+                ) : null}
               </>
             ) : (
               L.route.notStarted
