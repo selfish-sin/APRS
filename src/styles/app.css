@@ -1848,3 +1848,27 @@ a.ui-button[data-size="Medium"] {
 .ui-pill {
   white-space: nowrap;
 }
+
+.door .cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 699px) {
+  .door .cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.cell-part .who {
+  margin-left: 2px;
+  font-weight: 400;
+}
+
+.legend-swatch {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 4px;
+  font-family: "Noto Sans SC", var(--font-sans);
+  font-size: var(--font-size-caption);
+}

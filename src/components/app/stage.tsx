@@ -55,6 +55,9 @@ export function StageMap({ pipeline, onPick }: { pipeline: Pipeline; onPick: (no
                 <span className="map-node-name">{node.stage.name}</span>
                 <span className="map-node-count">
                   {node.passed}/{node.total}
+                  {node.state === "locked" ? " · 锁住" : ""}
+                  {node.counts.open ? ` · 可接 ${node.counts.open}` : ""}
+                  {node.counts.claimed + node.counts.returned ? ` · 在做 ${node.counts.claimed + node.counts.returned}` : ""}
                   {node.counts.submitted ? ` · 待审 ${node.counts.submitted}` : ""}
                 </span>
               </button>

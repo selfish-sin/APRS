@@ -11,12 +11,18 @@ function partTitle(t: GridTask, stageName: string): string {
   return [stageName, t.task.layer ? `${t.task.layer} 层` : null, TASK_STATUS_LABEL[t.task.status], who || null, t.versionTag].filter(Boolean).join(" · ");
 }
 
+/** 格子里的一个字状态（颜色不单独表意）。 */
+export const STATUS_CHAR: Record<GridTask["task"]["status"], string> = { locked: "锁", open: "可", claimed: "接", submitted: "审", returned: "退", passed: "过", reclaimed: "收" };
+
 function Part({ t, stageName }: { t: GridTask; stageName: string }) {
-  const initial = t.task.outsourced ? "外" : t.assignee?.nickname.slice(0, 1) ?? (t.task.layer ?? "");
+  const who = t.task.outsourced ? "外" : t.assignee?.nickname.slice(0, 1) ?? "";
   return (
     <span className="cell-part" data-status={t.task.status} data-mine={t.mine ? "true" : undefined} title={partTitle(t, stageName)}>
-      <span className="ini">{initial}</span>
-      {t.versionTag ? <span>{t.versionTag}</span> : t.task.layer && (t.assignee || t.task.outsourced) ? <span>{t.task.layer}</span> : null}
+      <span className="ini">
+        {STATUS_CHAR[t.task.status]}
+        {who ? <span className="who">{who}</span> : null}
+      </span>
+      <span>{t.versionTag ?? (t.task.layer ? `${t.task.layer} 层` : "")}</span>
     </span>
   );
 }
@@ -75,12 +81,17 @@ export function StatusLegend() {
     <div className="legend" aria-label="格子颜色">
       {items.map((s) => (
         <span key={s} className="legend-item">
-          <span className="cell-part" data-status={s} style={{ width: 16, height: 16, borderRadius: 4, flex: "none" }} />
+          <span className="cell-part legend-swatch" data-status={s}>
+            {STATUS_CHAR[s]}
+          </span>
           {TASK_STATUS_LABEL[s]}
         </span>
       ))}
       <span className="legend-item">
-        <span className="cell-part" data-status="claimed" data-mine="true" style={{ width: 16, height: 16, borderRadius: 4, flex: "none" }} />我的
+        <span className="cell-part legend-swatch" data-status="claimed" data-mine="true">
+          接
+        </span>
+        我的（黑框）
       </span>
     </div>
   );
