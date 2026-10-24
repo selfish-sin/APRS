@@ -37,9 +37,10 @@ export function WorldMenu({ open, onClose, worldTitle }: { open: boolean; onClos
       Label: "导出备份",
       Meta: backupLabel(days),
       onSelect: () => {
-        const r = exportWorld();
-        if (!r.ok) ui.open({ kind: "error", message: r.message });
         onClose();
+        void exportWorld().then((r) => {
+          if (!r.ok) ui.open({ kind: "error", message: r.message });
+        });
       },
     },
     {

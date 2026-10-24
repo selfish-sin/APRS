@@ -8,11 +8,15 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Empty, MemberAvatar, MemberLink, SelectField, Tag } from "@/components/app/bits";
 import { TaskActions } from "@/components/app/task";
 import { ThreadBody } from "@/components/app/thread";
+import { DropZone } from "@/components/library/intake";
+import { FileDialog, FileTile } from "@/components/library/tiles";
+import { Viewer } from "@/components/library/Viewer";
+import { useFiles } from "@/lib/files/FilesProvider";
 import { cmp } from "@/domain/agenda";
 import { dateTimeZh } from "@/domain/clock";
 import { formatNumber, VERDICT_LABEL } from "@/domain/labels";
 import type { Id, ThreadKind } from "@/domain/model";
-import { cutById, cutName, members, memberById, projectById, stagesOf, timelineOfCut, type TimelineItem } from "@/domain/queries";
+import { cutById, cutName, filesOfCut, members, memberById, projectById, stagesOf, timelineOfCut, type TimelineItem } from "@/domain/queries";
 import { Link, useRoute } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 import { NotFound } from "./NotFound";
@@ -20,10 +24,12 @@ import { NotFound } from "./NotFound";
 function dotKind(item: TimelineItem): string {
   if (item.kind === "review") return item.review?.verdict === "return" ? "return" : "review";
   if (item.kind === "thread") return item.thread?.kind === "todo" ? "todo" : "thread";
+  if (item.kind === "pin") return "pin";
+  if (item.kind === "file") return "file";
   return item.kind === "submit" ? "submit" : "other";
 }
 
-const DOT_TEXT: Record<string, string> = { review: "过", return: "退", submit: "交", thread: "问", todo: "补", other: "·" };
+const DOT_TEXT: Record<string, string> = { review: "过", return: "退", submit: "交", thread: "问", todo: "补", pin: "钉", file: "图", other: "·" };
 
 export function CutPage() {
   const { world } = useGuild();
@@ -31,7 +37,9 @@ export function CutPage() {
   const cut = cutById(world, route.segments[1]);
   const project = cut ? projectById(world, cut.projectId) : undefined;
   const timeline = useMemo(() => (cut ? timelineOfCut(world, cut.id) : []), [world, cut]);
+  const [viewer, setViewer] = useState<{ start: Id; pin: Id | null } | null>(null);
   if (!cut || !project) return <NotFound what="这一卡" />;
+  const cutFiles = filesOfCut(world, cut.id);
   const stages = stagesOf(world, project.id).filter((s) => s.grain !== "project");
   const tasks = Object.values(world.tasks).filter((t) => t.cutId === cut.id && !t.archivedAt);
   const todos = Object.values(world.threads).filter((t) => t.cutId === cut.id && t.kind === "todo" && t.status === "open" && !t.archivedAt);
@@ -120,6 +128,7 @@ export function CutPage() {
             </h2>
             <CutComposer cutId={cut.id} />
           </section>
+          <CutFiles cutId={cut.id} onOpen={(start) => setViewer({ start, pin: null })} />
           <section className="card" aria-labelledby="timeline-title">
             <h2 id="timeline-title" className="t-heading-18">
               时间线 <span className="count">{timeline.length}</span>
@@ -157,6 +166,21 @@ export function CutPage() {
                               {item.submission.onTime ? "" : " · 超时交的"}
                             </span>
                           ) : null}
+                          {item.pin ? <span className="break">{item.pin.text}</span> : null}
+                          {item.pin ? (
+                            <span className="label break">
+                              {[item.pin.layer ? `${item.pin.layer} 层` : null, item.pin.sheets ? `第 ${item.pin.sheets} 张` : null, item.pin.tag, item.pin.status === "resolved" ? "已解决" : null].filter(Boolean).join(" · ")}
+                              {" · "}
+                              <button type="button" className="inline-link" onClick={() => setViewer({ start: item.pin!.fileId, pin: item.pin!.id })} data-testid="timeline-open-pin">
+                                在图上看
+                              </button>
+                            </span>
+                          ) : null}
+                          {item.file && !item.pin ? (
+                            <button type="button" className="inline-link label" onClick={() => setViewer({ start: item.file!.id, pin: null })}>
+                              看图
+                            </button>
+                          ) : null}
                           {item.review && item.review.comments.length ? (
                             <ul className="comments" aria-label={`${VERDICT_LABEL[item.review.verdict]}的意见`}>
                               {item.review.comments.map((c, i) => (
@@ -177,7 +201,40 @@ export function CutPage() {
           </section>
         </div>
       </div>
+      {viewer ? <Viewer files={cutFiles} startId={viewer.start} focusPinId={viewer.pin} onClose={() => setViewer(null)} /> : null}
     </>
+  );
+}
+
+/** 这一卡的图和文件（挂在卡、任务、版本上的都算）：能拖 / 选 / 粘贴放进来。 */
+function CutFiles({ cutId, onOpen }: { cutId: Id; onOpen: (fileId: Id) => void }) {
+  const { world, notify } = useGuild();
+  const files = useFiles();
+  const [more, setMore] = useState<Id | null>(null);
+  const list = filesOfCut(world, cutId);
+  return (
+    <section className="card" aria-labelledby="cut-files-title" data-testid="cut-files">
+      <h2 id="cut-files-title" className="t-heading-18">
+        图和文件 <span className="count">{list.length}</span>
+      </h2>
+      <DropZone
+        testId="cut-drop"
+        onFiles={(picked) =>
+          void files.addFiles(picked, { subjectType: "cut", subjectId: cutId }).then((r) => {
+            if (r.errors.length) notify(r.errors[0], "Error");
+            else if (r.fileIds.length) notify(`放进来 ${r.fileIds.length} 个`);
+          })
+        }
+      />
+      {list.length ? (
+        <div className="file-grid">
+          {list.map((f) => (
+            <FileTile key={f.id} file={f} onOpen={() => onOpen(f.id)} onMore={() => setMore(f.id)} />
+          ))}
+        </div>
+      ) : null}
+      {more ? <FileDialog fileId={more} onClose={() => setMore(null)} /> : null}
+    </section>
   );
 }
 

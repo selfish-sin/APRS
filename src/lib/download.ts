@@ -1,10 +1,10 @@
 /**
  * 保存到这台设备（SPEC §11.6）。只在用户点按钮时调用。
  *   1. 先试 claude.ai 预览页面给的 downloads（`window.claude.use("downloads")`；拿到 null 或 10 秒没回 = 没有）
- *      有的话 `dl.save({ filename, data })`；扩展名只认下面这些，别的（.clip、.rar …）在预览页面里存不了；被拒不重试。
+ *      有的话 `dl.save({ filename, data })`；扩展名只认下面这些（xlsx 是 §15.3 导出汇报加的），别的（.clip、.rar …）在预览页面里存不了；被拒不重试。
  *   2. 没有就用普通的 `<a download>`。
  */
-export const PREVIEW_SAVE_TYPES = ["json", "png", "jpg", "jpeg", "webp", "gif", "pdf", "zip", "txt", "md", "csv", "svg", "mp4", "webm"] as const;
+export const PREVIEW_SAVE_TYPES = ["json", "png", "jpg", "jpeg", "webp", "gif", "pdf", "zip", "txt", "md", "csv", "svg", "mp4", "webm", "xlsx"] as const;
 
 export type SaveResult = { ok: true; via: "downloads" | "link" } | { ok: false; reason: "declined" | "unsupported_type" | "failed"; message: string };
 

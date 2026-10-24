@@ -3,12 +3,17 @@
  * 通过（选质量 0.5 / 1.0 / 1.2）/ 退回（加意见：层 · 张号 · 标签 · 文字）/ 自修（填新版本链接）后通过。
  */
 import { useMemo, useState } from "react";
+import { DropZone } from "@/components/library/intake";
+import { FileTile } from "@/components/library/tiles";
+import { Viewer } from "@/components/library/Viewer";
+import { useFiles } from "@/lib/files/FilesProvider";
+import { filesOfTask } from "@/domain/queries";
 import { Button } from "@/components/ui/Button";
 import { Empty, SelectField, Tag, TextArea, TextField } from "@/components/app/bits";
 import { dateTimeZh } from "@/domain/clock";
 import { isReviewer } from "@/domain/commands/core";
 import { VERDICT_LABEL, formatPoints } from "@/domain/labels";
-import type { Quality } from "@/domain/model";
+import type { Id, Quality } from "@/domain/model";
 import { fileNameFor } from "@/domain/naming";
 import { reviewQueue, type ReviewItem } from "@/domain/queries";
 import { QUALITY_OPTIONS, RETURN_TAGS } from "@/domain/rules";
@@ -176,6 +181,7 @@ function ReviewPanel({ item, next }: { item: ReviewItem; next: ReviewItem | null
           </dd>
         </div>
       </dl>
+      <ReviewImages taskId={view.task.id} submissionId={submission.id} />
       {lastReview && lastReview.comments.length ? (
         <div className="stack" data-gap="small">
           <span className="label">上一版（v{String(item.history[item.history.length - 1].submission.versionNo).padStart(2, "0")}）{VERDICT_LABEL[lastReview.verdict]}的意见</span>
@@ -279,5 +285,43 @@ function ReviewPanel({ item, next }: { item: ReviewItem; next: ReviewItem | null
         ) : null}
       </div>
     </section>
+  );
+}
+
+/** 交的版本上的图；审核员能附截图、在图上钉（就是群里「截图 + 红圈」那一步），钉的算审核意见。 */
+function ReviewImages({ taskId, submissionId }: { taskId: Id; submissionId: Id }) {
+  const { world, notify } = useGuild();
+  const files = useFiles();
+  const [open, setOpen] = useState<Id | null>(null);
+  const list = filesOfTask(world, taskId).filter((f) => !f.archivedAt);
+  const current = list.filter((f) => f.subjectType === "submission" && f.subjectId === submissionId);
+  return (
+    <div className="stack" data-gap="small" data-testid="review-images">
+      <span className="label">
+        图 {current.length ? `· 这一版 ${current.length} 张` : "· 这一版没附图"}
+        {list.length > current.length ? ` · 之前的版本 ${list.length - current.length} 张` : ""}。点开在图上点一下钉、拖一下框，钉的就是退回意见。
+      </span>
+      {list.length ? (
+        <div className="file-grid">
+          {list.map((f) => (
+            <FileTile key={f.id} file={f} onOpen={() => setOpen(f.id)} />
+          ))}
+        </div>
+      ) : null}
+      <DropZone
+        testId="review-drop"
+        hint="附截图：拖进来、选，或者直接粘贴"
+        onFiles={(picked) =>
+          void files.addFiles(picked, { subjectType: "submission", subjectId: submissionId }).then((r) => {
+            if (r.errors.length) notify(r.errors[0], "Error");
+            else if (r.fileIds.length) {
+              notify(`附了 ${r.fileIds.length} 张，点开在图上钉`);
+              setOpen(r.fileIds[0]);
+            }
+          })
+        }
+      />
+      {open ? <Viewer files={list} startId={open} forReview onClose={() => setOpen(null)} /> : null}
+    </div>
   );
 }

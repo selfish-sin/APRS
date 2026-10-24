@@ -402,13 +402,27 @@ export const reviewTask = guarded<ReviewInput>((rm, input, ctx) => {
   if (sub.byMemberId === me.id) reject("forbidden", "不能审自己交的版本");
   const verdict = mustBeOneOf(input.verdict, VERDICT, "审核结论");
   const cut = task.cutId ? rm.get("cuts", task.cutId) ?? null : null;
-  const comments = mustComments(input.comments, cut?.layers.map((l) => l.name) ?? []);
+  const layerNames = cut?.layers.map((l) => l.name) ?? [];
+  let comments = mustComments(input.comments, layerNames);
   const changes: Change[] = [];
   const created: Record<string, Id> = { taskId: task.id };
   const rules = rulesOf(rm, ctx);
 
   if (verdict === "return") {
-    if (comments.length === 0) reject("invalid", "退回要写意见（至少一条）");
+    if (comments.length === 0) {
+      // 只在图上钉了（审核时附图 + 钉，SPEC §11.4）：把这一版之后钉的那几处当成退回意见。
+      const pins = rm
+        .where("pins", { reviewTaskId: task.id })
+        .filter((p) => p.status === "open" && p.at >= sub.at)
+        .sort((a, b) => a.number - b.number);
+      if (pins.length === 0) reject("invalid", "退回要写意见（至少一条），或者在图上钉一处");
+      comments = pins.slice(0, 20).map((p) => ({
+        layer: p.layer && layerNames.includes(p.layer) ? p.layer : null,
+        sheets: p.sheets,
+        tag: p.tag,
+        text: `图上 ${p.number} 号：${p.text}`.slice(0, 500),
+      }));
+    }
     const r = insert(ctx, "reviews", { taskId: task.id, submissionId: sub.id, verdict, quality: null, comments, byMemberId: me.id, at: ctx.worldNow });
     changes.push(r.change);
     created.reviewId = r.row.id;

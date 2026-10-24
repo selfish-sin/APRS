@@ -3,6 +3,8 @@
  * 一屏最多一两张黑卡，给「现在这件事」。
  */
 import { useState } from "react";
+import { DropZone } from "@/components/library/intake";
+import { useFiles } from "@/lib/files/FilesProvider";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { StatusPill } from "@/components/ui/StatusPill";
@@ -159,6 +161,8 @@ export function QuestCard({ quest, eyebrow = "当前任务单", showCutLink = tr
 
 export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => void }) {
   const { dispatch, notify } = useGuild();
+  const files = useFiles();
+  const [attached, setAttached] = useState<File[]>([]);
   const [link, setLink] = useState(quest.view.latest?.link ?? "");
   const [note, setNote] = useState("");
   const [fileName, setFileName] = useState(quest.indicator.deliver.fileName);
@@ -169,8 +173,16 @@ export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => 
       setError(r.error.message);
       return;
     }
-    notify(`交了 ${quest.view.label} v${String(quest.indicator.deliver.version).padStart(2, "0")}，等审核`);
+    const label = `交了 ${quest.view.label} v${String(quest.indicator.deliver.version).padStart(2, "0")}，等审核`;
+    const submissionId = r.created.submissionId;
     onClose();
+    if (attached.length && submissionId) {
+      // 附的截图 / 胶片预览挂在这一版上。
+      void files.addFiles(attached, { subjectType: "submission", subjectId: submissionId }).then((rep) => {
+        if (rep.errors.length) notify(`${label}；${rep.errors[0]}`, "Error");
+        else notify(`${label}（附了 ${rep.fileIds.length + rep.existing.length} 个文件）`);
+      });
+    } else notify(label);
   };
   return (
     <Drawer
@@ -197,6 +209,19 @@ export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => 
         <TextField label="飞书链接" type="url" inputMode="url" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} hint="只收 http:// 或 https:// 开头的链接" />
         <TextArea label="说明" placeholder="改了哪里、还有什么要说的" value={note} onChange={(e) => setNote(e.target.value)} hint="链接和说明至少写一个" />
         <TextField label="文件名" value={fileName} onChange={(e) => setFileName(e.target.value)} hint="按规范自动生成，可以改；扩展名照你的软件" />
+        <DropZone testId="submit-drop" hint="附截图 / 导出的胶片预览（可以不附）" onFiles={(f) => setAttached((xs) => [...xs, ...f])} />
+        {attached.length ? (
+          <div className="attach-row" aria-label="要附的文件">
+            {attached.map((f, i) => (
+              <span key={i} className="attach-chip" data-testid="submit-attached">
+                <span className="break">{f.name || "粘贴的截图"}</span>
+                <button type="button" className="inline-link" aria-label={`不附 ${f.name}`} onClick={() => setAttached((xs) => xs.filter((_, j) => j !== i))}>
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : null}
         {error ? (
           <p className="error-text" role="alert">
             {error}

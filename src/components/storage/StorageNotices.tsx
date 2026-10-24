@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { Toast } from "@/components/ui/Toast";
 import { daysSince } from "@/lib/storage/local";
+import { useFiles } from "@/lib/files/FilesProvider";
 import { useStore } from "@/lib/store";
 import { backupLabel, useStorageUi } from "./StorageUi";
 import "./storage.css";
@@ -28,8 +29,9 @@ function SaveFailedBanner() {
         type="button"
         className="storage-banner-action"
         onClick={() => {
-          const r = exportWorld();
-          if (!r.ok) ui.open({ kind: "error", message: r.message });
+          void exportWorld().then((r) => {
+            if (!r.ok) ui.open({ kind: "error", message: r.message });
+          });
         }}
       >
         导出备份
@@ -55,8 +57,9 @@ function Reminders() {
           {...{ "Show action": true }}
           onAction={() => {
             dismissReminder();
-            const r = exportWorld();
-            if (!r.ok) ui.open({ kind: "error", message: r.message });
+            void exportWorld().then((r) => {
+              if (!r.ok) ui.open({ kind: "error", message: r.message });
+            });
           }}
           onClose={dismissReminder}
         />
@@ -95,9 +98,10 @@ function StorageDialog() {
           <Button
             Label="导出备份"
             onClick={() => {
-              const r = exportWorld();
-              if (!r.ok) ui.open({ kind: "error", message: r.message });
-              else ui.close();
+              void exportWorld().then((r) => {
+                if (!r.ok) ui.open({ kind: "error", message: r.message });
+                else ui.close();
+              });
             }}
           />
         </>
@@ -196,9 +200,10 @@ export function StorageNotices() {
           Type="Dialog"
           Title="导入好了"
           Body={
-            panel.report.skipped === 0
-              ? `「${panel.report.title}」恢复了 ${panel.report.applied.toLocaleString("en-US")} 步，0 步没能恢复，和导出的时候一样。`
-              : `恢复了 ${panel.report.applied.toLocaleString("en-US")} 步，${panel.report.skipped} 步没能恢复（留着，没有丢）。`
+              (panel.report.skipped === 0
+                ? `「${panel.report.title}」恢复了 ${panel.report.applied.toLocaleString("en-US")} 步，0 步没能恢复，和导出的时候一样。`
+                : `恢复了 ${panel.report.applied.toLocaleString("en-US")} 步，${panel.report.skipped} 步没能恢复（留着，没有丢）。`) +
+              (panel.report.files ? ` 带的 ${panel.report.files} 个文件也放回这台设备了。` : "")
           }
           open
           onClose={ui.close}
@@ -209,5 +214,20 @@ export function StorageNotices() {
         <Drawer Type="Dialog" Title="没能导入" Body={panel.message} open onClose={ui.close} actions={<Button Label="好" onClick={ui.close} />} />
       ) : null}
     </>
+  );
+}
+
+/** 文件只能存在内存里（预览框、无痕窗口）：顶上一条说清楚。 */
+export function FilesNotice() {
+  const files = useFiles();
+  const { world } = useStore();
+  if (!files.ready || files.persistent || !world) return null;
+  return (
+    <div className="storage-banner" role="status" data-testid="files-memory-banner">
+      <span className="storage-banner-mark" aria-hidden="true">
+        !
+      </span>
+      <span>这里存不了资料库的文件（浏览器不让用 IndexedDB），放进来的图只在这次打开时有。要留着就「导出备份 · 连文件一起」。</span>
+    </div>
   );
 }

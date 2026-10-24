@@ -89,6 +89,20 @@ describe("pin.add", () => {
     expect(q.inboxOf(g.state, reviewer).pins).toEqual([]);
   });
 
+  it("退回时只在图上钉了、没写意见：钉的那几处就是退回意见；什么都没有就拒", () => {
+    const { g, p, reviewer, worker, image } = setup();
+    g.run(g.admin, "hub.dispatch", { hubStageId: g.stage(p, "key_check").id, rows: [{ taskId: g.task(p, "inbetween", 1, "A").id, workload: 4 }], release: "all" });
+    const t = g.run(worker, "enroll.add", { group: "animation", stageKey: "inbetween", skill: 0 }).taskId;
+    const sub = g.run(worker, "task.submit", { taskId: t, note: "v1" }).submissionId;
+    expect(g.reject(reviewer, "task.review", { taskId: t, verdict: "return", comments: [] })).toBe("退回要写意见（至少一条），或者在图上钉一处");
+    const shot = image(reviewer, "submission", sub, 6);
+    g.run(reviewer, "pin.add", { fileId: shot, kind: "point", x: 0.5, y: 0.5, text: "下巴漏色", layer: "A", sheets: "18", tag: "漏色", forReview: true });
+    g.run(reviewer, "task.review", { taskId: t, verdict: "return", comments: [] });
+    const review = Object.values(g.state.reviews).find((r) => r.taskId === t)!;
+    expect(review.comments).toEqual([{ layer: "A", sheets: "18", tag: "漏色", text: "图上 1 号：下巴漏色" }]);
+    expect(g.state.tasks[t].status).toBe("returned");
+  });
+
   it("要在图里、框不能太小、标签和 @ 要对；不是图片不能钉；成员不能以审核的身份钉", () => {
     const { g, p, worker, image } = setup();
     const id = image();

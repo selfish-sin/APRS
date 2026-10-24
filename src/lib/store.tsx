@@ -14,7 +14,8 @@ import { dispatch as runCommand, type DispatchResult } from "@/domain/dispatch";
 import { newId } from "@/domain/ids";
 import { emptyWorldState, type AccountRow, type Id, type IsoDateTime, type JournalEntry, type JournalSource, type MemberRow, type WorldState } from "@/domain/model";
 import { accounts as accountsOf, memberById, nowOf, overdueTasks, theWorld } from "@/domain/queries";
-import type { WorldBase, WorldFile } from "@/lib/migrations";
+import { saveToDevice } from "@/lib/download";
+import type { EmbeddedFile, WorldBase, WorldFile } from "@/lib/migrations";
 import { makePasscode, verifyPasscode } from "@/lib/passcode";
 import type { Session } from "@/lib/session";
 import {
@@ -62,7 +63,7 @@ export interface StorageStatus {
   reminder: { kind: "usage" | "backup"; message: string } | null;
 }
 
-export type ImportReport = { ok: true; applied: number; skipped: number; total: number; title: string } | { ok: false; message: string };
+export type ImportReport = { ok: true; applied: number; skipped: number; total: number; title: string; files?: number } | { ok: false; message: string };
 
 export interface Notice {
   id: number;
@@ -196,7 +197,11 @@ export interface StoreApi {
   notify: (message: string, tone?: Notice["tone"]) => void;
   clearNotice: () => void;
   storage: StorageStatus;
-  exportWorld: () => { ok: true; fileName: string } | { ok: false; message: string };
+  /**
+   * 导出备份（只在用户点按钮时调用）：走 saveToDevice（预览页面里用 claude.use("downloads")，不然 <a download>）。
+   * `files` = 勾了「连文件一起」时，资料库的文件（base64）一起放进去。
+   */
+  exportWorld: (opts?: { files?: Record<string, EmbeddedFile> }) => Promise<{ ok: true; fileName: string } | { ok: false; message: string }>;
   /** 同一份备份，给成文字（下载被挡住的地方——比如预览框——用复制代替）。也记一次「备份过」。 */
   exportText: () => { ok: true; text: string; fileName: string } | { ok: false; message: string };
   worldFile: () => WorldFile | null;
@@ -466,55 +471,62 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  /** 备份的文字 + 文件名，并记一次「备份过」。导出文件和复制文字共用。 */
-  const prepareExport = useCallback(():
-    | { ok: true; text: string; fileName: string }
-    | { ok: false; message: string } => {
-    const box = storageRef.current;
-    const file0 = worldFile();
-    if (!file0) return { ok: false, message: "还没有打开工会" };
-    try {
-      const now = realNow();
-      const file = buildExport(file0, now, buildId());
-      const fileName = exportFileName(file.title ?? "", file.worldId, now);
-      const text = JSON.stringify(file, null, 2);
-      if (box) {
-        markBackedUp(box.storage, file.worldId, now);
-        setStorageStatus((prev) => ({ ...prev, lastBackupAt: now, reminder: null }));
-        try {
-          writeIndex(box.storage, { ...readIndex(box.storage), backupRemindedAt: now });
-        } catch {
-          /* cosmetic */
-        }
-        refreshGuilds();
+  /** 备份的文字 + 文件名。导出文件和复制文字共用。记「备份过」要等真的存下来（markExported）。 */
+  const prepareExport = useCallback(
+    (files?: Record<string, EmbeddedFile>):
+      | { ok: true; text: string; fileName: string; now: IsoDateTime; worldId: Id }
+      | { ok: false; message: string } => {
+      const file0 = worldFile();
+      if (!file0) return { ok: false, message: "还没有打开工会" };
+      try {
+        const now = realNow();
+        const file = buildExport(file0, now, buildId());
+        if (files && Object.keys(files).length) file.files = files;
+        const fileName = exportFileName(file.title ?? "", file.worldId, now);
+        const text = JSON.stringify(file, null, files ? 0 : 2);
+        return { ok: true, text, fileName, now, worldId: file.worldId };
+      } catch (e) {
+        return { ok: false, message: errorMessage(e) };
       }
-      return { ok: true, text, fileName };
-    } catch (e) {
-      return { ok: false, message: errorMessage(e) };
-    }
-  }, [worldFile, refreshGuilds]);
+    },
+    [worldFile]
+  );
 
-  const exportText = useCallback<StoreApi["exportText"]>(() => prepareExport(), [prepareExport]);
+  const markExported = useCallback(
+    (worldId: Id, now: IsoDateTime) => {
+      const box = storageRef.current;
+      if (!box) return;
+      markBackedUp(box.storage, worldId, now);
+      setStorageStatus((prev) => ({ ...prev, lastBackupAt: now, reminder: null }));
+      try {
+        writeIndex(box.storage, { ...readIndex(box.storage), backupRemindedAt: now });
+      } catch {
+        /* cosmetic */
+      }
+      refreshGuilds();
+    },
+    [refreshGuilds]
+  );
 
-  const exportWorld = useCallback<StoreApi["exportWorld"]>(() => {
-    if (typeof document === "undefined") return { ok: false, message: "只能在浏览器里导出" };
+  const exportText = useCallback<StoreApi["exportText"]>(() => {
     const r = prepareExport();
     if (!r.ok) return r;
-    try {
-      const blob = new Blob([r.text], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = r.fileName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    markExported(r.worldId, r.now);
+    return { ok: true, text: r.text, fileName: r.fileName };
+  }, [prepareExport, markExported]);
+
+  const exportWorld = useCallback<StoreApi["exportWorld"]>(
+    async (opts = {}) => {
+      if (typeof document === "undefined") return { ok: false, message: "只能在浏览器里导出" };
+      const r = prepareExport(opts.files);
+      if (!r.ok) return r;
+      const saved = await saveToDevice(r.fileName, new Blob([r.text], { type: "application/json" }));
+      if (!saved.ok) return { ok: false, message: saved.reason === "declined" ? "没有导出（你选了不保存）。" : saved.message };
+      markExported(r.worldId, r.now);
       return { ok: true, fileName: r.fileName };
-    } catch (e) {
-      return { ok: false, message: errorMessage(e) };
-    }
-  }, [prepareExport]);
+    },
+    [prepareExport, markExported]
+  );
 
   const importWorld = useCallback<StoreApi["importWorld"]>(
     (file) => {

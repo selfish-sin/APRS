@@ -196,7 +196,7 @@ describe("task.review", () => {
     const { g, reviewer, worker } = ready();
     const { taskId } = g.run(worker, "enroll.add", { group: "animation", stageKey: "inbetween", skill: 0 });
     g.run(worker, "task.submit", { taskId, note: "v1" });
-    expect(g.reject(reviewer, "task.review", { taskId, verdict: "return", comments: [] })).toBe("退回要写意见（至少一条）");
+    expect(g.reject(reviewer, "task.review", { taskId, verdict: "return", comments: [] })).toBe("退回要写意见（至少一条），或者在图上钉一处");
     g.run(reviewer, "task.review", { taskId, verdict: "return", comments: [{ layer: "A", sheets: "6、7", tag: "漏轨目", text: "第 6、7 张漏了轨目" }] });
     expect(g.state.tasks[taskId]).toMatchObject({ status: "returned", assigneeId: worker });
     const { submissionId } = g.run(worker, "task.submit", { taskId, note: "v2" });

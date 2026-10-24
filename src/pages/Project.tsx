@@ -67,6 +67,9 @@ export function ProjectPage() {
           </div>
         </div>
         <div className="page-head-actions">
+          <Link to={`/library/${project.id}`} className="ui-button" data-style="Secondary" data-size="Medium" data-testid="project-library">
+            资料库
+          </Link>
           {project.feishuRoot ? (
             <a href={project.feishuRoot} target="_blank" rel="noreferrer noopener" className="ui-button" data-style="Secondary" data-size="Medium">
               飞书根文件夹

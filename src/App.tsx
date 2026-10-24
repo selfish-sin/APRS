@@ -1,8 +1,9 @@
 /** 页面路由（hash）：没打开工会 → 进门；没登录 → 登录；登录了 → 外壳 + 各页。 */
 import { useEffect } from "react";
-import { StorageNotices, StorageUiProvider } from "@/components/storage";
+import { FilesNotice, StorageNotices, StorageUiProvider } from "@/components/storage";
 import { AppShell, Toasts } from "@/components/app/shell";
 import { navigate, useRoute, useScrollTopOnRoute } from "@/lib/router";
+import { FilesProvider } from "@/lib/files/FilesProvider";
 import { StoreProvider, useStore } from "@/lib/store";
 import { AdminPage } from "@/pages/Admin";
 import { BackupPage } from "@/pages/Backup";
@@ -11,6 +12,8 @@ import { EnrollPage } from "@/pages/Enroll";
 import { EntryPage } from "@/pages/Entry";
 import { HallPage } from "@/pages/Hall";
 import { LoginPage } from "@/pages/Login";
+import { DocPage } from "@/pages/DocPage";
+import { LibraryIndexPage, LibraryPage } from "@/pages/Library";
 import { MemberPage, MembersPage } from "@/pages/Member";
 import { NotFound } from "@/pages/NotFound";
 import { ProjectPage } from "@/pages/Project";
@@ -29,6 +32,8 @@ const TITLES: Record<string, string> = {
   member: "成员",
   me: "我的成长",
   backup: "备份",
+  library: "资料库",
+  page: "资料页",
   login: "登录",
 };
 
@@ -56,6 +61,10 @@ function Page() {
       return <MemberPage />;
     case "backup":
       return <BackupPage />;
+    case "library":
+      return route.segments[1] ? <LibraryPage /> : <LibraryIndexPage />;
+    case "page":
+      return <DocPage />;
     default:
       return <NotFound />;
   }
@@ -91,11 +100,14 @@ function Routes() {
 export function App() {
   return (
     <StoreProvider>
-      <StorageUiProvider>
-        <Routes />
-        <StorageNotices />
-        <Toasts />
-      </StorageUiProvider>
+      <FilesProvider>
+        <StorageUiProvider>
+          <Routes />
+          <StorageNotices />
+          <FilesNotice />
+          <Toasts />
+        </StorageUiProvider>
+      </FilesProvider>
     </StoreProvider>
   );
 }

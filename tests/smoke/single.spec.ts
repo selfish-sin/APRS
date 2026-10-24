@@ -29,6 +29,13 @@ test("单文件：直接打开，进示范工会，口令错有提示，对的�
     await page.goto(`file://${FILE}#/projects`, { waitUntil: "networkidle" });
     await page.locator("a.project-card").first().click();
     await expect(page.getByTestId("board")).toBeVisible();
+    // 资料库在单文件版里也能用（IndexedDB 不让用时退回内存，顶上有一条说明）
+    await page.goto(`file://${FILE}#/library`, { waitUntil: "networkidle" });
+    await page.getByTestId("library-project").first().click();
+    await page.getByTestId("library-drop-pick-input").setInputFiles({ name: "单文件里放的.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64") });
+    await expect(page.getByTestId("file-tile").filter({ hasText: "单文件里放的.png" })).toBeVisible();
+    const memory = await page.getByTestId("files-memory-banner").count();
+    console.log(`单文件版的文件仓：${memory ? "内存（有提示条）" : "IndexedDB"}`);
   }
   expectClean(errors, "单文件");
 });

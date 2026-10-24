@@ -6,6 +6,7 @@ import "./styles/typography.css";
 import "./components/ui/ui.css";
 import "./components/storage/storage.css";
 import "./styles/app.css";
+import "./components/library/library.css";
 
 createRoot(document.getElementById("root")!).render(<App />);
 

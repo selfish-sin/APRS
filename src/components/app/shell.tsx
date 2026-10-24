@@ -30,6 +30,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/hall", label: "大厅", match: (p) => p === "/hall", badge: inbox || undefined },
     { to: "/enroll", label: "报到", match: (p) => p.startsWith("/enroll") },
     { to: "/projects", label: "项目", match: (p) => p.startsWith("/projects") || p.startsWith("/project/") || p.startsWith("/cut/") },
+    { to: "/library", label: "资料库", match: (p) => p.startsWith("/library") || p.startsWith("/page/") },
     ...(reviewer ? [{ to: "/review", label: "审核台", match: (p: string) => p.startsWith("/review"), badge: reviewQueue(world, me.id).length || undefined }] : []),
     ...(isAdmin(me) ? [{ to: "/admin", label: "管理", match: (p: string) => p.startsWith("/admin") }] : []),
     { to: "/members", label: "成员", match: (p) => p.startsWith("/members") || (p.startsWith("/member/") && !p.endsWith(me.id)) },

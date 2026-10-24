@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { migrationReasonZh, type WorldFile } from "@/lib/migrations";
 import { parseImport } from "@/lib/storage/local";
+import { useFiles } from "@/lib/files/FilesProvider";
 import { useStore, type ImportReport } from "@/lib/store";
 
 /** What the overlay is showing. The world menu (sidebar) asks for these; StorageNotices draws them. */
@@ -28,6 +29,7 @@ const StorageUiContext = createContext<StorageUiApi | null>(null);
 
 export function StorageUiProvider({ children }: { children: ReactNode }) {
   const { guilds, importWorld } = useStore();
+  const { importEmbedded } = useFiles();
   const [panel, setPanel] = useState<StoragePanel | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
@@ -37,9 +39,19 @@ export function StorageUiProvider({ children }: { children: ReactNode }) {
   const confirmImport = useCallback(
     (file: WorldFile) => {
       const report = importWorld(file);
-      setPanel(report.ok ? { kind: "report", report } : { kind: "error", message: report.message });
+      if (!report.ok) {
+        setPanel({ kind: "error", message: report.message });
+        return;
+      }
+      // 备份里带了文件（勾了「连文件一起」）：放回这台设备的文件仓。
+      const n = file.files ? Object.keys(file.files).length : 0;
+      if (!n) {
+        setPanel({ kind: "report", report });
+        return;
+      }
+      void importEmbedded(file.files).then((put) => setPanel({ kind: "report", report: { ...report, files: put } }));
     },
-    [importWorld]
+    [importWorld, importEmbedded]
   );
 
   const guildsRef = useRef(guilds);

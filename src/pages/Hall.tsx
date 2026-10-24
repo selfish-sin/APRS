@@ -7,6 +7,7 @@ import { relativeZh } from "@/domain/clock";
 import { isReviewer } from "@/domain/commands/core";
 import { formatPoints, ROLE_LABEL } from "@/domain/labels";
 import { enrollmentsOf, feedOf, growthOf, inboxOf, pendingReviewCount, questFor, reviewQueue, taskViewById } from "@/domain/queries";
+import { Viewer } from "@/components/library/Viewer";
 import { Link, useRoute } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 
@@ -19,6 +20,7 @@ export function HallPage() {
   const enrolled = enrollmentsOf(world, me.id).length;
   const route = useRoute();
   const [picked, setPicked] = useState<string | null>(route.query.get("task"));
+  const [pinOpen, setPinOpen] = useState<{ fileId: string; pinId: string } | null>(null);
   const current = quests.find((q) => q.view.task.id === picked) ?? quests[0] ?? null;
   const canReview = isReviewer(me);
   const myQueue = canReview ? reviewQueue(world, me.id).length : 0;
@@ -106,6 +108,19 @@ export function HallPage() {
                     </div>
                   </li>
                 ))}
+                {inbox.pins.map((v) => (
+                  <li key={v.pin.id} data-testid="inbox-pin">
+                    <Tag tone="danger">图上的意见</Tag>
+                    <div className="list-main">
+                      <button type="button" className="inline-link t-body-14m" style={{ textAlign: "left", textDecoration: "none" }} onClick={() => setPinOpen({ fileId: v.file.id, pinId: v.pin.id })}>
+                        {v.where} · {v.pin.number} 号
+                      </button>
+                      <span className="label break">
+                        {v.by?.nickname ?? "有人"}：{v.pin.text}
+                      </span>
+                    </div>
+                  </li>
+                ))}
                 {inbox.todos.map((t) => (
                   <li key={t.thread.id}>
                     <Tag tone="warning">要补的</Tag>
@@ -179,6 +194,7 @@ export function HallPage() {
           </section>
         </div>
       </div>
+      {pinOpen && world.files[pinOpen.fileId] ? <Viewer files={[world.files[pinOpen.fileId]]} startId={pinOpen.fileId} focusPinId={pinOpen.pinId} onClose={() => setPinOpen(null)} /> : null}
     </>
   );
 }
