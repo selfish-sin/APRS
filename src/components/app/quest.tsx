@@ -10,76 +10,90 @@ import { useFiles } from "@/lib/files/FilesProvider";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { formatNumber, formatPoints, PHASE_LABEL, STAGE_KIND_LABEL } from "@/domain/labels";
+import { formatPoints } from "@/domain/labels";
+import { stageText } from "@/domain/templates";
+import { Joined, U, useI18n } from "@/i18n/I18n";
 import type { Id } from "@/domain/model";
 import { members as membersOf, type Quest } from "@/domain/queries";
 import { Link } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 import { SelectField, TextArea, TextField, copyText } from "./bits";
 
-export function QuestCard({ quest, eyebrow = "当前任务单", showCutLink = true, actions = true }: { quest: Quest; eyebrow?: string; showCutLink?: boolean; actions?: boolean }) {
-  const { view, indicator, countdown } = quest;
+export function QuestCard({ quest, eyebrow, showCutLink = true, actions = true }: { quest: Quest; eyebrow?: string; showCutLink?: boolean; actions?: boolean }) {
+  const { view, indicator } = quest;
   const { task, stage, project, cut } = view;
   const { notify } = useGuild();
+  const { L, f, r: rich, ph, pt, lang, countdown: cd, num, tag, unit: unitOf } = useI18n();
+  const countdown = quest.remainingMs === null ? null : cd(quest.remainingMs);
+  const st = stageText(project.group, stage, lang);
   const [dialog, setDialog] = useState<"submit" | "ask" | "release" | null>(null);
   const inHand = task.status === "claimed" || task.status === "returned";
   const urgent = !!quest.remainingMs && quest.remainingMs < 6 * 3600_000;
-  const unit = view.workloadLabel.split(" ").slice(1).join(" ");
+  const unit = unitOf(stage.unit, project.group, task.workload);
+  const uc = (custom: boolean, text: string) => (custom ? <U>{text}</U> : text);
   return (
-    <article className="quest" aria-label={`任务单：${view.title}`} data-testid="quest-card">
+    <article className="quest" aria-label={f(L.quest.aria, { title: pt(view.titleP) })} data-testid="quest-card">
       <div className="quest-eyebrow">
         <span>
-          {eyebrow} · {project.name}
+          {eyebrow ?? L.quest.current} · <U>{project.name}</U>
         </span>
-        <StatusPill Status={task.status} Label={task.status === "submitted" && view.versionTag ? `待审 ${view.versionTag}` : undefined} />
+        <StatusPill Status={task.status} Label={task.status === "submitted" && view.versionTag ? f(L.quest.inReviewV, { v: view.versionTag }) : undefined} />
       </div>
       <div className="stack" data-gap="small">
-        <h2 className="quest-title">{view.label}</h2>
+        <h2 className="quest-title">{ph(view.labelP)}</h2>
         {quest.assignedBy ? (
           <p className="quest-assigned" data-testid="quest-assigned-by">
-            {quest.assignedBy.nickname}派给你的
+            {rich(L.quest.assignedBy, { name: <U>{quest.assignedBy.nickname}</U> })}
           </p>
         ) : null}
-        {task.extra?.description ? <p className="quest-sub break">{task.extra.description}</p> : null}
+        {task.extra?.description ? (
+          <p className="quest-sub break">
+            <U>{task.extra.description}</U>
+          </p>
+        ) : null}
         <p className="quest-sub">
-          {project.code} · {PHASE_LABEL[stage.phase]} · {STAGE_KIND_LABEL[stage.kind]}
-          {stage.hub && stage.kind !== "hub" ? " · 枢纽" : ""}
-          {view.versionTag ? ` · 最新 ${view.versionTag}` : ""}
+          {project.code} · {L.labels.phase[stage.phase]} · {L.labels.stageKind[stage.kind]}
+          {stage.hub && stage.kind !== "hub" ? L.quest.hubSuffix : ""}
+          {view.versionTag ? f(L.quest.latest, { v: view.versionTag }) : ""}
         </p>
       </div>
       <div className="quest-numbers">
         <div className="quest-number">
-          <span className="num">{formatNumber(task.workload)}</span>
-          <small>工作量（{unit}）</small>
+          <span className="num">{num(task.workload)}</span>
+          <small>{f(L.quest.workload, { unit })}</small>
         </div>
         <div className="quest-number" data-urgent={urgent || countdown?.overdue ? "true" : "false"}>
           <span className="num">{countdown ? countdown.big : "—"}</span>
-          <small>{countdown ? countdown.text : task.status === "submitted" ? "交了，等审核" : "没有时限"}</small>
+          <small>{countdown ? countdown.text : task.status === "submitted" ? L.quest.submittedWaiting : L.quest.noDeadline}</small>
         </div>
         <div className="quest-number">
           <span className="num">{formatPoints(quest.reward, true)}</span>
-          <small>活力点（按质量 1.0）</small>
+          <small>{L.quest.reward}</small>
         </div>
       </div>
 
       {quest.lastReturn ? (
-        <ul className="quest-notes" aria-label="退回意见">
+        <ul className="quest-notes" aria-label={L.quest.returnNotes}>
           {quest.lastReturn.comments.map((c, i) => (
             <li key={i}>
               <span className="label">
-                退回 · {[c.layer ? `${c.layer} 层` : null, c.sheets ? `第 ${c.sheets} 张` : null, c.tag].filter(Boolean).join(" · ") || "意见"}
+                {L.quest.returned} · <Joined parts={[c.layer ? f(L.labels.layer, { layer: c.layer }) : null, c.sheets ? rich(L.quest.sheetNo, { n: <U>{c.sheets}</U> }) : null, c.tag ? tag(c.tag) : null]} fallback={L.quest.comment} />
               </span>
-              <span>{c.text}</span>
+              <span>
+                <U>{c.text}</U>
+              </span>
             </li>
           ))}
         </ul>
       ) : null}
       {indicator.todos.length ? (
-        <ul className="quest-notes" aria-label="要补">
+        <ul className="quest-notes" aria-label={L.quest.todos}>
           {indicator.todos.map((t) => (
             <li key={t.id}>
-              <span className="label">拍板以后要补</span>
-              <span>{t.text.replace(/^要补：/, "")}</span>
+              <span className="label">{L.quest.todoAfterRuling}</span>
+              <span>
+                <U>{t.text.replace(/^要补：/, "")}</U>
+              </span>
             </li>
           ))}
         </ul>
@@ -87,23 +101,23 @@ export function QuestCard({ quest, eyebrow = "当前任务单", showCutLink = tr
 
       <dl className="quest-rows">
         <div>
-          <dt>收什么</dt>
+          <dt>{L.quest.receive}</dt>
           <dd>
-            <span>{indicator.receive.text}</span>
+            <span>{uc(st.uc.receive, st.receive)}</span>
             {indicator.receive.from.map((src) =>
               src.tasks.slice(0, 4).map((t) => (
                 <span key={t.task.id} className="quest-sub">
-                  {t.label}
+                  {ph(t.labelP)}
                   {t.latest ? ` · v${String(t.latest.versionNo).padStart(2, "0")}` : ""}
                   {t.latest?.link ? (
                     <>
                       {" · "}
                       <a href={t.latest.link} target="_blank" rel="noreferrer noopener">
-                        打开链接
+                        {L.quest.openLink}
                       </a>
                     </>
                   ) : (
-                    ` · 在 ${t.folder}`
+                    rich(L.quest.inFolder, { folder: <U>{t.folder}</U> })
                   )}
                 </span>
               ))
@@ -111,64 +125,63 @@ export function QuestCard({ quest, eyebrow = "当前任务单", showCutLink = tr
           </dd>
         </div>
         <div>
-          <dt>交到哪</dt>
+          <dt>{L.quest.deliverTo}</dt>
           <dd>
-            <span className="quest-code">{indicator.deliver.folder}</span>
+            <span className="quest-code" data-uc="">
+              {indicator.deliver.folder}
+            </span>
             {project.feishuRoot ? (
               <a href={project.feishuRoot} target="_blank" rel="noreferrer noopener">
-                打开飞书根文件夹
+                {L.quest.openRoot}
               </a>
             ) : (
-              <span className="quest-sub">在项目的飞书文件夹里</span>
+              <span className="quest-sub">{L.quest.inProjectFolder}</span>
             )}
           </dd>
         </div>
         <div>
-          <dt>文件名</dt>
+          <dt>{L.quest.fileName}</dt>
           <dd>
             <span className="quest-code">{indicator.deliver.fileName}</span>
-            <button
-              type="button"
-              className="copy-button"
-              onClick={async () => notify((await copyText(indicator.deliver.fileName)) ? "文件名复制好了" : "这里不让复制，照着抄一下", "Neutral")}
-            >
-              复制文件名
+            <button type="button" className="copy-button" onClick={async () => notify((await copyText(indicator.deliver.fileName)) ? L.quest.fileNameCopied : L.quest.copyBlocked, "Neutral")}>
+              {L.quest.copyFileName}
             </button>
           </dd>
         </div>
         <div>
-          <dt>交什么</dt>
+          <dt>{L.quest.deliver}</dt>
           <dd>
-            <span>{indicator.deliver.text}</span>
+            <span>{uc(st.uc.deliver, st.deliver)}</span>
             <span className="quest-sub">
-              交给：{indicator.handTo.text}
-              {indicator.reviewer ? ` · 审核：${indicator.reviewer.nickname}` : ""}
+              {rich(L.quest.handTo, { to: uc(st.uc.handTo, st.handTo) })}
+              {indicator.reviewer ? rich(L.quest.reviewerIs, { name: <U>{indicator.reviewer.nickname}</U> }) : ""}
             </span>
           </dd>
         </div>
       </dl>
 
       {actions ? (
-      <div className="quest-actions">
-        {inHand ? <Button Label={task.status === "returned" ? "改好了，再交" : "交"} Style="Accent" onClick={() => setDialog("submit")} /> : null}
-        <Button Label="提问" Style="Secondary" onClick={() => setDialog("ask")} />
-        {inHand ? <Button Label="放弃" Style="Secondary" onClick={() => setDialog("release")} /> : null}
-        {showCutLink && cut ? (
-          <Link to={`/cut/${cut.id}`} className="ui-button" data-style="Secondary" data-size="Medium">
-            看这一卡
-          </Link>
-        ) : null}
-      </div>
+        <div className="quest-actions">
+          {inHand ? <Button Label={task.status === "returned" ? L.quest.resubmit : L.quest.submit} Style="Accent" onClick={() => setDialog("submit")} /> : null}
+          <Button Label={L.quest.ask} Style="Secondary" onClick={() => setDialog("ask")} />
+          {inHand ? <Button Label={L.quest.release} Style="Secondary" onClick={() => setDialog("release")} /> : null}
+          {showCutLink && cut ? (
+            <Link to={`/cut/${cut.id}`} className="ui-button" data-style="Secondary" data-size="Medium">
+              {L.quest.viewCut}
+            </Link>
+          ) : null}
+        </div>
       ) : null}
       {dialog === "submit" ? <SubmitDialog quest={quest} onClose={() => setDialog(null)} /> : null}
       {dialog === "ask" ? <AskDialog quest={quest} onClose={() => setDialog(null)} /> : null}
-      {dialog === "release" ? <ReleaseDialog taskId={task.id} label={view.label} onClose={() => setDialog(null)} /> : null}
+      {dialog === "release" ? <ReleaseDialog taskId={task.id} label={pt(view.labelP)} onClose={() => setDialog(null)} /> : null}
     </article>
   );
 }
 
 export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => void }) {
   const { dispatch, notify } = useGuild();
+  const { L, f, pt, err } = useI18n();
   const files = useFiles();
   const [attached, setAttached] = useState<File[]>([]);
   const [links, setLinks] = useState<LinkDraft[]>(() => {
@@ -181,31 +194,31 @@ export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => 
   const submit = () => {
     const r = dispatch("task.submit", { taskId: quest.view.task.id, links: links.map((l) => ({ url: l.url, name: l.name || null, kind: l.kind || null })), note, fileName }, { quiet: true });
     if (!r.ok) {
-      setError(r.error.message);
+      setError(err(r.error));
       return;
     }
-    const label = `交了 ${quest.view.label} v${String(quest.indicator.deliver.version).padStart(2, "0")}，等审核`;
+    const params = { label: pt(quest.view.labelP), v: `v${String(quest.indicator.deliver.version).padStart(2, "0")}` };
     const submissionId = r.created.submissionId;
     onClose();
     if (attached.length && submissionId) {
       // 附的截图 / 胶片预览挂在这一版上。
       void files.addFiles(attached, { subjectType: "submission", subjectId: submissionId }).then((rep) => {
-        if (rep.errors.length) notify(`${label}；${rep.errors[0]}`, "Error");
-        else notify(`${label}（附了 ${rep.fileIds.length + rep.existing.length} 个文件）`);
+        if (rep.errors.length) notify(f(L.quest.submittedFileError, { ...params, why: pt(rep.errors[0]) }), "Error");
+        else notify(f(L.quest.submittedFiles, { ...params, n: rep.fileIds.length + rep.existing.length }));
       });
-    } else notify(label);
+    } else notify(f(L.quest.submitted, params));
   };
   return (
     <Drawer
       Type="Dialog"
-      Title={`交 ${quest.view.label}`}
-      Body={`这一版是 v${String(quest.indicator.deliver.version).padStart(2, "0")}。大文件放飞书（或者 Google Drive、Dropbox），这里只贴链接。`}
+      Title={f(L.quest.submitTitle, { label: pt(quest.view.labelP) })}
+      Body={f(L.quest.submitBody, { v: `v${String(quest.indicator.deliver.version).padStart(2, "0")}` })}
       open
       onClose={onClose}
       actions={
         <>
-          <Button Label="取消" Style="Secondary" onClick={onClose} />
-          <Button Label="交" Style="Accent" onClick={submit} data-testid="submit-confirm" />
+          <Button Label={L.quest.cancel} Style="Secondary" onClick={onClose} />
+          <Button Label={L.quest.submit} Style="Accent" onClick={submit} data-testid="submit-confirm" />
         </>
       }
     >
@@ -218,15 +231,15 @@ export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => 
         }}
       >
         <LinksEditor value={links} onChange={setLinks} />
-        <TextArea label="说明" placeholder="改了哪里、还有什么要说的" value={note} onChange={(e) => setNote(e.target.value)} hint="链接和说明至少写一个" />
-        <TextField label="文件名" value={fileName} onChange={(e) => setFileName(e.target.value)} hint="按规范自动生成，可以改；扩展名照你的软件" />
-        <DropZone testId="submit-drop" hint="附截图 / 导出的胶片预览（可以不附）" onFiles={(f) => setAttached((xs) => [...xs, ...f])} />
+        <TextArea label={L.quest.note} placeholder={L.quest.notePlaceholder} value={note} onChange={(e) => setNote(e.target.value)} hint={L.quest.noteHint} />
+        <TextField label={L.quest.fileName} value={fileName} onChange={(e) => setFileName(e.target.value)} hint={L.quest.fileNameHint} />
+        <DropZone testId="submit-drop" hint={L.quest.dropHint} onFiles={(fs) => setAttached((xs) => [...xs, ...fs])} />
         {attached.length ? (
-          <div className="attach-row" aria-label="要附的文件">
-            {attached.map((f, i) => (
+          <div className="attach-row" aria-label={L.quest.attachments}>
+            {attached.map((file, i) => (
               <span key={i} className="attach-chip" data-testid="submit-attached">
-                <span className="break">{f.name || "粘贴的截图"}</span>
-                <button type="button" className="inline-link" aria-label={`不附 ${f.name}`} onClick={() => setAttached((xs) => xs.filter((_, j) => j !== i))}>
+                <span className="break">{file.name ? <U>{file.name}</U> : L.quest.pastedShot}</span>
+                <button type="button" className="inline-link" aria-label={f(L.quest.unattach, { name: file.name })} onClick={() => setAttached((xs) => xs.filter((_, j) => j !== i))}>
                   ✕
                 </button>
               </span>
@@ -246,7 +259,8 @@ export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => 
 
 export function AskDialog({ quest, onClose }: { quest: Quest; onClose: () => void }) {
   const { dispatch, notify, world, me } = useGuild();
-  const upstream = quest.indicator.receive.from.map((f) => f.stage);
+  const { L, f, pt, err, stageName } = useI18n();
+  const upstream = quest.indicator.receive.from.map((src) => src.stage);
   const [target, setTarget] = useState<string>(upstream[0] ? `stage:${upstream[0].templateKey}` : "");
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -257,41 +271,41 @@ export function AskDialog({ quest, onClose }: { quest: Quest; onClose: () => voi
     const kind = target === "comment" ? "comment" : target === "setting" ? "setting" : "ask";
     const r = dispatch("thread.open", { subjectType: "task", subjectId: quest.view.task.id, kind, askStageKey, askMemberId, text }, { quiet: true });
     if (!r.ok) {
-      setError(r.error.message);
+      setError(err(r.error));
       return;
     }
-    notify(kind === "ask" ? "问出去了，有人回了会在「等我处理」里" : "留好了");
+    notify(kind === "ask" ? L.quest.asked : L.quest.left);
     onClose();
   };
   return (
     <Drawer
       Type="Dialog"
-      Title={`提问 · ${quest.view.label}`}
+      Title={f(L.quest.askTitle, { label: pt(quest.view.labelP) })}
       open
       onClose={onClose}
       actions={
         <>
-          <Button Label="取消" Style="Secondary" onClick={onClose} />
-          <Button Label="发出去" Style="Accent" onClick={send} />
+          <Button Label={L.quest.cancel} Style="Secondary" onClick={onClose} />
+          <Button Label={L.quest.send} Style="Accent" onClick={send} />
         </>
       }
     >
       <div className="stack" data-gap="small">
-        <SelectField label="问谁" value={target} onChange={(e) => setTarget(e.target.value)}>
+        <SelectField label={L.quest.askWho} value={target} onChange={(e) => setTarget(e.target.value)}>
           {upstream.map((s) => (
             <option key={s.id} value={`stage:${s.templateKey}`}>
-              上游：{s.name}
+              {f(L.quest.upstreamOpt, { stage: stageName(quest.view.project.group, s) })}
             </option>
           ))}
           {people.map((m) => (
-            <option key={m.id} value={`member:${m.id}`}>
-              问 {m.nickname}
+            <option key={m.id} value={`member:${m.id}`} data-uc="">
+              {f(L.quest.askMember, { name: m.nickname })}
             </option>
           ))}
-          <option value="setting">设定问题（要管理员拍板）</option>
-          <option value="comment">只留个意见</option>
+          <option value="setting">{L.quest.settingOpt}</option>
+          <option value="comment">{L.quest.commentOpt}</option>
         </SelectField>
-        <TextArea label="问题" placeholder="要问上游的事：哪一层、第几张、哪里看不懂" value={text} onChange={(e) => setText(e.target.value)} />
+        <TextArea label={L.quest.question} placeholder={L.quest.questionPlaceholder} value={text} onChange={(e) => setText(e.target.value)} />
         {error ? (
           <p className="error-text" role="alert">
             {error}
@@ -304,21 +318,22 @@ export function AskDialog({ quest, onClose }: { quest: Quest; onClose: () => voi
 
 export function ReleaseDialog({ taskId, label, onClose }: { taskId: Id; label: string; onClose: () => void }) {
   const { dispatch, notify } = useGuild();
+  const { L, f } = useI18n();
   return (
     <Drawer
       Type="Dialog"
-      Title={`放弃 ${label}？`}
-      Body="放弃以后这张回到「可接」，别人可以接，不扣分。交过的版本还留着。"
+      Title={f(L.quest.releaseTitle, { label })}
+      Body={L.quest.releaseBody}
       open
       onClose={onClose}
       actions={
         <>
-          <Button Label="不放弃" Style="Secondary" onClick={onClose} />
+          <Button Label={L.quest.keep} Style="Secondary" onClick={onClose} />
           <Button
-            Label="放弃"
+            Label={L.quest.release}
             onClick={() => {
               const r = dispatch("task.release", { taskId });
-              if (r.ok) notify(`${label} 放回去了`, "Neutral");
+              if (r.ok) notify(f(L.quest.released, { label }), "Neutral");
               onClose();
             }}
           />
@@ -330,12 +345,13 @@ export function ReleaseDialog({ taskId, label, onClose }: { taskId: Id; label: s
 
 /** 白色的小任务单（手上不止一张时）。 */
 export function MiniQuest({ quest, selected, onSelect }: { quest: Quest; selected: boolean; onSelect: () => void }) {
+  const { L, ph, countdown } = useI18n();
   return (
     <button type="button" className="mini-quest" aria-pressed={selected} onClick={onSelect} data-testid="mini-quest">
       <div className="list-main">
-        <span className="t-body-14m">{quest.view.label}</span>
+        <span className="t-body-14m">{ph(quest.view.labelP)}</span>
         <span className="label">
-          {quest.view.project.name} · {quest.countdown ? quest.countdown.text : "等审核"}
+          <U>{quest.view.project.name}</U> · {quest.remainingMs !== null ? countdown(quest.remainingMs).text : L.quest.waitingReview}
         </span>
       </div>
       <StatusPill Status={quest.view.task.status} />

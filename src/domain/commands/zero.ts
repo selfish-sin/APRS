@@ -11,16 +11,18 @@ import { PROJECT_TEMPLATES, PROJECT_TEMPLATE_KEYS, type ProjectTemplateKey } fro
 import type { ReadModel } from "../readmodel";
 import { DEFAULT_MAX_ACTIVE, rateFor } from "../rules";
 import { groupTemplate } from "../templates";
-import { guarded, insert, mustAdmin, mustBeOneOf, mustGet, mustText, ok, optDate, reject, rejectT, update, type Ctx } from "./core";
+import { guarded, insert, mustAdmin, mustBeOneOf, mustGet, mustText, ok, optDate, rejectT, update, type Ctx } from "./core";
+import { t2, uc, type Text2 } from "../text";
+import { whatText } from "../what";
 import { newTasks, openReady } from "./materialize";
 import { stageBody } from "./project";
 
 const CODE_RE = /^[A-Z][A-Z0-9]{1,5}$/;
 export const MAX_CUTS = 200;
 
-function int(value: unknown, what: string, min: number, max: number): number {
+function int(value: unknown, what: string | Text2, min: number, max: number): number {
   const n = Number(value);
-  if (!Number.isInteger(n) || n < min || n > max) rejectT("invalid", "structure_range", { what, min, max });
+  if (!Number.isInteger(n) || n < min || n > max) rejectT("invalid", "structure_range", { what: whatText(what), min, max });
   return n;
 }
 
@@ -89,8 +91,8 @@ export const draftProject = guarded<DraftProjectInput>((rm, input, ctx) => {
   const group = input.group ? mustBeOneOf(input.group, GROUP, "组") : tpl.group;
   const name = mustText(input.name, "项目名字", 40);
   const code = typeof input.code === "string" ? input.code.trim().toUpperCase() : "";
-  if (!CODE_RE.test(code)) reject("invalid", "项目代号要 2–6 位大写字母或数字，用在文件名里（例如 ANDLC）");
-  if (rm.where("projects").some((p) => p.code === code)) reject("invalid", `代号 ${code} 已经有项目在用了`);
+  if (!CODE_RE.test(code)) rejectT("invalid", "project_code_bad");
+  if (rm.where("projects").some((p) => p.code === code)) rejectT("invalid", "project_code_taken", { code });
   const today = ctx.worldNow.slice(0, 10);
   const startOn = optDate(input.startOn, "开始") ?? today;
   const planEndOn = optDate(input.planEndOn, "计划结束") ?? addDays(startOn, 90);
@@ -149,9 +151,9 @@ export const setStructure = guarded<SetStructureInput>((rm, input, ctx) => {
     if (!row) continue;
     if (c.layers) {
       const names = mustLayerNames(c.layers.map((l) => l.name), hasLayers);
-      row.layers = names.map((name, i) => ({ name, sheets: int(c.layers![i].sheets, `${cutCode(row, p.group)} ${name} 层的张数`, 1, 999) }));
+      row.layers = names.map((name, i) => ({ name, sheets: int(c.layers![i].sheets, t2(`${cutCode(row, p.group)} ${name} 层的张数`, `drawings for ${cutCode(row, p.group, "en")} layer ${name}`), 1, 999) }));
     }
-    if (c.seconds !== undefined) row.seconds = int(c.seconds, `${cutCode(row, p.group)} 的秒数`, 0, 600);
+    if (c.seconds !== undefined) row.seconds = int(c.seconds, t2(`${cutCode(row, p.group)} 的秒数`, `seconds for ${cutCode(row, p.group, "en")}`), 0, 600);
   }
   const ch = update("projects", p, { structure, cutsPlan: plan });
   return ok(ch ? [ch] : [], { projectId: p.id });
@@ -176,12 +178,12 @@ export const setStaff = guarded<StaffSetInput>((rm, input, ctx) => {
   for (const raw of list) {
     if ("memberId" in raw && raw.memberId) {
       const m = mustGet(rm, ctx, "members", raw.memberId, "成员");
-      if (people.some((x) => "memberId" in x && x.memberId === m.id)) rejectT("invalid", "staff_dup", { name: m.nickname });
+      if (people.some((x) => "memberId" in x && x.memberId === m.id)) rejectT("invalid", "staff_dup", { name: uc(m.nickname) });
       people.push({ memberId: m.id });
     } else {
       const name = typeof (raw as { name?: unknown }).name === "string" ? (raw as { name: string }).name.trim() : "";
       if (!name || name.length > 24) rejectT("invalid", "staff_name_bad");
-      if (people.some((x) => "name" in x && x.name === name)) rejectT("invalid", "staff_dup", { name });
+      if (people.some((x) => "name" in x && x.name === name)) rejectT("invalid", "staff_dup", { name: uc(name) });
       people.push({ name });
     }
   }

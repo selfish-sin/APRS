@@ -8,8 +8,11 @@ import { cmp } from "./agenda";
 import { addDays, daysBetween, localDate } from "./clock";
 import { LEDGER_KIND_LABEL, PHASE_LABEL, TASK_STATUS_LABEL, VERDICT_LABEL } from "./labels";
 import type { Id, StageRow, TaskStatus, WorldState } from "./model";
-import { cutName, gridOf, indexOf, memberById, projectById, reviewsOf, scheduleOf, submissionsOf, taskView, todayOf } from "./queries";
-import { EXTRA_KIND_LABEL } from "./naming";
+import { gridOf, indexOf, memberById, projectById, reviewsOf, scheduleOf, submissionsOf, taskView, todayOf } from "./queries";
+import { EXTRA_KIND_LABEL, EXTRA_KIND_TEXT, cutCode } from "./naming";
+import { tagText } from "./rules";
+import { stageText } from "./templates";
+import { phraseText, type Phrase } from "./text";
 
 export type Lang = "zh" | "en";
 export type CellStyle = "header" | "plan" | "actual" | "over" | "today" | "phase" | "total";
@@ -66,7 +69,9 @@ const statusText = (s: TaskStatus, lang: Lang) => (lang === "en" ? STATUS_EN[s] 
 const phaseText = (p: StageRow["phase"], lang: Lang) => (lang === "en" ? PHASE_EN[p] : PHASE_LABEL[p]);
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 const v2 = (n: number) => `v${String(n).padStart(2, "0")}`;
-const stageName = (s: StageRow) => s.name.replace(/（.*?）/, "");
+/** 环节名：中文去掉括号里的说明；English 用模板的说法（管理员自己起的名字照原样）。 */
+const stageName = (state: WorldState, s: StageRow, lang: Lang) =>
+  lang === "en" ? stageText(projectById(state, s.projectId)?.group ?? "animation", s, "en").name : s.name.replace(/（.*?）/, "");
 
 /** 必要劳动时间统计表：环节 → 工会表里的列（1–8，对应 H.hours 的第 2–9 列）。 */
 export const HOURS_COLUMN: Record<string, number> = {
@@ -109,7 +114,7 @@ export function progressTable(state: WorldState, projectId: Id, lang: Lang): Rep
       const status = done ? (lang === "en" ? "Done" : "完成") : !r.actual ? (left < 0 ? (lang === "en" ? "Late" : "超期") : lang === "en" ? "Not started" : "未开始") : left < 0 ? (lang === "en" ? "Late" : "超期") : lang === "en" ? "In progress" : "进行中";
       const tasks = indexOf(state).tasksByStage.get(r.stage.id) ?? [];
       const lastPass = done ? tasks.map((t) => (t.passedAt ? localDate(t.passedAt) : "")).sort(cmp).pop() ?? "" : "";
-      rows.push([++i, stageName(r.stage), phaseText(r.stage.phase, lang), start, end, daysBetween(start, end) + 1, pct(r.progress), done ? 0 : left, status, lastPass || null]);
+      rows.push([++i, stageName(state, r.stage, lang), phaseText(r.stage.phase, lang), start, end, daysBetween(start, end) + 1, pct(r.progress), done ? 0 : left, status, lastPass || null]);
       if (!done && left < 0) styles.push({ r: rows.length - 1, c: 8, s: "over" });
     }
   return { key: "progress", name: sheetName(L.progress[lang]), header: H.progress[lang], rows, widths: [6, 22, 12, 12, 12, 10, 8, 10, 10, 12], styles, freezeCols: 2 };
@@ -137,7 +142,7 @@ export function planTable(state: WorldState, projectId: Id, lang: Lang): ReportT
         .filter(Boolean)
         .join("、");
       const row: CellValue[] = [
-        stageName(r.stage),
+        stageName(state, r.stage, lang),
         phaseText(r.stage.phase, lang),
         owners || null,
         `W${r.plan.start}`,
@@ -180,7 +185,7 @@ export function planTable(state: WorldState, projectId: Id, lang: Lang): ReportT
 export function gridTable(state: WorldState, projectId: Id, lang: Lang): ReportTable | null {
   const grid = gridOf(state, projectId);
   if (!grid) return null;
-  const header = [lang === "en" ? "Cut" : "卡", ...grid.columns.map(stageName)];
+  const header = [lang === "en" ? "Cut" : "卡", ...grid.columns.map((c) => stageName(state, c, lang))];
   const rows: CellValue[][] = grid.rows.map((row) => [
     row.code,
     ...row.cells.map((cell) =>
@@ -240,13 +245,17 @@ export function reviewsTable(state: WorldState, projectId: Id, lang: Lang): Repo
     const subs = submissionsOf(state, t.id);
     for (const r of reviewsOf(state, t.id)) {
       const sub = subs.find((s) => s.id === r.submissionId);
-      const comments = r.comments.map((c) => [c.layer ? (lang === "en" ? `layer ${c.layer}` : `${c.layer} 层`) : null, c.sheets ? (lang === "en" ? `#${c.sheets}` : `第 ${c.sheets} 张`) : null, c.tag, c.text].filter(Boolean).join(" ")).join("；");
+      const comments = r.comments.map((c) => [c.layer ? (lang === "en" ? `layer ${c.layer}` : `${c.layer} 层`) : null, c.sheets ? (lang === "en" ? `#${c.sheets}` : `第 ${c.sheets} 张`) : null, c.tag ? tagText(c.tag, lang) : null, c.text].filter(Boolean).join(" ")).join(lang === "en" ? "; " : "；");
       rows.push({
         at: r.at,
         row: [
           localDate(r.at),
-          v.cut ? cutName(state, v.cut) : null,
-          t.extra ? `${stageName(v.stage)} ${lang === "en" ? t.extra.kind : EXTRA_KIND_LABEL[t.extra.kind]}：${t.extra.title}` : `${stageName(v.stage)}${t.layer ? ` ${t.layer}` : ""}`,
+          v.cut ? cutCode(v.cut, v.project.group, lang) : null,
+          t.extra
+            ? lang === "en"
+              ? `${stageName(state, v.stage, lang)} ${EXTRA_KIND_TEXT[t.extra.kind].en}: ${t.extra.title}`
+              : `${stageName(state, v.stage, lang)} ${EXTRA_KIND_LABEL[t.extra.kind]}：${t.extra.title}`
+            : `${stageName(state, v.stage, lang)}${t.layer ? ` ${t.layer}` : ""}`,
           sub ? v2(sub.versionNo) : null,
           sub?.byMemberId ? memberById(state, sub.byMemberId)?.nickname ?? null : t.outsourceName,
           memberById(state, r.byMemberId)?.nickname ?? null,
@@ -291,13 +300,13 @@ export function memberRecord(state: WorldState, memberId: Id, lang: Lang = "zh")
     const v = taskView(state, t)!;
     const subs = idx.subsByTask.get(t.id) ?? [];
     const last = subs[subs.length - 1];
-    return [v.project.name, v.label, statusText(t.status, lang), last ? v2(last.versionNo) : null, last ? localDate(last.at) : null, t.passedAt ? localDate(t.passedAt) : null, pointsByTask.get(t.id) ?? null];
+    return [v.project.name, phraseText(v.labelP, lang), statusText(t.status, lang), last ? v2(last.versionNo) : null, last ? localDate(last.at) : null, t.passedAt ? localDate(t.passedAt) : null, pointsByTask.get(t.id) ?? null];
   });
   const byStage = new Map<string, { n: number; hours: number; points: number }>();
   for (const l of ledger) {
     const t = l.taskId ? idx.taskById.get(l.taskId) : undefined;
     const s = t ? idx.stageById.get(t.stageId) : undefined;
-    const name = s ? stageName(s) : lang === "en" ? "Other" : "其他";
+    const name = s ? stageName(state, s, lang) : lang === "en" ? "Other" : "其他";
     const cur = byStage.get(name) ?? { n: 0, hours: 0, points: 0 };
     if (l.kind === "task") cur.n += 1;
     cur.hours += l.hours;
@@ -307,13 +316,22 @@ export function memberRecord(state: WorldState, memberId: Id, lang: Lang = "zh")
   const hours: CellValue[][] = Array.from(byStage.entries()).map(([name, x]) => [name, x.n, Math.round(x.hours * 10) / 10, Math.round(x.points * 10) / 10]);
   const flow: CellValue[][] = ledger.map((l) => {
     const t = l.taskId ? idx.taskById.get(l.taskId) : undefined;
-    return [localDate(l.at), lang === "en" ? LEDGER_EN[l.kind] : LEDGER_KIND_LABEL[l.kind], t ? taskView(state, t)?.title ?? null : null, l.hours, l.factor, l.quality, l.points, l.note];
+    return [localDate(l.at), lang === "en" ? LEDGER_EN[l.kind] : LEDGER_KIND_LABEL[l.kind], t ? phraseText(taskView(state, t)?.titleP ?? null, lang) || null : null, l.hours, l.factor, l.quality, l.points, ledgerNote(l.note, l.kind, t ? taskView(state, t)?.labelP ?? null : null, lang)];
   });
   return [
     { key: "myTasks", name: sheetName(L.myTasks[lang]), header: H.myTasks[lang], rows: tasks, widths: [14, 30, 10, 10, 12, 12, 8], styles: [], freezeCols: 0 },
     { key: "myHours", name: sheetName(L.myHours[lang]), header: H.myHours[lang], rows: hours, widths: [20, 10, 10, 10], styles: [], freezeCols: 0 },
     { key: "myLedger", name: sheetName(L.myLedger[lang]), header: H.myLedger[lang], rows: flow, widths: [12, 10, 36, 8, 8, 8, 8, 20], styles: [], freezeCols: 0 },
   ];
+}
+
+/** 流水的备注：记的是中文（「C009 · 中割 · B 层 超时收回」「自修出 v02」），English 表里按种类重说一遍。 */
+function ledgerNote(note: string | null, kind: keyof typeof LEDGER_EN, label: Phrase | null, lang: Lang): string | null {
+  if (!note || lang === "zh") return note;
+  if (kind === "penalty") return label ? `${phraseText(label, "en")}: reclaimed after the deadline` : "Reclaimed after the deadline";
+  const v = /v\d+/.exec(note)?.[0];
+  if (kind === "self_fix") return v ? `Reviewer fixed it as ${v}` : "Reviewer fixed it";
+  return note;
 }
 
 /** 文件名：「安娜的旅程-汇报-2026-10-23.xlsx」。 */

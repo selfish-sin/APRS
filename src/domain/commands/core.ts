@@ -6,7 +6,8 @@
  */
 import { ID_PREFIX, type IdTable } from "../ids";
 import { ERRORS, type ErrorKey } from "../errors";
-import { fill, type TextParam } from "../text";
+import { fill, type Text2, type TextParam } from "../text";
+import { whatText } from "../what";
 import type { Change, Id, IsoDateTime, MemberRow, Patch, RowHeader, TableName, Tables } from "../model";
 import type { ReadModel } from "../readmodel";
 
@@ -147,25 +148,25 @@ export function compact(changes: (Change | null | undefined)[]): Change[] {
 // ---------------------------------------------------------------------------
 
 /** Live row in this world, or reject with not_found. */
-export function mustGet<K extends TableName>(rm: ReadModel, ctx: Ctx, table: K, id: Id | null | undefined, what: string): Tables[K] {
+export function mustGet<K extends TableName>(rm: ReadModel, ctx: Ctx, table: K, id: Id | null | undefined, what: string | Text2): Tables[K] {
   const row = id ? rm.get(table, id) : undefined;
   if (!row || row.archivedAt || (table !== "accounts" && row.worldId !== ctx.worldId)) {
-    reject("not_found", `找不到${what}`, { table, id });
+    rejectT("not_found", "not_found", { what: whatText(what) });
   }
   return row;
 }
 
-export function mustBeOneOf<T extends string>(value: unknown, allowed: readonly T[], what: string): T {
+export function mustBeOneOf<T extends string>(value: unknown, allowed: readonly T[], what: string | Text2): T {
   if (typeof value !== "string" || !(allowed as readonly string[]).includes(value)) {
-    reject("invalid", `${what}不在可选范围内`, { value, allowed });
+    rejectT("invalid", "not_option", { what: whatText(what) });
   }
   return value as T;
 }
 
-export function mustText(value: unknown, what: string, max = 200): string {
+export function mustText(value: unknown, what: string | Text2, max = 200): string {
   const s = typeof value === "string" ? value.trim() : "";
-  if (!s) reject("invalid", `${what}不能为空`);
-  if (s.length > max) reject("invalid", `${what}太长了（最多 ${max} 字）`);
+  if (!s) rejectT("invalid", "empty", { what: whatText(what) });
+  if (s.length > max) rejectT("invalid", "too_long", { what: whatText(what), max });
   return s;
 }
 
@@ -173,31 +174,31 @@ export function optText(value: unknown, max = 2000): string | null {
   if (value === undefined || value === null) return null;
   const s = String(value).trim();
   if (!s) return null;
-  if (s.length > max) reject("invalid", `内容太长了（最多 ${max} 字）`);
+  if (s.length > max) rejectT("invalid", "content_too_long", { max });
   return s;
 }
 
 /** A web address (http / https only, ≤ 500 chars) or null. */
-export function optUrl(value: unknown, what: string): string | null {
+export function optUrl(value: unknown, what: string | Text2): string | null {
   if (value === undefined || value === null || value === "") return null;
   const s = typeof value === "string" ? value.trim() : "";
-  if (!/^https?:\/\/[^\s/?#]+/i.test(s)) reject("invalid", `${what}要以 http:// 或 https:// 开头`);
-  if (s.length > 500) reject("invalid", `${what}太长了（最多 500 字）`);
+  if (!/^https?:\/\/[^\s/?#]+/i.test(s)) rejectT("invalid", "url_scheme", { what: whatText(what) });
+  if (s.length > 500) rejectT("invalid", "too_long", { what: whatText(what), max: 500 });
   return s;
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-export function optDate(value: unknown, what: string): string | null {
+export function optDate(value: unknown, what: string | Text2): string | null {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || !DATE_RE.test(value)) reject("invalid", `${what}的日期格式不对（YYYY-MM-DD）`);
+  if (typeof value !== "string" || !DATE_RE.test(value)) rejectT("invalid", "date_format", { what: whatText(what) });
   return value;
 }
 
 /** A date (YYYY-MM-DD, all day) or an ISO date-time — the two shapes `events.startAt / endAt` hold. */
-export function optWhen(value: unknown, what: string): string | null {
+export function optWhen(value: unknown, what: string | Text2): string | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value === "string" && DATE_RE.test(value)) return value;
-  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) reject("invalid", `${what}的时间格式不对`);
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) rejectT("invalid", "time_format", { what: whatText(what) });
   return value;
 }
 
@@ -206,16 +207,16 @@ export function whenMs(value: string): number {
   return Date.parse(DATE_RE.test(value) ? `${value}T00:00:00+08:00` : value);
 }
 
-export function optNumber(value: unknown, what: string, min = 0, max = 1e6): number | null {
+export function optNumber(value: unknown, what: string | Text2, min = 0, max = 1e6): number | null {
   if (value === undefined || value === null || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n) || n < min || n > max) reject("invalid", `${what}要填 ${min}–${max} 之间的数字`);
+  if (!Number.isFinite(n) || n < min || n > max) rejectT("invalid", "number_range", { what: whatText(what), min, max });
   return n;
 }
 
-export function optDateTime(value: unknown, what: string): string | null {
+export function optDateTime(value: unknown, what: string | Text2): string | null {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) reject("invalid", `${what}的时间格式不对`);
+  if (typeof value !== "string" || Number.isNaN(Date.parse(value))) rejectT("invalid", "time_format", { what: whatText(what) });
   return value;
 }
 
@@ -228,9 +229,9 @@ export function mustUrl(value: unknown): string {
   try {
     protocol = new URL(s).protocol.toLowerCase();
   } catch {
-    reject("invalid", "这不像一个链接（需要完整地址，例如 https://…）");
+    rejectT("invalid", "not_a_link");
   }
-  if (BLOCKED_SCHEMES.has(protocol)) reject("invalid", "不支持这种链接");
+  if (BLOCKED_SCHEMES.has(protocol)) rejectT("invalid", "link_blocked");
   return s;
 }
 
@@ -240,12 +241,12 @@ export function mustUrl(value: unknown): string {
 
 /** 现在操作的成员（并核对：登录的账号就是这个成员的）。 */
 export function mustMember(rm: ReadModel, ctx: Ctx): MemberRow {
-  if (!ctx.actorMemberId) reject("forbidden", "请先登录");
+  if (!ctx.actorMemberId) rejectT("forbidden", "login_first");
   const member = rm.get("members", ctx.actorMemberId);
-  if (!member || member.archivedAt || member.worldId !== ctx.worldId) reject("forbidden", "找不到你在这个工会里的成员资料，请重新登录");
+  if (!member || member.archivedAt || member.worldId !== ctx.worldId) rejectT("forbidden", "member_missing");
   if (ctx.accountId) {
     const account = rm.get("accounts", ctx.accountId);
-    if (!account || account.archivedAt || account.memberId !== member.id) reject("forbidden", "登录的账号和成员对不上，请重新登录");
+    if (!account || account.archivedAt || account.memberId !== member.id) rejectT("forbidden", "account_mismatch");
   }
   return member;
 }
@@ -259,22 +260,22 @@ export function isReviewer(member: MemberRow | undefined | null): boolean {
   return member?.role === "admin" || member?.role === "reviewer";
 }
 
-export function mustAdmin(rm: ReadModel, ctx: Ctx, what = "这一步"): MemberRow {
+export function mustAdmin(rm: ReadModel, ctx: Ctx, what: string | Text2 = "这一步"): MemberRow {
   const m = mustMember(rm, ctx);
-  if (!isAdmin(m)) reject("forbidden", `只有管理员可以${what}`);
+  if (!isAdmin(m)) rejectT("forbidden", "admin_only", { what: whatText(what) });
   return m;
 }
 
-export function optInteger(value: unknown, what: string, min: number, max: number): number | null {
+export function optInteger(value: unknown, what: string | Text2, min: number, max: number): number | null {
   if (value === undefined || value === null || value === "") return null;
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isInteger(n) || n < min || n > max) reject("invalid", `${what}要填 ${min}–${max} 之间的整数`);
+  if (!Number.isInteger(n) || n < min || n > max) rejectT("invalid", "integer_range", { what: whatText(what), min, max });
   return n;
 }
 
-export function mustNumber(value: unknown, what: string, min: number, max: number): number {
+export function mustNumber(value: unknown, what: string | Text2, min: number, max: number): number {
   const n = optNumber(value, what, min, max);
-  if (n === null) reject("invalid", `${what}不能为空`);
+  if (n === null) rejectT("invalid", "empty", { what: whatText(what) });
   return n;
 }
 

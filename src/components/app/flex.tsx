@@ -6,10 +6,10 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { isAdmin, isReviewer } from "@/domain/commands/core";
-import { dateZh } from "@/domain/clock";
-import { PHASE_LABEL, UNIT_LABEL } from "@/domain/labels";
-import { EXTRA_KIND, type ExtraKind, type Id, type StageRow, type TaskRow } from "@/domain/model";
-import { EXTRA_KIND_LABEL } from "@/domain/naming";
+import { U, useI18n } from "@/i18n/I18n";
+import { EXTRA_KIND, type ExtraKind, type Group, type Id, type StageRow, type TaskRow } from "@/domain/model";
+import { shortStageName } from "./board";
+import { cutCode } from "@/domain/naming";
 import { cutName, cutsOf, extrasOfStage, libraryOf, members, memberById, scheduleOf, taskView, tasksOf, type ScheduleRow } from "@/domain/queries";
 import { stageLocked } from "@/domain/rules";
 import { useFiles } from "@/lib/files/FilesProvider";
@@ -22,6 +22,8 @@ import { TaskActions } from "./task";
 /** 环节设置（管理员）：只给指派的人 · 计划周期 · 时限参数。 */
 export function StageSettings({ stage }: { stage: StageRow }) {
   const { world, dispatch, notify } = useGuild();
+  const { L, f, err, stageName, unit: unitOf } = useI18n();
+  const group = world.projects[stage.projectId]?.group ?? "animation";
   const sched = scheduleOf(world, stage.projectId);
   const row = sched?.phases.flatMap((p) => p.rows).find((r) => r.stage.id === stage.id);
   const [startWeek, setStartWeek] = useState(String(row?.plan.start ?? 1));
@@ -31,10 +33,10 @@ export function StageSettings({ stage }: { stage: StageRow }) {
   const [minHours, setMinHours] = useState(stage.minDeadlineHours ? String(stage.minDeadlineHours) : "");
   const [error, setError] = useState<string | null>(null);
   const locked = stageLocked(stage);
-  const unit = UNIT_LABEL[stage.unit];
+  const unit = unitOf(stage.unit, group, stage.per);
   return (
     <div className="stack flex-box" data-gap="small" data-testid="stage-settings">
-      <h3 className="t-body-14m">环节设置</h3>
+      <h3 className="t-body-14m">{L.flex.settings}</h3>
       <label className="check-row">
         <input
           type="checkbox"
@@ -42,27 +44,27 @@ export function StageSettings({ stage }: { stage: StageRow }) {
           data-testid="stage-lock"
           onChange={(e) => {
             const r = dispatch("stage.set_lock", { stageId: stage.id, locked: e.target.checked }, { quiet: true });
-            if (r.ok) notify(e.target.checked ? `「${stage.name}」只给指派的人` : `「${stage.name}」谁都能认领`, "Neutral");
+            if (r.ok) notify(f(e.target.checked ? L.flex.lockOn : L.flex.lockOff, { stage: stageName(group, stage) }), "Neutral");
           }}
         />
-        <span>只给指派的人（没被指派的人看得到，但不能认领）</span>
+        <span>{L.flex.lockLabel}</span>
       </label>
       <form
         className="form-grid"
         onSubmit={(e) => {
           e.preventDefault();
           const r = dispatch("stage.set_period", { stageId: stage.id, startWeek: Number(startWeek), weeks: Number(weeks) }, { quiet: true });
-          if (!r.ok) setError(r.error.message);
+          if (!r.ok) setError(err(r.error));
           else {
             setError(null);
-            notify("计划周期改好了", "Neutral");
+            notify(L.flex.periodSaved, "Neutral");
           }
         }}
       >
-        <TextField label={`计划从第几周开始（一周 = ${sched?.cycleDays ?? 7} 天）`} type="number" min={1} value={startWeek} onChange={(e) => setStartWeek(e.target.value)} data-testid="period-start" />
-        <TextField label="工期（几周）" type="number" min={1} value={weeks} onChange={(e) => setWeeks(e.target.value)} data-testid="period-weeks" />
+        <TextField label={f(L.flex.periodStart, { n: sched?.cycleDays ?? 7 })} type="number" min={1} value={startWeek} onChange={(e) => setStartWeek(e.target.value)} data-testid="period-start" />
+        <TextField label={L.flex.periodWeeks} type="number" min={1} value={weeks} onChange={(e) => setWeeks(e.target.value)} data-testid="period-weeks" />
         <div className="form-actions">
-          <Button Label="存计划周期" Size="Small" Style="Secondary" type="submit" data-testid="period-save" />
+          <Button Label={L.flex.periodSave} Size="Small" Style="Secondary" type="submit" data-testid="period-save" />
         </div>
       </form>
       <form
@@ -74,21 +76,21 @@ export function StageSettings({ stage }: { stage: StageRow }) {
             { stageId: stage.id, tn: Number(tn), deadlineFactor: factor ? Number(factor) : null, minDeadlineHours: minHours ? Number(minHours) : null },
             { quiet: true }
           );
-          if (!r.ok) setError(r.error.message);
+          if (!r.ok) setError(err(r.error));
           else {
             setError(null);
-            notify("时限参数改好了（只影响之后派出的任务）", "Neutral");
+            notify(L.flex.rateSaved, "Neutral");
           }
         }}
       >
-        <TextField label={`Tn（每 ${stage.per} ${unit}几小时）`} type="number" step="0.1" min={0} value={tn} onChange={(e) => setTn(e.target.value)} data-testid="rate-tn" />
-        <TextField label="时限系数" type="number" step="0.1" placeholder="1.5" value={factor} onChange={(e) => setFactor(e.target.value)} />
-        <TextField label="最短时限（小时）" type="number" placeholder="4" value={minHours} onChange={(e) => setMinHours(e.target.value)} />
+        <TextField label={f(L.flex.tnPer, { per: stage.per, unit })} type="number" step="0.1" min={0} value={tn} onChange={(e) => setTn(e.target.value)} data-testid="rate-tn" />
+        <TextField label={L.flex.factor} type="number" step="0.1" placeholder="1.5" value={factor} onChange={(e) => setFactor(e.target.value)} />
+        <TextField label={L.flex.minHours} type="number" placeholder="4" value={minHours} onChange={(e) => setMinHours(e.target.value)} />
         <div className="form-actions">
-          <Button Label="存时限参数" Size="Small" Style="Secondary" type="submit" data-testid="rate-save" />
+          <Button Label={L.flex.rateSave} Size="Small" Style="Secondary" type="submit" data-testid="rate-save" />
         </div>
       </form>
-      <p className="label">改了只影响之后派出的任务；已经派出的任务用「延期」改。</p>
+      <p className="label">{L.flex.rateNote}</p>
       {error ? (
         <p className="error-text" role="alert">
           {error}
@@ -101,6 +103,8 @@ export function StageSettings({ stage }: { stage: StageRow }) {
 /** 一批派给某人：选这个环节里几卡可接的任务。 */
 export function BatchAssign({ stage }: { stage: StageRow }) {
   const { world, dispatch, notify } = useGuild();
+  const { L, f, err, ph, cut: cutOf } = useI18n();
+  const group = world.projects[stage.projectId]?.group ?? "animation";
   const open = tasksOf(world, stage.projectId).filter((t) => t.stageId === stage.id && (t.status === "open" || t.status === "reclaimed"));
   const [picked, setPicked] = useState<Id[]>([]);
   const [who, setWho] = useState("");
@@ -108,38 +112,38 @@ export function BatchAssign({ stage }: { stage: StageRow }) {
   if (!open.length) return null;
   return (
     <div className="stack flex-box" data-gap="small" data-testid="batch-assign">
-      <h3 className="t-body-14m">直接派给某人</h3>
-      <div className="chips" role="group" aria-label="选几卡">
+      <h3 className="t-body-14m">{L.flex.batchTitle}</h3>
+      <div className="chips" role="group" aria-label={L.flex.pickCuts}>
         {open.map((t) => {
           const v = taskView(world, t);
           return (
             <button key={t.id} type="button" className="ui-chip" aria-pressed={picked.includes(t.id)} onClick={() => setPicked((xs) => (xs.includes(t.id) ? xs.filter((x) => x !== t.id) : [...xs, t.id]))} data-testid="batch-pick">
-              {v?.cut ? cutName(world, v.cut) : v?.label}
+              {v?.cut ? cutOf(v.cut, group) : v ? ph(v.labelP) : null}
               {t.layer ? ` ${t.layer}` : ""}
             </button>
           );
         })}
       </div>
       <div className="row">
-        <SelectField label="派给谁" value={who} onChange={(e) => setWho(e.target.value)} data-testid="batch-who">
-          <option value="">选一个</option>
+        <SelectField label={L.flex.toWhom} value={who} onChange={(e) => setWho(e.target.value)} data-testid="batch-who">
+          <option value="">{L.flex.pickOne}</option>
           {members(world).map((m) => (
-            <option key={m.id} value={m.id}>
+            <option key={m.id} value={m.id} data-uc="">
               {m.nickname}
             </option>
           ))}
         </SelectField>
         <Button
-          Label={`派 ${picked.length} 张`}
+          Label={f(L.flex.batchGo, { n: picked.length })}
           Size="Small"
           Style="Accent"
           disabled={!picked.length || !who}
           data-testid="batch-go"
           onClick={() => {
             const r = dispatch("task.assign", { taskIds: picked, memberId: who }, { quiet: true });
-            if (!r.ok) setError(r.error.message);
+            if (!r.ok) setError(err(r.error));
             else {
-              notify(`派了 ${picked.length} 张给 ${memberById(world, who)?.nickname ?? ""}`);
+              notify(f(L.flex.batched, { n: picked.length, name: memberById(world, who)?.nickname ?? "" }));
               setPicked([]);
               setError(null);
             }
@@ -154,6 +158,8 @@ export function BatchAssign({ stage }: { stage: StageRow }) {
 /** 在这个环节上发一张新任务（管理员和这个环节的审核员）。 */
 export function PublishForm({ stage, onDone }: { stage: StageRow; onDone?: () => void }) {
   const { world, me, dispatch, notify } = useGuild();
+  const { L, f, err, stageName, unit: unitOf, cut: cutOf } = useI18n();
+  const group = world.projects[stage.projectId]?.group ?? "animation";
   const files = useFiles();
   const [kind, setKind] = useState<ExtraKind>("fix");
   const [title, setTitle] = useState("");
@@ -192,11 +198,12 @@ export function PublishForm({ stage, onDone }: { stage: StageRow; onDone?: () =>
       { quiet: true }
     );
     if (!r.ok) {
-      setError(r.error.message);
+      setError(err(r.error));
       return;
     }
     if (newFiles.length) await files.addFiles(newFiles, { subjectType: "task", subjectId: r.created.taskId });
-    notify(`发了一张${EXTRA_KIND_LABEL[kind]}：${title}${assignee ? `，派给 ${memberById(world, assignee)?.nickname ?? ""}` : "，等人认领"}`);
+    const kindText = L.labels.extraKind[kind];
+    notify(assignee ? f(L.flex.published, { kind: kindText, title, name: memberById(world, assignee)?.nickname ?? "" }) : f(L.flex.publishedOpen, { kind: kindText, title }));
     setTitle("");
     setDescription("");
     setCutIds([]);
@@ -216,79 +223,81 @@ export function PublishForm({ stage, onDone }: { stage: StageRow; onDone?: () =>
         void publish();
       }}
     >
-      <h3 className="t-body-14m">在「{stage.name}」发新任务</h3>
-      <div className="chips" role="radiogroup" aria-label="种类">
+      <h3 className="t-body-14m">{f(L.flex.publishTitle, { stage: stageName(group, stage) })}</h3>
+      <div className="chips" role="radiogroup" aria-label={L.flex.kind}>
         {EXTRA_KIND.map((k) => (
           <button key={k} type="button" className="ui-chip" aria-pressed={kind === k} onClick={() => setKind(k)} data-testid={`publish-kind-${k}`}>
-            {EXTRA_KIND_LABEL[k]}
+            {L.labels.extraKind[k]}
           </button>
         ))}
       </div>
-      <TextField label="标题" placeholder={kind === "fix" ? "C003 分镜加一个镜头" : kind === "setting" ? "照拍板补耳饰" : "补一张道具设定"} value={title} onChange={(e) => setTitle(e.target.value)} data-testid="publish-title" />
-      <TextArea label="说明" placeholder="要做什么、照哪个拍板、参考哪张图" value={description} onChange={(e) => setDescription(e.target.value)} />
+      <TextField label={L.flex.title} placeholder={kind === "fix" ? L.flex.titleFix : kind === "setting" ? L.flex.titleSetting : L.flex.titleExtra} value={title} onChange={(e) => setTitle(e.target.value)} data-testid="publish-title" />
+      <TextArea label={L.flex.description} placeholder={L.flex.descriptionPlaceholder} value={description} onChange={(e) => setDescription(e.target.value)} />
       <div className="stack" data-gap="small">
-        <span className="label">挂哪几卡（可以不挂）</span>
-        <div className="chips" role="group" aria-label="挂哪几卡">
+        <span className="label">{L.flex.attachCuts}</span>
+        <div className="chips" role="group" aria-label={L.flex.attachCuts}>
           {cuts.map((c) => (
             <button key={c.id} type="button" className="ui-chip" aria-pressed={cutIds.includes(c.id)} onClick={() => setCutIds((xs) => (xs.includes(c.id) ? xs.filter((x) => x !== c.id) : [...xs, c.id]))} data-testid="publish-cut">
-              {cutName(world, c)}
+              {cutOf(c, group)}
             </button>
           ))}
         </div>
       </div>
-      <div className="chips" role="radiogroup" aria-label="怎么算活力点">
+      <div className="chips" role="radiogroup" aria-label={L.flex.pointsMode}>
         <button type="button" className="ui-chip" aria-pressed={mode === "workload"} onClick={() => setMode("workload")}>
-          按工作量（{UNIT_LABEL[stage.unit]}）
+          {f(L.flex.byWorkload, { unit: unitOf(stage.unit, group, 2) })}
         </button>
         <button type="button" className="ui-chip" aria-pressed={mode === "points"} onClick={() => setMode("points")} data-testid="publish-mode-points">
-          固定活力点
+          {L.flex.fixedPoints}
         </button>
       </div>
       <div className="form-grid">
         {mode === "workload" ? (
-          <TextField label={`工作量（${UNIT_LABEL[stage.unit]}）`} type="number" step="0.5" min={0} value={workload} onChange={(e) => setWorkload(e.target.value)} data-testid="publish-workload" />
+          <TextField label={f(L.flex.workload, { unit: unitOf(stage.unit, group, 2) })} type="number" step="0.5" min={0} value={workload} onChange={(e) => setWorkload(e.target.value)} data-testid="publish-workload" />
         ) : (
-          <TextField label="固定活力点" type="number" step="0.5" min={0} value={points} onChange={(e) => setPoints(e.target.value)} data-testid="publish-points" />
+          <TextField label={L.flex.fixedPoints} type="number" step="0.5" min={0} value={points} onChange={(e) => setPoints(e.target.value)} data-testid="publish-points" />
         )}
-        <TextField label="时限（小时，从接的时候算）" type="number" min={1} value={hours} onChange={(e) => setHours(e.target.value)} data-testid="publish-hours" />
-        <SelectField label="派给谁" value={assignee} onChange={(e) => setAssignee(e.target.value)} data-testid="publish-assignee">
-          <option value="">放出来让人认领</option>
+        <TextField label={L.flex.hours} type="number" min={1} value={hours} onChange={(e) => setHours(e.target.value)} data-testid="publish-hours" />
+        <SelectField label={L.flex.assignTo} value={assignee} onChange={(e) => setAssignee(e.target.value)} data-testid="publish-assignee">
+          <option value="">{L.flex.openToClaim}</option>
           {members(world).map((m) => (
-            <option key={m.id} value={m.id}>
+            <option key={m.id} value={m.id} data-uc="">
               {m.nickname}
             </option>
           ))}
         </SelectField>
-        <SelectField label="谁审" value={reviewer} onChange={(e) => setReviewer(e.target.value)}>
-          <option value="">审核员和管理员谁都能审</option>
+        <SelectField label={L.flex.reviewer} value={reviewer} onChange={(e) => setReviewer(e.target.value)}>
+          <option value="">{L.flex.anyReviewer}</option>
           {members(world)
             .filter((m) => isReviewer(m))
             .map((m) => (
-              <option key={m.id} value={m.id}>
+              <option key={m.id} value={m.id} data-uc="">
                 {m.nickname}
-                {m.id === stage.reviewerId ? "（这个环节的审核员）" : ""}
+                {m.id === stage.reviewerId ? L.flex.stageReviewer : ""}
               </option>
             ))}
         </SelectField>
       </div>
       <label className="check-row">
         <input type="checkbox" checked={blocking} onChange={(e) => setBlocking(e.target.checked)} data-testid="publish-blocking" />
-        <span>这一卡要等它做完（挂着的卡的下游等它通过；不勾就不挡流程）</span>
+        <span>{L.flex.blocking}</span>
       </label>
       <div className="stack" data-gap="small">
-        <span className="label">附图：资料库里选，或者直接拖进来 / 粘贴</span>
+        <span className="label">{L.flex.attachImages}</span>
         {images.length ? (
           <div className="pick-grid">
             {images.map((v) => (
               <button key={v.file.id} type="button" className="pick-tile" aria-pressed={fileIds.includes(v.file.id)} onClick={() => setFileIds((xs) => (xs.includes(v.file.id) ? xs.filter((x) => x !== v.file.id) : [...xs, v.file.id]))}>
                 <FileImage file={v.file} className="pick-img" />
-                <span className="label break">{v.file.name}</span>
+                <span className="label break">
+                  <U>{v.file.name}</U>
+                </span>
               </button>
             ))}
           </div>
         ) : null}
-        <DropZone testId="publish-drop" paste={false} onFiles={(f) => setNewFiles((xs) => [...xs, ...f])} />
-        {newFiles.length ? <span className="label">还要附 {newFiles.length} 个新文件（发出去以后放进资料库）</span> : null}
+        <DropZone testId="publish-drop" paste={false} onFiles={(fs) => setNewFiles((xs) => [...xs, ...fs])} />
+        {newFiles.length ? <span className="label">{f(L.flex.newFiles, { n: newFiles.length })}</span> : null}
       </div>
       {error ? (
         <p className="error-text" role="alert">
@@ -296,7 +305,7 @@ export function PublishForm({ stage, onDone }: { stage: StageRow; onDone?: () =>
         </p>
       ) : null}
       <div className="form-actions">
-        <Button Label="发出去" Size="Small" Style="Accent" type="submit" data-testid="publish-go" />
+        <Button Label={L.flex.publishGo} Size="Small" Style="Accent" type="submit" data-testid="publish-go" />
       </div>
     </form>
   );
@@ -305,12 +314,13 @@ export function PublishForm({ stage, onDone }: { stage: StageRow; onDone?: () =>
 /** 这个环节上发过的额外 / 修正 / 补设定任务。 */
 export function ExtrasList({ stage }: { stage: StageRow }) {
   const { world } = useGuild();
+  const { L } = useI18n();
   const list = extrasOfStage(world, stage.id);
   if (!list.length) return null;
   return (
     <div className="stack" data-gap="small" data-testid="extras-list">
       <h3 className="t-body-14m">
-        这个环节的额外任务 <span className="count">{list.length}</span>
+        {L.flex.extrasTitle} <span className="count">{list.length}</span>
       </h3>
       <ul className="list">
         {list.map((t) => (
@@ -323,22 +333,29 @@ export function ExtrasList({ stage }: { stage: StageRow }) {
 
 function ExtraItem({ task }: { task: TaskRow }) {
   const { world } = useGuild();
+  const { L, f, ph, cut: cutOf } = useI18n();
   const v = taskView(world, task);
   if (!v || !task.extra) return null;
   const cuts = task.extra.cutIds.map((id) => world.cuts[id]).filter(Boolean);
   return (
     <li style={{ flexDirection: "column", alignItems: "stretch" }} data-testid="extra-item">
       <div className="row">
-        <Tag tone={task.extra.kind === "fix" ? "danger" : task.extra.kind === "setting" ? "lilac" : "sky"}>{EXTRA_KIND_LABEL[task.extra.kind]}</Tag>
-        <span className="t-body-14m break">{task.extra.title}</span>
+        <Tag tone={task.extra.kind === "fix" ? "danger" : task.extra.kind === "setting" ? "lilac" : "sky"}>{L.labels.extraKind[task.extra.kind]}</Tag>
+        <span className="t-body-14m break">
+          <U>{task.extra.title}</U>
+        </span>
         <StatusPill Status={task.status} />
-        {task.extra.blocking ? <Tag tone="warning">这一卡要等它</Tag> : null}
+        {task.extra.blocking ? <Tag tone="warning">{L.flex.waitsTag}</Tag> : null}
       </div>
       <span className="label break">
-        {cuts.length ? cuts.map((c) => cutName(world, c)).join("、") : "不挂卡"} · {task.extra.fixedPoints !== null ? `固定 ${task.extra.fixedPoints} 活力点` : v.workloadLabel} ·{" "}
-        {task.assigneeId ? <MemberLink member={v.assignee} /> : "等人认领"}
+        {cuts.length ? cuts.map((c) => cutOf(c, v.project.group)).join(L.common.listSep) : L.flex.noCut} · {task.extra.fixedPoints !== null ? f(L.flex.fixedN, { n: task.extra.fixedPoints }) : ph(v.workloadP)} ·{" "}
+        {task.assigneeId ? <MemberLink member={v.assignee} /> : L.flex.waitingClaim}
       </span>
-      {task.extra.description ? <span className="label break">{task.extra.description}</span> : null}
+      {task.extra.description ? (
+        <span className="label break">
+          <U>{task.extra.description}</U>
+        </span>
+      ) : null}
       <TaskActions task={task} />
     </li>
   );
@@ -347,6 +364,7 @@ function ExtraItem({ task }: { task: TaskRow }) {
 /** 项目排期（照工会的「项目规划表」）：一行一个环节，按 前期 / 中期 / 后期 分组；横轴是周。 */
 export function ScheduleView({ projectId }: { projectId: Id }) {
   const { world, me } = useGuild();
+  const { L, f, date } = useI18n();
   const sched = scheduleOf(world, projectId);
   const [editing, setEditing] = useState<Id | null>(null);
   if (!sched) return null;
@@ -354,35 +372,35 @@ export function ScheduleView({ projectId }: { projectId: Id }) {
   const cols = Array.from({ length: sched.weeks }, (_, i) => i + 1);
   return (
     <div className="stack" data-gap="small">
-      <div className="legend" aria-label="排期图例">
+      <div className="legend" aria-label={L.flex.legend}>
         <span className="legend-item">
-          <span className="gantt-swatch" data-kind="plan" /> 计划
+          <span className="gantt-swatch" data-kind="plan" /> {L.flex.plan}
         </span>
         <span className="legend-item">
-          <span className="gantt-swatch" data-kind="actual" /> 实际
+          <span className="gantt-swatch" data-kind="actual" /> {L.flex.actual}
         </span>
         <span className="legend-item">
-          <span className="gantt-swatch" data-kind="over" /> 超出计划
+          <span className="gantt-swatch" data-kind="over" /> {L.flex.over}
         </span>
         <span className="legend-item">
-          <span className="gantt-swatch" data-kind="today" /> 这一周
+          <span className="gantt-swatch" data-kind="today" /> {L.flex.thisWeek}
         </span>
-        <span className="label">一周 = {sched.cycleDays} 天 · 从 {dateZh(sched.project.startOn)} 起</span>
+        <span className="label">{f(L.flex.weekIs, { n: sched.cycleDays, date: date(sched.project.startOn) })}</span>
       </div>
       <div className="gantt-scroll" data-testid="schedule">
         <table className="gantt" style={{ ["--weeks" as string]: sched.weeks }}>
           <thead>
             <tr>
               <th scope="col" className="gantt-name">
-                环节
+                {L.flex.stage}
               </th>
               {cols.map((w) => (
-                <th key={w} scope="col" data-today={w === sched.today ? "yes" : "no"} title={dateZh(sched.weekStarts[w - 1])}>
+                <th key={w} scope="col" data-today={w === sched.today ? "yes" : "no"} title={date(sched.weekStarts[w - 1])}>
                   <span className="num">{w}</span>
                 </th>
               ))}
               <th scope="col" className="gantt-pct">
-                完成
+                {L.flex.done}
               </th>
             </tr>
           </thead>
@@ -390,11 +408,11 @@ export function ScheduleView({ projectId }: { projectId: Id }) {
             <tbody key={ph.phase}>
               <tr className="gantt-phase">
                 <th scope="rowgroup" colSpan={sched.weeks + 2}>
-                  {PHASE_LABEL[ph.phase]}
+                  {L.labels.phase[ph.phase]}
                 </th>
               </tr>
               {ph.rows.map((r) => (
-                <GanttRow key={r.stage.id} row={r} cols={cols} today={sched.today} admin={admin} editing={editing === r.stage.id} onEdit={() => setEditing(editing === r.stage.id ? null : r.stage.id)} />
+                <GanttRow key={r.stage.id} row={r} group={sched.project.group} cols={cols} today={sched.today} admin={admin} editing={editing === r.stage.id} onEdit={() => setEditing(editing === r.stage.id ? null : r.stage.id)} />
               ))}
             </tbody>
           ))}
@@ -405,8 +423,10 @@ export function ScheduleView({ projectId }: { projectId: Id }) {
   );
 }
 
-function GanttRow({ row, cols, today, admin, editing, onEdit }: { row: ScheduleRow; cols: number[]; today: number; admin: boolean; editing: boolean; onEdit: () => void }) {
+function GanttRow({ row, group, cols, today, admin, editing, onEdit }: { row: ScheduleRow; group: Group; cols: number[]; today: number; admin: boolean; editing: boolean; onEdit: () => void }) {
   const { dispatch } = useGuild();
+  const { L, f, ph, pt, stageName } = useI18n();
+  const name = stageName(group, row.stage);
   const [drag, setDrag] = useState<{ from: number; shift: number } | null>(null);
   const plan = { start: row.plan.start + (drag?.shift ?? 0), end: row.plan.end + (drag?.shift ?? 0) };
   const commit = () => {
@@ -418,17 +438,17 @@ function GanttRow({ row, cols, today, admin, editing, onEdit }: { row: ScheduleR
   return (
     <tr data-testid="schedule-row" data-stage={row.stage.templateKey} data-dragging={drag ? "yes" : "no"} onPointerUp={commit} onPointerLeave={commit}>
       <th scope="row" className="gantt-name">
-        <button type="button" className="inline-link" onClick={admin ? onEdit : undefined} disabled={!admin} aria-expanded={admin ? editing : undefined} title={admin ? "改计划周期" : undefined}>
-          {row.stage.name.replace(/（.*?）/, "")}
+        <button type="button" className="inline-link" onClick={admin ? onEdit : undefined} disabled={!admin} aria-expanded={admin ? editing : undefined} title={admin ? L.flex.editPeriod : undefined}>
+          {shortStageName(name)}
         </button>
         {row.overrun ? (
           <span className="gantt-over-text" data-testid="schedule-overrun">
-            超出 {row.overrun} 周
+            {f(L.flex.overrun, { n: row.overrun })}
           </span>
         ) : null}
-        {row.warning ? (
-          <span className="gantt-warn" title={row.warning} data-testid="schedule-warning">
-            {row.warning}
+        {row.warningP ? (
+          <span className="gantt-warn" title={pt(row.warningP)} data-testid="schedule-warning">
+            {ph(row.warningP)}
           </span>
         ) : null}
       </th>
@@ -460,11 +480,13 @@ function GanttRow({ row, cols, today, admin, editing, onEdit }: { row: ScheduleR
 }
 
 function PeriodEditor({ stage, onClose }: { stage: StageRow; onClose: () => void }) {
+  const { world } = useGuild();
+  const { L, f, stageName } = useI18n();
   return (
     <div className="card" data-tone="muted">
       <div className="row" data-justify="between">
-        <h3 className="t-body-14m">「{stage.name}」的计划周期和时限参数</h3>
-        <Button Label="收起" Size="Small" Style="Ghost" onClick={onClose} />
+        <h3 className="t-body-14m">{f(L.flex.periodTitle, { stage: stageName(world.projects[stage.projectId]?.group ?? "animation", stage) })}</h3>
+        <Button Label={L.flex.collapse} Size="Small" Style="Ghost" onClick={onClose} />
       </div>
       <StageSettings stage={stage} />
     </div>

@@ -3,9 +3,9 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Empty, Level, MemberAvatar, Stat, Tag, XpBar } from "@/components/app/bits";
 import { MiniQuest, QuestCard } from "@/components/app/quest";
-import { relativeZh } from "@/domain/clock";
 import { isReviewer } from "@/domain/commands/core";
-import { formatPoints, ROLE_LABEL } from "@/domain/labels";
+import { formatPoints } from "@/domain/labels";
+import { U, useI18n } from "@/i18n/I18n";
 import { enrollmentsOf, feedOf, growthOf, inboxOf, pendingReviewCount, questFor, reviewQueue, taskViewById } from "@/domain/queries";
 import { Viewer } from "@/components/library/Viewer";
 import { LinkList } from "@/components/app/links";
@@ -14,6 +14,7 @@ import { useGuild } from "@/lib/store";
 
 export function HallPage() {
   const { world, me, now, dispatch, notify } = useGuild();
+  const { L, f, r: rich, ph, relative, say, stage: stageEl } = useI18n();
   const growth = useMemo(() => growthOf(world, me.id), [world, me.id]);
   const quests = useMemo(() => questFor(world, me.id), [world, me.id]);
   const inbox = useMemo(() => inboxOf(world, me.id), [world, me.id]);
@@ -31,7 +32,7 @@ export function HallPage() {
     if (r.ok && r.created.taskId) {
       setPicked(r.created.taskId);
       const v = taskViewById(r.state, r.created.taskId);
-      notify(`拿到一张任务单：${v ? v.label : "新任务"}`);
+      notify(say((d) => d.hall.gotQuest, { label: v ? v.labelP : say((d) => d.hall.newTask) }));
     }
   };
 
@@ -39,12 +40,22 @@ export function HallPage() {
     <>
       <div className="page-head">
         <div className="page-head-text">
-          <span className="label">大厅</span>
-          <h1 className="t-title-32">你好，{me.nickname}</h1>
+          <span className="label">{L.hall.title}</span>
+          <h1 className="t-title-32">{rich(L.hall.hello, { name: <U>{me.nickname}</U> })}</h1>
         </div>
         <div className="page-head-actions">
-          {canReview ? <Link to="/review" className="ui-button" data-style="Secondary" data-size="Medium">{`审核台 · ${myQueue} 张等你审`}</Link> : null}
-          {enrolled ? <Button Label="接任务" Style="Accent" onClick={claim} data-testid="claim" /> : <Link to="/enroll" className="ui-button" data-style="Accent" data-size="Medium">去报到</Link>}
+          {canReview ? (
+            <Link to="/review" className="ui-button" data-style="Secondary" data-size="Medium">
+              {f(L.hall.reviewDesk, { n: myQueue })}
+            </Link>
+          ) : null}
+          {enrolled ? (
+            <Button Label={L.hall.claim} Style="Accent" onClick={claim} data-testid="claim" />
+          ) : (
+            <Link to="/enroll" className="ui-button" data-style="Accent" data-size="Medium">
+              {L.hall.goEnroll}
+            </Link>
+          )}
         </div>
       </div>
 
@@ -53,21 +64,27 @@ export function HallPage() {
           {current ? (
             <QuestCard quest={current} />
           ) : (
-            <section className="card" aria-label="当前任务单">
-              <h2 className="t-heading-18">手上没有任务单</h2>
+            <section className="card" aria-label={L.hall.currentQuest}>
+              <h2 className="t-heading-18">{L.hall.noQuest}</h2>
               <Empty
                 action={
-                  enrolled ? <Button Label="接任务" Style="Accent" onClick={claim} /> : <Link to="/enroll" className="ui-button" data-style="Accent" data-size="Medium">去报到一个环节</Link>
+                  enrolled ? (
+                    <Button Label={L.hall.claim} Style="Accent" onClick={claim} />
+                  ) : (
+                    <Link to="/enroll" className="ui-button" data-style="Accent" data-size="Medium">
+                      {L.hall.goEnrollStage}
+                    </Link>
+                  )
                 }
               >
-                {enrolled ? "点「接任务」，从你报到的环节里按卡号配一张。" : "先报到一个环节（选你会做的、选熟练度），系统马上给你配一张。"}
+                {enrolled ? L.hall.noQuestEnrolled : L.hall.noQuestNotEnrolled}
               </Empty>
             </section>
           )}
           {quests.length > 1 ? (
-            <section className="stack" data-gap="small" aria-label="手上的其他任务">
+            <section className="stack" data-gap="small" aria-label={L.hall.otherQuests}>
               <h2 className="t-heading-18">
-                手上的任务 <span className="count">{quests.length}</span>
+                {L.hall.myQuests} <span className="count">{quests.length}</span>
               </h2>
               {quests.map((q) => (
                 <MiniQuest key={q.view.task.id} quest={q} selected={q.view.task.id === current?.view.task.id} onSelect={() => setPicked(q.view.task.id)} />
@@ -78,70 +95,68 @@ export function HallPage() {
           <section className="card" aria-labelledby="inbox-title">
             <div className="card-head">
               <h2 id="inbox-title" className="t-heading-18">
-                等我处理 <span className="count">{inbox.total}</span>
+                {L.hall.inbox} <span className="count">{inbox.total}</span>
               </h2>
             </div>
             {inbox.total === 0 ? (
-              <Empty>没有退回的、没人问你、也没有要补的。</Empty>
+              <Empty>{L.hall.inboxEmpty}</Empty>
             ) : (
               <ul className="list">
                 {inbox.returned.map((q) => (
                   <li key={q.view.task.id}>
-                    <Tag tone="danger">退回的</Tag>
+                    <Tag tone="danger">{L.hall.returnedTag}</Tag>
                     <div className="list-main">
                       <button type="button" className="inline-link t-body-14m" style={{ textAlign: "left", textDecoration: "none" }} onClick={() => setPicked(q.view.task.id)}>
-                        {q.view.title}
+                        {ph(q.view.titleP)}
                       </button>
-                      <span className="label break">{q.lastReturn?.comments.map((c) => c.text).join("；") ?? "看审核意见"}</span>
+                      <span className="label break">{q.lastReturn ? <U>{q.lastReturn.comments.map((c) => c.text).join("；")}</U> : L.hall.seeReview}</span>
                     </div>
                   </li>
                 ))}
                 {inbox.asked.map((t) => (
                   <li key={t.thread.id}>
-                    <Tag tone="info">被问到的</Tag>
+                    <Tag tone="info">{L.hall.askedTag}</Tag>
                     <div className="list-main">
                       <Link to={t.cut ? `/cut/${t.cut.id}` : `/project/${t.thread.projectId}`} className="t-body-14m">
-                        {t.where}
+                        {ph(t.whereP)}
                       </Link>
-                      <span className="label break">
-                        {t.by?.nickname ?? "有人"}：{t.thread.text}
-                      </span>
+                      <span className="label break">{rich(L.hall.saidColon, { who: t.by ? <U>{t.by.nickname}</U> : L.hall.someone, text: <U>{t.thread.text}</U> })}</span>
                     </div>
                   </li>
                 ))}
                 {inbox.links.map((x) => (
                   <li key={`${x.submission.id}:${x.link.id}`} data-testid="inbox-broken-link" style={{ flexDirection: "column", alignItems: "stretch" }}>
                     <div className="row">
-                      <Tag tone="danger">链接打不开</Tag>
+                      <Tag tone="danger">{L.hall.brokenLinkTag}</Tag>
                       <span className="t-body-14m break">
-                        {x.view.title} v{String(x.submission.versionNo).padStart(2, "0")}
+                        {ph(x.view.titleP)} v{String(x.submission.versionNo).padStart(2, "0")}
                       </span>
                     </div>
-                    <span className="label">{x.by?.nickname ?? "审核员"} 点开打不开，换一条就清掉：</span>
+                    <span className="label">{rich(L.hall.brokenBy, { who: x.by ? <U>{x.by.nickname}</U> : L.hall.reviewer })}</span>
                     <LinkList submission={x.submission} compact />
                   </li>
                 ))}
                 {inbox.pins.map((v) => (
                   <li key={v.pin.id} data-testid="inbox-pin">
-                    <Tag tone="danger">图上的意见</Tag>
+                    <Tag tone="danger">{L.hall.pinTag}</Tag>
                     <div className="list-main">
                       <button type="button" className="inline-link t-body-14m" style={{ textAlign: "left", textDecoration: "none" }} onClick={() => setPinOpen({ fileId: v.file.id, pinId: v.pin.id })}>
-                        {v.where} · {v.pin.number} 号
+                        {rich(L.hall.pinNo, { where: v.whereP, n: v.pin.number })}
                       </button>
-                      <span className="label break">
-                        {v.by?.nickname ?? "有人"}：{v.pin.text}
-                      </span>
+                      <span className="label break">{rich(L.hall.saidColon, { who: v.by ? <U>{v.by.nickname}</U> : L.hall.someone, text: <U>{v.pin.text}</U> })}</span>
                     </div>
                   </li>
                 ))}
                 {inbox.todos.map((t) => (
                   <li key={t.thread.id}>
-                    <Tag tone="warning">要补的</Tag>
+                    <Tag tone="warning">{L.hall.todoTag}</Tag>
                     <div className="list-main">
                       <Link to={t.cut ? `/cut/${t.cut.id}` : `/project/${t.thread.projectId}`} className="t-body-14m">
-                        {t.where}
+                        {ph(t.whereP)}
                       </Link>
-                      <span className="label break">{t.thread.text.replace(/^要补：/, "")}</span>
+                      <span className="label break">
+                        <U>{t.thread.text.replace(/^要补：/, "")}</U>
+                      </span>
                     </div>
                   </li>
                 ))}
@@ -152,54 +167,54 @@ export function HallPage() {
 
         <div className="stack">
           {growth ? (
-            <section className="card" aria-label="我的身份卡">
+            <section className="card" aria-label={L.hall.idCard}>
               <div className="me-card-top">
                 <MemberAvatar member={me} size="64" />
                 <div className="me-card-name">
-                  <h2 className="t-section-24">{me.nickname}</h2>
+                  <h2 className="t-section-24">
+                    <U>{me.nickname}</U>
+                  </h2>
                   <span className="label">
-                    {ROLE_LABEL[me.role]} · 加入 {growth.joinedDays} 天
+                    {L.labels.role[me.role]} · {f(L.hall.joinedDays, { n: growth.joinedDays })}
                   </span>
                 </div>
                 <Level level={growth.level.level} />
               </div>
               <XpBar points={growth.points} level={growth.level} />
               <div className="stats">
-                <Stat label="本周活力点" value={formatPoints(growth.weekPoints)} />
-                <Stat label="主环节" value={growth.mainStage?.name ?? "还没有"} zh />
-                <Stat label="准时率" value={growth.onTime.rate === null ? "—" : `${Math.round(growth.onTime.rate * 100)}%`} />
+                <Stat label={L.hall.weekPoints} value={formatPoints(growth.weekPoints)} />
+                <Stat label={L.hall.mainStage} value={growth.mainStage ? stageEl(growth.mainStage.group, { templateKey: growth.mainStage.key, name: growth.mainStage.name }) : L.hall.none} zh />
+                <Stat label={L.hall.onTime} value={growth.onTime.rate === null ? "—" : `${Math.round(growth.onTime.rate * 100)}%`} />
               </div>
               <Link to="/me" className="label">
-                看我的成长 →
+                {L.hall.myGrowth}
               </Link>
             </section>
           ) : null}
 
           {canReview && pendingReviewCount(world) > 0 ? (
-            <section className="card" data-size="compact" data-tone="muted" aria-label="待审">
+            <section className="card" data-size="compact" data-tone="muted" aria-label={L.hall.pending}>
               <div className="row" data-justify="between">
-                <span>
-                  全工会在等审核的 <span className="num t-body-14m">{pendingReviewCount(world)}</span> 张，你能审的 <span className="num t-body-14m">{myQueue}</span> 张
-                </span>
-                <Link to="/review">去审核台</Link>
+                <span>{rich(L.hall.pendingLine, { all: <span className="num t-body-14m">{pendingReviewCount(world)}</span>, mine: <span className="num t-body-14m">{myQueue}</span> })}</span>
+                <Link to="/review">{L.hall.goReview}</Link>
               </div>
             </section>
           ) : null}
 
           <section className="card" aria-labelledby="feed-title">
             <h2 id="feed-title" className="t-heading-18">
-              工会动态
+              {L.hall.feed}
             </h2>
             {feed.length === 0 ? (
-              <Empty>还没有动静。</Empty>
+              <Empty>{L.hall.feedEmpty}</Empty>
             ) : (
               <ul className="list">
-                {feed.map((f) => (
-                  <li key={f.entry.id}>
+                {feed.map((item) => (
+                  <li key={item.entry.id}>
                     <div className="list-main">
-                      <span className="break">{f.text}</span>
+                      <span className="break">{ph(item.phrase)}</span>
                     </div>
-                    <span className="list-meta">{relativeZh(f.at, now)}</span>
+                    <span className="list-meta">{relative(item.at, now)}</span>
                   </li>
                 ))}
               </ul>

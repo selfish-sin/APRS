@@ -6,20 +6,20 @@
  */
 import { LINK_KINDS, LINK_REASON, defaultLinkName, linkKey, normalizeLink, recognizeLink, type LinkKind } from "../links";
 import type { Id, SubmissionLink } from "../model";
-import { guarded, isAdmin, isReviewer, mustGet, mustMember, ok, reject, update } from "./core";
+import { guarded, isAdmin, isReviewer, mustGet, mustMember, ok, rejectT, update } from "./core";
 
 export const MAX_LINKS = 10;
 
 function cleanName(value: unknown, fallback: string): string {
   const s = typeof value === "string" ? value.replace(/[\r\n]+/g, " ").trim() : "";
-  if (s.length > 60) reject("invalid", "链接的名字太长了（最多 60 字）");
+  if (s.length > 60) rejectT("invalid", "link_name_long");
   return s || fallback;
 }
 
 function mustOne(raw: { url?: unknown; name?: unknown; kind?: unknown }, n: number): Omit<SubmissionLink, "id" | "broken"> {
   const r = normalizeLink(raw.url);
-  if (!r.ok) reject("invalid", `第 ${n} 条链接：${LINK_REASON[r.reason].zh}`);
-  if (r.url.length > 1000) reject("invalid", `第 ${n} 条链接太长了`);
+  if (!r.ok) rejectT("invalid", "link_bad", { n, reason: LINK_REASON[r.reason] });
+  if (r.url.length > 1000) rejectT("invalid", "link_too_long", { n });
   const info = recognizeLink(r.url);
   const kind = raw.kind && (LINK_KINDS as readonly string[]).includes(String(raw.kind)) ? (raw.kind as LinkKind) : info.kind;
   return { url: r.url, name: cleanName(raw.name, defaultLinkName(info)), kind };
@@ -36,11 +36,11 @@ export function mustLinks(value: unknown): SubmissionLink[] {
     const one = mustOne(r, i + 1);
     const key = linkKey(one.url);
     const dup = seen.get(key);
-    if (dup !== undefined) reject("invalid", `第 ${i + 1} 条和第 ${dup} 条是同一个链接`);
+    if (dup !== undefined) rejectT("invalid", "link_dup", { i: i + 1, j: dup });
     seen.set(key, i + 1);
     out.push({ id: `l${out.length + 1}`, ...one, broken: null });
   });
-  if (out.length > MAX_LINKS) reject("invalid", `一版最多挂 ${MAX_LINKS} 条链接`);
+  if (out.length > MAX_LINKS) rejectT("invalid", "links_max", { max: MAX_LINKS });
   return out;
 }
 
@@ -59,12 +59,12 @@ export interface MarkBrokenInput {
 
 export const markLinkBroken = guarded<MarkBrokenInput>((rm, input, ctx) => {
   const me = mustMember(rm, ctx);
-  if (!isReviewer(me)) reject("forbidden", "只有审核员和管理员能标「打不开」");
+  if (!isReviewer(me)) rejectT("forbidden", "mark_broken_forbidden");
   const sub = mustGet(rm, ctx, "submissions", input.submissionId, "版本");
   const links = linksOf(sub);
   const i = links.findIndex((l) => l.id === input.linkId);
-  if (i < 0) reject("not_found", "这一版没有这条链接");
-  if (links[i].broken) reject("state", "这条已经标过「打不开」了");
+  if (i < 0) rejectT("not_found", "link_missing");
+  if (links[i].broken) rejectT("state", "link_already_broken");
   const next = links.map((l, j) => (j === i ? { ...l, broken: { byMemberId: me.id, at: ctx.worldNow } } : l));
   const c = update("submissions", sub, { links: next });
   return ok(c ? [c] : [], { submissionId: sub.id });
@@ -84,14 +84,14 @@ export const replaceLink = guarded<ReplaceLinkInput>((rm, input, ctx) => {
   const sub = mustGet(rm, ctx, "submissions", input.submissionId, "版本");
   const task = mustGet(rm, ctx, "tasks", sub.taskId, "任务");
   const mine = sub.byMemberId === me.id || (task.assigneeId === me.id && !sub.byMemberId);
-  if (!mine && !isAdmin(me)) reject("forbidden", "只有交这一版的人能换链接");
+  if (!mine && !isAdmin(me)) rejectT("forbidden", "link_replace_forbidden");
   const links = linksOf(sub);
   const i = links.findIndex((l) => l.id === input.linkId);
-  if (i < 0) reject("not_found", "这一版没有这条链接");
+  if (i < 0) rejectT("not_found", "link_missing");
   const one = mustOne({ url: input.url, name: input.name, kind: input.kind ?? links[i].kind }, i + 1);
   const key = linkKey(one.url);
   const dup = links.findIndex((l, j) => j !== i && linkKey(l.url) === key);
-  if (dup >= 0) reject("invalid", `和第 ${dup + 1} 条是同一个链接`);
+  if (dup >= 0) rejectT("invalid", "link_same_as", { n: dup + 1 });
   const next = links.map((l, j) => (j === i ? { ...l, ...one, name: input.name ? one.name : one.name, broken: null } : l));
   const c = update("submissions", sub, { links: next, link: next[0]?.url ?? null });
   return ok(c ? [c] : [], { submissionId: sub.id });

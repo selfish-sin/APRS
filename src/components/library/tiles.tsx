@@ -4,14 +4,15 @@ import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
 import { MemberLink, SelectField, Tag, TextField } from "@/components/app/bits";
 import { isReviewer } from "@/domain/commands/core";
-import { dateTimeZh } from "@/domain/clock";
+import { U, useI18n } from "@/i18n/I18n";
 import type { FileRow, Id } from "@/domain/model";
-import { cutsOf, cutName, extOf, fileKind, fileView, FILE_KIND_LABEL, sizeLabel } from "@/domain/queries";
+import { cutsOf, extOf, fileKind, fileView, projectById, sizeLabel } from "@/domain/queries";
+import { t2 } from "@/domain/text";
 import { saveToDevice } from "@/lib/download";
 import { useFiles, useFileUrl } from "@/lib/files/FilesProvider";
 import { useGuild } from "@/lib/store";
 
-export const MISSING_TEXT = "这个文件不在这台设备上";
+export const MISSING_TEXT = t2("这个文件不在这台设备上", "This file isn't on this device");
 
 /** 一张图（原图有就用原图，不然用记录里的小缩略图）。 */
 export function FileImage({ file, className, alt, full = false }: { file: FileRow; className?: string; alt?: string; full?: boolean }) {
@@ -22,10 +23,11 @@ export function FileImage({ file, className, alt, full = false }: { file: FileRo
 }
 
 export function MissingPlaceholder({ compact = false }: { compact?: boolean }) {
+  const { L } = useI18n();
   return (
     <div className="file-missing" data-testid="file-missing">
-      <span className="t-body-14m">{MISSING_TEXT}</span>
-      {compact ? null : <span className="label">把同一个文件拖进资料库就能对上（按内容认）。</span>}
+      <span className="t-body-14m">{L.library.missing}</span>
+      {compact ? null : <span className="label">{L.library.missingHint}</span>}
     </div>
   );
 }
@@ -34,39 +36,40 @@ export function MissingPlaceholder({ compact = false }: { compact?: boolean }) {
 export function FileTile({ file, onOpen, onMore }: { file: FileRow; onOpen: () => void; onMore?: () => void }) {
   const { world } = useGuild();
   const { present, ready } = useFiles();
+  const { L, f, ph } = useI18n();
   const v = fileView(world, file);
   const here = present.has(file.sha256);
   const image = v.kind === "image";
   return (
     <figure className="file-tile" data-kind={v.kind} data-here={here || !ready ? "yes" : "no"} data-testid="file-tile">
-      <button type="button" className="file-tile-open" onClick={onOpen} aria-label={`打开 ${file.name}`}>
+      <button type="button" className="file-tile-open" onClick={onOpen} aria-label={f(L.library.openFile, { name: file.name })}>
         {image && (here || file.thumb) ? (
           <FileImage file={file} className="file-tile-img" />
         ) : (
           <span className="file-tile-card">
-            <span className="file-ext">{extOf(file.name).toUpperCase() || "文件"}</span>
+            <span className="file-ext">{extOf(file.name).toUpperCase() || L.library.fileFallback}</span>
             <span className="label">
-              {v.kindLabel} · {sizeLabel(file.size)}
+              {L.labels.fileKind[v.kind]} · {sizeLabel(file.size)}
             </span>
           </span>
         )}
-        {ready && !here ? <span className="file-tile-missing">不在这台设备上</span> : null}
+        {ready && !here ? <span className="file-tile-missing">{L.library.notHere}</span> : null}
         {v.pins.open ? (
-          <span className="file-tile-pins" aria-label={`${v.pins.open} 个没解决的钉`}>
+          <span className="file-tile-pins" aria-label={f(L.library.openPins, { n: v.pins.open })}>
             {v.pins.open}
           </span>
         ) : null}
       </button>
       <figcaption>
-        <span className="file-tile-name break" title={file.name}>
+        <span className="file-tile-name break" title={file.name} data-uc="">
           {file.name}
         </span>
         <span className="label break">
-          {v.where} · {v.uploader?.nickname ?? "有人"}
+          {ph(v.whereP)} · {v.uploader ? <U>{v.uploader.nickname}</U> : L.library.someone}
         </span>
         {onMore ? (
           <button type="button" className="inline-link label" onClick={onMore} data-testid="file-more">
-            信息 · 改
+            {L.library.info}
           </button>
         ) : null}
       </figcaption>
@@ -78,10 +81,11 @@ export function FileTile({ file, onOpen, onMore }: { file: FileRow; onOpen: () =
 export function SaveFileButton({ file, style = "Secondary" }: { file: FileRow; style?: "Secondary" | "Ghost" | "Accent" }) {
   const { getBlob, present } = useFiles();
   const { notify } = useGuild();
+  const { L, say } = useI18n();
   const [busy, setBusy] = useState(false);
   return (
     <Button
-      Label={busy ? "正在保存…" : "保存到这台设备"}
+      Label={busy ? L.library.saving : L.library.saveToDevice}
       Size="Small"
       Style={style}
       disabled={busy || !present.has(file.sha256)}
@@ -95,7 +99,7 @@ export function SaveFileButton({ file, style = "Secondary" }: { file: FileRow; s
             return;
           }
           const r = await saveToDevice(file.name, blob);
-          if (r.ok) notify(`存好了：${file.name}`);
+          if (r.ok) notify(say((d) => d.library.savedAs, { name: { uc: file.name } }));
           else if (r.reason !== "declined") notify(r.message, "Error");
           else notify(r.message, "Neutral");
         } finally {
@@ -108,38 +112,41 @@ export function SaveFileButton({ file, style = "Secondary" }: { file: FileRow; s
 
 export function FileFacts({ file }: { file: FileRow }) {
   const { world } = useGuild();
+  const { L, ph, dateTime } = useI18n();
   const v = fileView(world, file);
   return (
     <dl className="facts">
-      <dt>类型</dt>
+      <dt>{L.library.factKind}</dt>
       <dd>
-        {FILE_KIND_LABEL[fileKind(file)]}
+        {L.labels.fileKind[fileKind(file)]}
         {extOf(file.name) ? ` · .${extOf(file.name)}` : ""}
       </dd>
-      <dt>大小</dt>
+      <dt>{L.library.factSize}</dt>
       <dd className="num">{sizeLabel(file.size)}</dd>
       {file.width && file.height ? (
         <>
-          <dt>尺寸</dt>
+          <dt>{L.library.factDims}</dt>
           <dd className="num">
             {file.width} × {file.height}
           </dd>
         </>
       ) : null}
-      <dt>谁传的</dt>
+      <dt>{L.library.uploader}</dt>
       <dd>
         <MemberLink member={v.uploader} />
       </dd>
-      <dt>挂在哪</dt>
-      <dd className="break">{v.where}</dd>
-      <dt>什么时候</dt>
-      <dd>{dateTimeZh(file.at)}</dd>
+      <dt>{L.library.factWhere}</dt>
+      <dd className="break">{ph(v.whereP)}</dd>
+      <dt>{L.library.factWhen}</dt>
+      <dd>{dateTime(file.at)}</dd>
       {file.tags.length ? (
         <>
-          <dt>标签</dt>
+          <dt>{L.library.tags}</dt>
           <dd className="row">
             {file.tags.map((t) => (
-              <Tag key={t}>{t}</Tag>
+              <Tag key={t}>
+                <U>{t}</U>
+              </Tag>
             ))}
           </dd>
         </>
@@ -152,6 +159,7 @@ export function FileFacts({ file }: { file: FileRow }) {
 export function FileDialog({ fileId, onClose }: { fileId: Id; onClose: () => void }) {
   const { world, me, dispatch, notify } = useGuild();
   const { present } = useFiles();
+  const { L, err, say, cut: cutOf } = useI18n();
   const file = world.files[fileId];
   const [name, setName] = useState(file?.name ?? "");
   const [tags, setTags] = useState(file?.tags.join("，") ?? "");
@@ -162,33 +170,33 @@ export function FileDialog({ fileId, onClose }: { fileId: Id; onClose: () => voi
   const movable = file.subjectType === "project" || file.subjectType === "cut";
   const save = () => {
     const steps: [string, () => ReturnType<typeof dispatch>][] = [];
-    if (name.trim() !== file.name) steps.push(["改名", () => dispatch("file.rename", { fileId, name }, { quiet: true })]);
+    if (name.trim() !== file.name) steps.push(["rename", () => dispatch("file.rename", { fileId, name }, { quiet: true })]);
     const nextTags = tags.split(/[,，、\s]+/).map((t) => t.trim()).filter(Boolean);
-    if (nextTags.join("|") !== file.tags.join("|")) steps.push(["标签", () => dispatch("file.tag", { fileId, tags: nextTags }, { quiet: true })]);
+    if (nextTags.join("|") !== file.tags.join("|")) steps.push(["tags", () => dispatch("file.tag", { fileId, tags: nextTags }, { quiet: true })]);
     if (movable && (cutId || "") !== (file.subjectType === "cut" ? file.subjectId : "")) {
-      steps.push(["挪", () => dispatch("file.move", { fileId, subjectType: cutId ? "cut" : "project", subjectId: cutId || file.projectId }, { quiet: true })]);
+      steps.push(["move", () => dispatch("file.move", { fileId, subjectType: cutId ? "cut" : "project", subjectId: cutId || file.projectId }, { quiet: true })]);
     }
     for (const [, run] of steps) {
       const r = run();
       if (!r.ok) {
-        setError(r.error.message);
+        setError(err(r.error));
         return;
       }
     }
-    if (steps.length) notify("改好了");
+    if (steps.length) notify(say((d) => d.library.edited));
     onClose();
   };
   return (
     <Drawer
       Type="Dialog"
-      Title={file.name}
+      Title={<U>{file.name}</U>}
       open
       onClose={onClose}
       actions={
         <>
           <SaveFileButton file={file} />
-          <Button Label="关" Style="Secondary" onClick={onClose} />
-          {editable ? <Button Label="存" Style="Accent" onClick={save} data-testid="file-dialog-save" /> : null}
+          <Button Label={L.library.close} Style="Secondary" onClick={onClose} />
+          {editable ? <Button Label={L.library.save} Style="Accent" onClick={save} data-testid="file-dialog-save" /> : null}
         </>
       }
     >
@@ -197,14 +205,14 @@ export function FileDialog({ fileId, onClose }: { fileId: Id; onClose: () => voi
         <FileFacts file={file} />
         {editable ? (
           <>
-            <TextField label="文件名" value={name} onChange={(e) => setName(e.target.value)} data-testid="file-rename" />
-            <TextField label="标签" value={tags} onChange={(e) => setTags(e.target.value)} hint="用逗号隔开，最多 8 个" data-testid="file-tags" />
+            <TextField label={L.library.fileName} value={name} onChange={(e) => setName(e.target.value)} data-testid="file-rename" />
+            <TextField label={L.library.tags} value={tags} onChange={(e) => setTags(e.target.value)} hint={L.library.tagsHint8} data-testid="file-tags" />
             {movable ? (
-              <SelectField label="挂在哪" value={cutId} onChange={(e) => setCutId(e.target.value)}>
-                <option value="">资料库（不挂卡）</option>
+              <SelectField label={L.library.factWhere} value={cutId} onChange={(e) => setCutId(e.target.value)}>
+                <option value="">{L.library.noCutWhere}</option>
                 {cutsOf(world, file.projectId).map((c) => (
                   <option key={c.id} value={c.id}>
-                    {cutName(world, c)}
+                    {cutOf(c, projectById(world, file.projectId)?.group)}
                   </option>
                 ))}
               </SelectField>
@@ -216,14 +224,14 @@ export function FileDialog({ fileId, onClose }: { fileId: Id; onClose: () => voi
             ) : null}
             <div className="form-actions">
               <Button
-                Label="从资料库里拿掉"
+                Label={L.library.archive}
                 Size="Small"
                 Style="Ghost"
                 onClick={() => {
                   const r = dispatch("file.archive", { fileId }, { quiet: true });
-                  if (!r.ok) setError(r.error.message);
+                  if (!r.ok) setError(err(r.error));
                   else {
-                    notify("拿掉了（记录还在日志里）", "Neutral");
+                    notify(say((d) => d.library.archived), "Neutral");
                     onClose();
                   }
                 }}
@@ -231,7 +239,7 @@ export function FileDialog({ fileId, onClose }: { fileId: Id; onClose: () => voi
             </div>
           </>
         ) : (
-          <p className="label">只有传的人、审核员或管理员可以改这个文件。</p>
+          <p className="label">{L.library.onlyEditors}</p>
         )}
       </div>
     </Drawer>

@@ -56,3 +56,18 @@ test("单文件：不连外网，数字字体内联在文件里", async ({ page 
   expect(await page.evaluate(async () => { await document.fonts.load("600 16px Outfit", "0123"); return document.fonts.check("600 16px Outfit"); })).toBe(true);
   expectClean(errors, "单文件不连外网");
 });
+
+test("单文件：English 浏览器打开是 English，切到中文刷新还是中文", async ({ page }, info) => {
+  test.skip(!existsSync(FILE), "没有 dist-single/index.html（先 pnpm build:single）");
+  test.skip(info.project.name !== "en-US UTC", "只在 English 那一套里跑");
+  await noExternal(page);
+  const errors = watch(page);
+  await page.goto(`file://${FILE}`, { waitUntil: "networkidle" });
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { name: "Create your own guild" })).toBeVisible();
+  await page.locator('[data-testid="lang-zh"]:visible').click();
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.getByRole("heading", { name: "建自己的工会" })).toBeVisible();
+  expectClean(errors, "单文件 English");
+});

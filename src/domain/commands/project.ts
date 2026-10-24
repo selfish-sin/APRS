@@ -6,9 +6,10 @@ import { hubScope, TaskPatches, tasksToUnlock } from "../flow";
 import { GROUP, PROJECT_STATUS, type Change, type CutLayer, type CutRow, type Group, type Id, type ProjectStatus, type RateOverride, type RowHeader, type StageRow, type TaskRow } from "../model";
 import type { ReadModel } from "../readmodel";
 import { rateFor } from "../rules";
-import { groupTemplate, stageTemplate, type DefaultWorkload, type StageTemplate } from "../templates";
-import { cutCode } from "../naming";
-import { guarded, insert, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustNumber, mustText, ok, optDate, optInteger, optNumber, reject, rejectT, update, type Ctx } from "./core";
+import { GROUP_EN, groupTemplate, stageTemplate, type DefaultWorkload, type StageTemplate } from "../templates";
+import { cutCode, cutCode2, stageParam, taskLabelP } from "../naming";
+import { phraseText, t2, uc, type Phrase, type Text2 } from "../text";
+import { guarded, insert, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustNumber, mustText, ok, optDate, optInteger, optNumber, rejectT, update, type Ctx } from "./core";
 import { optLink } from "./validate";
 
 export interface CutInput {
@@ -38,39 +39,39 @@ const SCENE_RE = /^SC\d{3}$/;
 
 function mustCode(rm: ReadModel, value: unknown, exceptId?: Id): string {
   const code = typeof value === "string" ? value.trim().toUpperCase() : "";
-  if (!CODE_RE.test(code)) reject("invalid", "代号要 2–6 位大写字母（可以带数字，第一位是字母），例如 ANDLC");
-  if (rm.where("projects").some((p) => p.code === code && p.id !== exceptId)) reject("invalid", `代号「${code}」已经用过了`);
+  if (!CODE_RE.test(code)) rejectT("invalid", "code_bad");
+  if (rm.where("projects").some((p) => p.code === code && p.id !== exceptId)) rejectT("invalid", "code_used", { code });
   return code;
 }
 
 function mustEpisode(value: unknown, fallback: string): string {
   const s = value === undefined || value === null || value === "" ? fallback : String(value).trim().toUpperCase();
-  if (!EPISODE_RE.test(s)) reject("invalid", "集数写成 EP01 这样");
+  if (!EPISODE_RE.test(s)) rejectT("invalid", "episode_bad");
   return s;
 }
 
 function mustScene(value: unknown, fallback: string): string {
   const s = value === undefined || value === null || value === "" ? fallback : String(value).trim().toUpperCase();
-  if (!SCENE_RE.test(s)) reject("invalid", "场景写成 SC001 这样");
+  if (!SCENE_RE.test(s)) rejectT("invalid", "scene_bad");
   return s;
 }
 
-function mustLayers(value: unknown, where: string, hasLayers: boolean): CutLayer[] {
+function mustLayers(value: unknown, where: Text2, hasLayers: boolean): CutLayer[] {
   const list = Array.isArray(value) ? value : [];
   if (!hasLayers) {
-    if (list.length) reject("invalid", "视频组不分层");
+    if (list.length) rejectT("invalid", "layers_none_video");
     return [];
   }
-  if (list.length === 0) reject("invalid", `${where}至少要有一层（A 层）`);
-  if (list.length > 6) reject("invalid", `${where}最多 6 层`);
+  if (list.length === 0) rejectT("invalid", "layers_min", { where });
+  if (list.length > 6) rejectT("invalid", "layers_max", { where });
   const seen = new Set<string>();
   return list.map((l) => {
     const name = typeof l?.name === "string" ? l.name.trim().toUpperCase() : "";
-    if (!/^[A-Z]$/.test(name)) reject("invalid", `${where}的层名写一个大写字母（A、B …）`);
-    if (seen.has(name)) reject("invalid", `${where}有两个 ${name} 层`);
+    if (!/^[A-Z]$/.test(name)) rejectT("invalid", "layer_name_bad", { where });
+    if (seen.has(name)) rejectT("invalid", "layer_dup", { where, name });
     seen.add(name);
-    const sheets = optInteger(l?.sheets, `${where} ${name} 层的张数`, 1, 999);
-    if (sheets === null) reject("invalid", `${where} ${name} 层要填张数`);
+    const sheets = optInteger(l?.sheets, t2(`${where.zh} ${name} 层的张数`, `drawings for layer ${name} of ${where.en}`), 1, 999);
+    if (sheets === null) rejectT("invalid", "layer_sheets_missing", { where, name });
     return { name, sheets };
   });
 }
@@ -127,12 +128,12 @@ export const createProject = guarded<CreateProjectInput>((rm, input, ctx) => {
   const scene = mustScene(input.scene, "SC001");
   const startOn = optDate(input.startOn, "开始");
   const planEndOn = optDate(input.planEndOn, "计划结束");
-  if (!startOn || !planEndOn) reject("invalid", "开始和计划结束的日期都要填");
-  if (planEndOn < startOn) reject("invalid", "计划结束不能早于开始");
+  if (!startOn || !planEndOn) rejectT("invalid", "dates_required");
+  if (planEndOn < startOn) rejectT("invalid", "end_before_start");
   const feishuRoot = optLink(input.feishuRoot, "飞书根文件夹");
   const cutInputs = Array.isArray(input.cuts) ? input.cuts : [];
-  if (cutInputs.length === 0) reject("invalid", `至少要有 1 ${tpl.cutLabel}`);
-  if (cutInputs.length > 200) reject("invalid", `一个项目最多 200 ${tpl.cutLabel}`);
+  if (cutInputs.length === 0) rejectT("invalid", "cuts_min", { unit: t2(tpl.cutLabel, GROUP_EN[group].cutLabel) });
+  if (cutInputs.length > 200) rejectT("invalid", "cuts_max", { unit: t2(tpl.cutLabel, GROUP_EN[group].cutLabel) });
 
   const world = rm.get("worlds", ctx.worldId);
   const project = insert(ctx, "projects", { group, name, code, episode, scene, startOn, planEndOn, status: "active", feishuRoot });
@@ -141,12 +142,12 @@ export const createProject = guarded<CreateProjectInput>((rm, input, ctx) => {
   const numbers = new Set<number>();
   const cuts: CutRow[] = cutInputs.map((c, i) => {
     const number = optInteger(c?.number, "卡号", 1, 9999) ?? i + 1;
-    if (numbers.has(number)) reject("invalid", `${cutCode({ number }, group)} 重复了`);
+    if (numbers.has(number)) rejectT("invalid", "cut_dup", { cut: cutCode2({ number }, group) });
     numbers.add(number);
-    const where = cutCode({ number }, group);
+    const where = cutCode2({ number }, group);
     const layers = mustLayers(c?.layers, where, tpl.hasLayers);
-    const seconds = optNumber(c?.seconds, `${where} 的秒数`, 0, 600) ?? 0;
-    const keySheets = optInteger(c?.keySheets, `${where} 的原画张数`, 0, 999) ?? 0;
+    const seconds = optNumber(c?.seconds, t2(`${where.zh} 的秒数`, `seconds for ${where.en}`), 0, 600) ?? 0;
+    const keySheets = optInteger(c?.keySheets, t2(`${where.zh} 的原画张数`, `key drawings for ${where.en}`), 0, 999) ?? 0;
     const row = insert(ctx, "cuts", {
       projectId: project.row.id,
       episode: mustEpisode(c?.episode, episode),
@@ -231,7 +232,7 @@ export const updateProject = guarded<UpdateProjectInput>((rm, input, ctx) => {
   if (input.code !== undefined) patch.code = mustCode(rm, input.code, p.id);
   if (input.startOn !== undefined) patch.startOn = optDate(input.startOn, "开始") ?? p.startOn;
   if (input.planEndOn !== undefined) patch.planEndOn = optDate(input.planEndOn, "计划结束") ?? p.planEndOn;
-  if ((patch.planEndOn ?? p.planEndOn) < (patch.startOn ?? p.startOn)) reject("invalid", "计划结束不能早于开始");
+  if ((patch.planEndOn ?? p.planEndOn) < (patch.startOn ?? p.startOn)) rejectT("invalid", "end_before_start");
   if (input.feishuRoot !== undefined) patch.feishuRoot = optLink(input.feishuRoot, "飞书根文件夹");
   if (input.status !== undefined) patch.status = mustBeOneOf(input.status, PROJECT_STATUS, "状态");
   if (input.cycleDays !== undefined) patch.cycleDays = optInteger(input.cycleDays, "一周期几天", 1, 31) ?? 7;
@@ -269,7 +270,7 @@ export const setReviewer = guarded<SetReviewerInput>((rm, input, ctx) => {
   let reviewerId: Id | null = null;
   if (input.memberId) {
     const m = mustGet(rm, ctx, "members", input.memberId, "成员");
-    if (!isReviewer(m)) reject("invalid", `「${m.nickname}」不是审核员，先在成员里把角色改成审核员`);
+    if (!isReviewer(m)) rejectT("invalid", "not_reviewer", { name: uc(m.nickname) });
     reviewerId = m.id;
   }
   const ch = update("stages", stage, { reviewerId });
@@ -292,7 +293,7 @@ export const setRate = guarded<SetRateInput>((rm, input, ctx) => {
   mustAdmin(rm, ctx, "改工时和系数");
   const group = mustBeOneOf(input.group, GROUP, "组");
   const t = stageTemplate(group, input.stageKey);
-  if (!t) reject("not_found", "找不到这个环节");
+  if (!t) rejectT("not_found", "stage_missing");
   const world = mustGet(rm, ctx, "worlds", ctx.worldId, "工会");
   const prev = rateFor(world.rules, group, t.key) ?? {};
   const next: RateOverride = { ...prev };
@@ -342,39 +343,39 @@ const EDITABLE: TaskRow["status"][] = ["locked", "open", "reclaimed"];
 export const hubDispatch = guarded<HubDispatchInput>((rm, input, ctx) => {
   mustAdmin(rm, ctx, "枢纽派发");
   const hub = mustGet(rm, ctx, "stages", input.hubStageId, "枢纽环节");
-  if (!hub.hub) reject("invalid", `「${hub.name}」不是枢纽环节`);
-  const release = input.release === "all" ? "all" : input.release === "ready" ? "ready" : reject("invalid", "选一下怎么放出来");
+  if (!hub.hub) rejectT("invalid", "not_hub", { stage: stageParam(groupOfStage(rm, hub), hub) });
+  const release = input.release === "all" ? "all" : input.release === "ready" ? "ready" : rejectT("invalid", "release_pick");
   const project = mustGet(rm, ctx, "projects", hub.projectId, "项目");
   const stages = rm.where("stages", { projectId: project.id });
   const scope = new Map(hubScope(stages, hub).map((s) => [s.id, s]));
   const rows = Array.isArray(input.rows) ? input.rows : [];
   const adds = Array.isArray(input.add) ? input.add : [];
-  if (rows.length === 0 && adds.length === 0) reject("invalid", "没有选要派发的任务");
+  if (rows.length === 0 && adds.length === 0) rejectT("invalid", "dispatch_none");
   const acc = new TaskPatches(rm);
   const changes: Change[] = [];
   const touched = new Set<Id>();
   for (const r of rows) {
     const task = mustGet(rm, ctx, "tasks", r?.taskId, "任务");
     const stage = scope.get(task.stageId);
-    if (!stage) reject("invalid", `这张任务不在「${hub.name}」管的范围里`);
-    if (touched.has(task.id)) reject("invalid", "同一张任务写了两次");
+    if (!stage) rejectT("invalid", "dispatch_out_of_scope", { stage: stageParam(project.group, hub) });
+    if (touched.has(task.id)) rejectT("invalid", "dispatch_dup");
     touched.add(task.id);
     const label = taskWhere(rm, task, stage, project.group);
-    if (!EDITABLE.includes(task.status)) reject("state", `${label}已经有人在做或做完了，不能再派发`);
-    const workload = mustNumber(r.workload, `${label}的工作量`, 0.5, 9999);
+    if (!EDITABLE.includes(task.status)) rejectT("state", "dispatch_busy", { label });
+    const workload = mustNumber(r.workload, t2(`${phraseText(label, "zh")}的工作量`, `workload for ${phraseText(label, "en")}`), 0.5, 9999);
     acc.set(task, { workload, dispatchedAt: ctx.worldNow, ...(release === "all" && task.status === "locked" ? { status: "open" as const } : {}) });
   }
   for (const a of adds) {
     const stage = scope.get(a?.stageId);
-    if (!stage) reject("invalid", "要加的任务不在这个枢纽管的范围里");
-    if (stage.grain !== "layer") reject("invalid", `「${stage.name}」不分层，不能加层`);
+    if (!stage) rejectT("invalid", "dispatch_add_out_of_scope");
+    if (stage.grain !== "layer") rejectT("invalid", "dispatch_no_layers", { stage: stageParam(project.group, stage) });
     const cut = mustGet(rm, ctx, "cuts", a.cutId, "卡");
-    if (cut.projectId !== project.id) reject("invalid", "这一卡不在这个项目里");
+    if (cut.projectId !== project.id) rejectT("invalid", "cut_other_project");
     const layer = typeof a.layer === "string" ? a.layer.trim().toUpperCase() : "";
-    if (!/^[A-Z]$/.test(layer)) reject("invalid", "层名写一个大写字母");
+    if (!/^[A-Z]$/.test(layer)) rejectT("invalid", "layer_letter");
     const exists = rm.where("tasks", { stageId: stage.id, cutId: cut.id }).some((t) => t.layer === layer);
-    if (exists) reject("invalid", `${cutCode(cut, project.group)} 的「${stage.name}」已经有 ${layer} 层了`);
-    const workload = mustNumber(a.workload, `${cutCode(cut, project.group)} ${layer} 层的工作量`, 0.5, 9999);
+    if (exists) rejectT("invalid", "layer_exists", { cut: cutCode2(cut, project.group), stage: stageParam(project.group, stage), layer });
+    const workload = mustNumber(a.workload, t2(`${cutCode(cut, project.group)} ${layer} 层的工作量`, `workload for ${cutCode(cut, project.group, "en")} layer ${layer}`), 0.5, 9999);
     const t = insert(ctx, "tasks", {
       projectId: project.id,
       stageId: stage.id,
@@ -411,9 +412,13 @@ export const hubDispatch = guarded<HubDispatchInput>((rm, input, ctx) => {
   return ok([...acc.changes(), ...changes], { projectId: project.id });
 });
 
-function taskWhere(rm: ReadModel, task: TaskRow, stage: StageRow, group: Group): string {
-  const cut = task.cutId ? rm.get("cuts", task.cutId) : undefined;
-  return `${cut ? `${cutCode(cut, group)} ` : ""}「${stage.name}」${task.layer ? ` ${task.layer} 层` : ""}`;
+function taskWhere(rm: ReadModel, task: TaskRow, stage: StageRow, group: Group): Phrase {
+  const cut = task.cutId ? rm.get("cuts", task.cutId) ?? null : null;
+  return taskLabelP(stage, cut, task, group);
+}
+
+function groupOfStage(rm: ReadModel, stage: StageRow): Group {
+  return rm.get("projects", stage.projectId)?.group ?? "animation";
 }
 
 export type { Ctx };

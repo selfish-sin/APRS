@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
 
 export type DrawerProps = {
   Type?: "Drawer" | "Dialog";
-  Title: string;
-  Body?: string;
+  Title: ReactNode;
+  Body?: ReactNode;
   children?: ReactNode;
   "Show actions"?: boolean;
   actions?: ReactNode;

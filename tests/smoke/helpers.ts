@@ -8,6 +8,9 @@ export type Errors = { console: string[]; page: string[]; failed: string[]; exte
 
 const BASE_ORIGIN = new URL(process.env.SMOKE_BASE_URL ?? "http://localhost:4173").origin;
 
+/** 新开的浏览器环境也先定成中文（和 playwright.config.ts 里默认的一样；业务流程的断言写的是中文）。 */
+export const ZH_STATE = { cookies: [], origins: [{ origin: BASE_ORIGIN, localStorage: [{ name: "arps:lang", value: "zh" }] }] };
+
 /** 对外网的请求：http(s) 但不是这个站自己（境内打不开外网字体 / CDN，SPEC §14.3）。data: / blob: 不算。 */
 export function isExternal(page: Page, url: string): boolean {
   let u: URL;

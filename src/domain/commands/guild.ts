@@ -3,7 +3,7 @@
  */
 import { AVATAR_TONE, type AvatarToneName } from "../model";
 import { DEFAULT_DEADLINE_FACTOR } from "../rules";
-import { guarded, insert, mustAdmin, mustBeOneOf, mustGet, mustText, ok, optNumber, reject, update } from "./core";
+import { guarded, insert, mustAdmin, mustBeOneOf, mustGet, mustText, ok, optNumber, rejectT, update } from "./core";
 import { mustHash, mustLogin, mustNickname, mustSalt } from "./validate";
 
 export interface CreateGuildInput {
@@ -19,7 +19,7 @@ export interface CreateGuildInput {
 
 /** 建一个全空的工会：工会 + 建的人（管理员）+ 他的账号。只能在还没有工会的世界里跑。 */
 export const createGuild = guarded<CreateGuildInput>((rm, input, ctx) => {
-  if (rm.get("worlds", ctx.worldId)) reject("state", "这个工会已经建好了");
+  if (rm.get("worlds", ctx.worldId)) rejectT("state", "guild_exists");
   const title = mustText(input.title, "工会名字", 24);
   const nickname = mustNickname(input.nickname);
   const login = mustLogin(input.login);

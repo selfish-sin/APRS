@@ -9,6 +9,8 @@
  * 打开工会、登录以后，自动把超过时限的任务收回到可接（SPEC §4 规则 3），每一张一条日志。
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { phrase, t2, type Say } from "@/domain/text";
+import { errorSay } from "@/domain/errors";
 import type { CommandInput, CommandName, DomainError } from "@/domain/commands";
 import { dispatch as runCommand, type DispatchResult } from "@/domain/dispatch";
 import { newId } from "@/domain/ids";
@@ -57,17 +59,17 @@ export interface StorageStatus {
   /** 底之后做了几步。 */
   steps: number;
   lastBackupAt: IsoDateTime | null;
-  saveFailed: { at: IsoDateTime; message: string } | null;
+  saveFailed: { at: IsoDateTime; message: Say } | null;
   skipped: { entry: JournalEntry; reason: string }[];
   skippedNew: number;
-  reminder: { kind: "usage" | "backup"; message: string } | null;
+  reminder: { kind: "usage" | "backup"; message: Say } | null;
 }
 
-export type ImportReport = { ok: true; applied: number; skipped: number; total: number; title: string; files?: number } | { ok: false; message: string };
+export type ImportReport = { ok: true; applied: number; skipped: number; total: number; title: string; files?: number } | { ok: false; message: Say };
 
 export interface Notice {
   id: number;
-  message: string;
+  message: Say;
   tone: "Neutral" | "Success" | "Error";
 }
 
@@ -97,17 +99,17 @@ function realNow(): IsoDateTime {
   return new Date().toISOString();
 }
 
-function errorMessage(e: unknown): string {
-  if (isQuotaError(e)) return "浏览器的存储满了";
+function errorMessage(e: unknown): Say {
+  if (isQuotaError(e)) return t2("浏览器的存储满了", "The browser's storage is full");
   return e instanceof Error ? e.message : String(e);
 }
 
-function saveFailureMessage(result: ReturnType<typeof saveWorld>, box: { storage: StorageLike; persistent: boolean }): string {
-  if (!box.persistent) return "这个浏览器不让存（无痕窗口或者禁了本机存储）";
-  if (result.ok) return "没存上";
+function saveFailureMessage(result: ReturnType<typeof saveWorld>, box: { storage: StorageLike; persistent: boolean }): Say {
+  if (!box.persistent) return t2("这个浏览器不让存（无痕窗口或者禁了本机存储）", "This browser won't save data (a private window, or site storage is blocked)");
+  if (result.ok) return t2("没存上", "Not saved");
   if (isQuotaError(result.error)) {
     const usage = measureUsage(box.storage);
-    return usage.ratio < 0.5 ? "这个浏览器不让存，可能是无痕窗口" : "浏览器的存储满了";
+    return usage.ratio < 0.5 ? t2("这个浏览器不让存，可能是无痕窗口", "This browser won't save data. It may be a private window") : t2("浏览器的存储满了", "The browser's storage is full");
   }
   return errorMessage(result.error);
 }
@@ -146,15 +148,15 @@ function reminderFor(storage: StorageLike, status: Omit<StorageStatus, "reminder
   const index = readIndex(storage);
   if (status.ratio >= USAGE_WARN_RATIO && !index.usageWarnedAt) {
     const days = daysSince(status.lastBackupAt, now);
-    const backup = days === null ? "还没有导出过备份" : `上次备份是 ${days} 天前`;
-    return { kind: "usage", message: `这台设备的存储已用 ${Math.round(status.ratio * 100)}%，${backup}。` };
+    const backup = days === null ? t2("还没有导出过备份", "no backup has been exported yet") : phrase("上次备份是 {d} 天前", "the last backup was {d} {d|day|days} ago", { d: days });
+    return { kind: "usage", message: phrase("这台设备的存储已用 {pct}%，{backup}。", "This device's storage is {pct}% full, and {backup}.", { pct: Math.round(status.ratio * 100), backup }) };
   }
   if (status.steps >= 20) {
     const days = daysSince(status.lastBackupAt, now);
     const stale = days === null || days >= BACKUP_REMIND_DAYS;
     const remindedDays = daysSince(index.backupRemindedAt, now);
     if (stale && (remindedDays === null || remindedDays >= 1)) {
-      return { kind: "backup", message: days === null ? "这个工会还没有导出过备份。" : `这个工会上次备份是 ${days} 天前。` };
+      return { kind: "backup", message: days === null ? t2("这个工会还没有导出过备份。", "This guild has never been backed up.") : phrase("这个工会上次备份是 {d} 天前。", "This guild was last backed up {d} {d|day|days} ago.", { d: days }) };
     }
   }
   return null;
@@ -184,26 +186,26 @@ export interface StoreApi {
   account: AccountRow | null;
   /** 以登录的成员身份跑一条命令。同步返回；被拒时 `error.message` 是中文。 */
   dispatch: Dispatch;
-  login: (accountId: Id, passcode: string) => Promise<{ ok: true } | { ok: false; message: string }>;
+  login: (accountId: Id, passcode: string) => Promise<{ ok: true } | { ok: false; message: Say }>;
   logout: () => void;
   openDemo: () => void;
   openGuild: (worldId: Id) => boolean;
   leaveGuild: () => void;
-  createGuild: (form: CreateGuildForm) => Promise<{ ok: true } | { ok: false; message: string }>;
+  createGuild: (form: CreateGuildForm) => Promise<{ ok: true } | { ok: false; message: Say }>;
   resetDemo: () => void;
   lastError: DomainError | null;
   clearError: () => void;
   notice: Notice | null;
-  notify: (message: string, tone?: Notice["tone"]) => void;
+  notify: (message: Say, tone?: Notice["tone"]) => void;
   clearNotice: () => void;
   storage: StorageStatus;
   /**
    * 导出备份（只在用户点按钮时调用）：走 saveToDevice（预览页面里用 claude.use("downloads")，不然 <a download>）。
    * `files` = 勾了「连文件一起」时，资料库的文件（base64）一起放进去。
    */
-  exportWorld: (opts?: { files?: Record<string, EmbeddedFile> }) => Promise<{ ok: true; fileName: string } | { ok: false; message: string }>;
+  exportWorld: (opts?: { files?: Record<string, EmbeddedFile> }) => Promise<{ ok: true; fileName: string } | { ok: false; message: Say }>;
   /** 同一份备份，给成文字（下载被挡住的地方——比如预览框——用复制代替）。也记一次「备份过」。 */
-  exportText: () => { ok: true; text: string; fileName: string } | { ok: false; message: string };
+  exportText: () => { ok: true; text: string; fileName: string } | { ok: false; message: Say };
   worldFile: () => WorldFile | null;
   /** 导入一份备份：同一个工会在这台设备上就替换（先留 :bak），没有就加进来，然后打开它。 */
   importWorld: (file: WorldFile) => ImportReport;
@@ -355,14 +357,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
     if (n > 0) {
       commit({ ...current, world: state });
-      setNotice({ id: ++noticeSeq.current, message: `有 ${n} 张任务过了时限没交，已经收回到可接。`, tone: "Neutral" });
+      setNotice({ id: ++noticeSeq.current, message: phrase("有 {n} 张任务过了时限没交，已经收回到可接。", "{n} {n|task|tasks} ran past the deadline without being handed in and {n|is|are} open again.", { n }), tone: "Neutral" });
     }
   }, [current, commit]);
 
   const dispatch = useCallback<Dispatch>((name, input, opts = {}) => {
     const cur = currentRef.current;
     if (!cur) {
-      const error: DomainError = { code: "state", message: "还没有打开工会" };
+      const error: DomainError = { code: "state", key: "no_guild", message: "还没有打开工会" };
       if (!opts.quiet) setLastError(error);
       return { ok: false, error };
     }
@@ -380,14 +382,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback<StoreApi["login"]>(
     async (accountId, passcode) => {
       const cur = currentRef.current;
-      if (!cur) return { ok: false, message: "还没有打开工会" };
+      if (!cur) return { ok: false, message: t2("还没有打开工会", "No guild is open yet") };
       const account = cur.world.accounts[accountId];
-      if (!account || account.archivedAt) return { ok: false, message: "找不到这个账号" };
-      if (!passcode) return { ok: false, message: "请输口令" };
+      if (!account || account.archivedAt) return { ok: false, message: t2("找不到这个账号", "Can't find this account") };
+      if (!passcode) return { ok: false, message: t2("请输口令", "Enter the passcode") };
       const ok = await verifyPasscode(account, passcode);
-      if (!ok) return { ok: false, message: "口令不对，再试一次" };
+      if (!ok) return { ok: false, message: t2("口令不对，再试一次", "Wrong passcode. Try again") };
       const latest = currentRef.current;
-      if (!latest || latest.worldId !== cur.worldId) return { ok: false, message: "工会换了，请重新登录" };
+      if (!latest || latest.worldId !== cur.worldId) return { ok: false, message: t2("工会换了，请重新登录", "The guild changed. Please sign in again") };
       commit({ ...latest, session: { worldId: latest.worldId, accountId: account.id, memberId: account.memberId } });
       setLastError(null);
       return { ok: true };
@@ -443,7 +445,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         salt,
         hash,
       });
-      if (!r.ok) return { ok: false, message: r.error.message };
+      if (!r.ok) return { ok: false, message: errorSay(r.error) };
       sweptFor.current = null;
       commit({ worldId, base: "empty", world: r.state, session: { worldId, accountId: r.created.accountId, memberId: r.created.memberId }, skipped: [] });
       return { ok: true };
@@ -475,9 +477,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const prepareExport = useCallback(
     (files?: Record<string, EmbeddedFile>):
       | { ok: true; text: string; fileName: string; now: IsoDateTime; worldId: Id }
-      | { ok: false; message: string } => {
+      | { ok: false; message: Say } => {
       const file0 = worldFile();
-      if (!file0) return { ok: false, message: "还没有打开工会" };
+      if (!file0) return { ok: false, message: t2("还没有打开工会", "No guild is open yet") };
       try {
         const now = realNow();
         const file = buildExport(file0, now, buildId());
@@ -517,11 +519,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const exportWorld = useCallback<StoreApi["exportWorld"]>(
     async (opts = {}) => {
-      if (typeof document === "undefined") return { ok: false, message: "只能在浏览器里导出" };
+      if (typeof document === "undefined") return { ok: false, message: t2("只能在浏览器里导出", "Exporting only works in a browser") };
       const r = prepareExport(opts.files);
       if (!r.ok) return r;
       const saved = await saveToDevice(r.fileName, new Blob([r.text], { type: "application/json" }));
-      if (!saved.ok) return { ok: false, message: saved.reason === "declined" ? "没有导出（你选了不保存）。" : saved.message };
+      if (!saved.ok) return { ok: false, message: saved.reason === "declined" ? t2("没有导出（你选了不保存）。", "Not exported (you chose not to save).") : saved.message };
       markExported(r.worldId, r.now);
       return { ok: true, fileName: r.fileName };
     },
@@ -546,9 +548,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       try {
         built = rebuildWorld(file.base, file.worldId, file.journal, file.skipped ?? []);
       } catch (e) {
-        return { ok: false, message: `备份读不了（${errorMessage(e)}）。` };
+        return { ok: false, message: phrase("备份读不了（{why}）。", "The backup can't be read ({why}).", { why: errorMessage(e) }) };
       }
-      if (!theWorld(built.state)) return { ok: false, message: "备份里没有能恢复的工会。" };
+      if (!theWorld(built.state)) return { ok: false, message: t2("备份里没有能恢复的工会。", "There's no guild in this backup to restore.") };
       sweptFor.current = null;
       commit({ worldId: file.worldId, base: file.base, world: built.state, session: validSession(built.state, file.worldId, file.session), skipped: built.skipped });
       setLastError(null);
@@ -598,7 +600,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   }, [ready, storageStatus.ratio]);
 
-  const notify = useCallback((message: string, tone: Notice["tone"] = "Success") => setNotice({ id: ++noticeSeq.current, message, tone }), []);
+  const notify = useCallback((message: Say, tone: Notice["tone"] = "Success") => setNotice({ id: ++noticeSeq.current, message, tone }), []);
   const clearNotice = useCallback(() => setNotice(null), []);
   const clearError = useCallback(() => setLastError(null), []);
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
 import { buildDemoWorld } from "@/data/demo";
-import { REPORT_KEYS, buildReport, memberRecord } from "@/domain/report";
+import { REPORT_KEYS, buildReport, memberFileName, memberRecord, reportFileName } from "@/domain/report";
 import * as q from "@/domain/queries";
 import { checkWorkbook, colName, parseRef, rangeRef } from "./model";
 import { readWorkbook } from "./read";
@@ -91,6 +91,15 @@ describe("导出汇报", () => {
     expect(oct.name).toBe("必要劳动时间统计表 2026-10");
     // 英文
     expect(buildReport(s, andlc.id, ["progress"], { lang: "en" })[0].header[0]).toBe("No.");
+    const HAN = /[\u3400-\u9fff]/;
+    for (const t of buildReport(s, andlc.id, REPORT_KEYS, { lang: "en" })) {
+      expect(t.name, "English 表名").not.toMatch(HAN);
+      for (const h of t.header) expect(String(h), `English 表头：${t.name}`).not.toMatch(HAN);
+    }
+    expect(reportFileName(s, andlc.id, "xlsx", "en")).toBe(`ANDLC-report-${q.todayOf(s)}.xlsx`);
+    expect(reportFileName(s, andlc.id, "xlsx", "zh")).toBe(`ANDLC-汇报-${q.todayOf(s)}.xlsx`);
+    const worker = q.members(s)[0];
+    expect(memberFileName(s, worker.id, "en")).toMatch(/-records-\d{4}-\d{2}-\d{2}\.xlsx$/);
   });
 
   it("写成 .xlsx 再用同一个库读回来：表名、表头、行数、颜色、冻结都在", async () => {
@@ -118,5 +127,12 @@ describe("导出汇报", () => {
     const rec = memberRecord(s, muxing.id);
     expect(rec.map((t) => t.name)).toEqual(["我的任务", "工时", "活力点流水"]);
     expect(rec[2].rows.length).toBe((q.indexOf(s).ledgerByMember.get(muxing.id) ?? []).length);
+    // English：表名、表头、环节、任务名、流水种类都是英文（项目名、昵称、人写的备注照原样）
+    const recEn = memberRecord(s, muxing.id, "en");
+    expect(recEn.map((t) => t.name)).not.toContain("我的任务");
+    const HAN = /[\u3400-\u9fff]/;
+    for (const t of recEn) for (const h of t.header) expect(String(h)).not.toMatch(HAN);
+    for (const row of recEn[1].rows) expect(String(row[0])).not.toMatch(HAN);
+    for (const row of recEn[2].rows) expect(String(row[1])).not.toMatch(HAN);
   });
 });

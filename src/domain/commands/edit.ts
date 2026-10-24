@@ -8,7 +8,8 @@
  */
 import { addHours, atWorldClock } from "../clock";
 import { GRAIN, PHASE, STAGE_KIND, UNIT, type Change, type CutLayer, type CutRow, type Id, type StageRow, type TaskRow } from "../model";
-import { cutCode, taskLabel } from "../naming";
+import { cutCode, cutCode2, taskLabel, taskLabelP } from "../naming";
+import { uc } from "../text";
 import type { ReadModel } from "../readmodel";
 import { deadlineHours } from "../rules";
 import { groupTemplate } from "../templates";
@@ -69,7 +70,7 @@ export const addStage = guarded<AddStageInput>((rm, input, ctx) => {
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name || name.length > 30) rejectT("invalid", "stage_name_bad");
   const stages = liveStages(rm, p.id);
-  if (stages.some((s) => s.name === name)) rejectT("invalid", "stage_name_taken", { name });
+  if (stages.some((s) => s.name === name)) rejectT("invalid", "stage_name_taken", { name: uc(name) });
   const phase = mustBeOneOf(input.phase, PHASE, "阶段");
   const kind = mustBeOneOf(input.kind, STAGE_KIND, "类型");
   const grain = mustBeOneOf(input.grain, GRAIN, "粒度");
@@ -153,7 +154,7 @@ export const updateStage = guarded<UpdateStageInput>((rm, input, ctx) => {
   if (input.name !== undefined) {
     const name = String(input.name).trim();
     if (!name || name.length > 30) rejectT("invalid", "stage_name_bad");
-    if (liveStages(rm, s.projectId).some((x) => x.id !== s.id && x.name === name)) rejectT("invalid", "stage_name_taken", { name });
+    if (liveStages(rm, s.projectId).some((x) => x.id !== s.id && x.name === name)) rejectT("invalid", "stage_name_taken", { name: uc(name) });
     patch.name = name;
   }
   if (input.phase !== undefined) patch.phase = mustBeOneOf(input.phase, PHASE, "阶段");
@@ -305,7 +306,7 @@ export const extendTask = guarded<TaskExtendInput>((rm, input, ctx) => {
   const s = mustGet(rm, ctx, "stages", t.stageId, "环节");
   const p = mustGet(rm, ctx, "projects", t.projectId, "项目");
   const cut = t.cutId ? rm.get("cuts", t.cutId) ?? null : null;
-  if ((t.status !== "claimed" && t.status !== "returned") || !t.dueAt) rejectT("state", "extend_not_running", { label: taskLabel(s, cut, t, p.group) });
+  if ((t.status !== "claimed" && t.status !== "returned") || !t.dueAt) rejectT("state", "extend_not_running", { label: taskLabelP(s, cut, t, p.group) });
   const c = update("tasks", t, { dueAt: newDue(t.dueAt, input) });
   return ok(c ? [c] : [], { taskId: t.id });
 });
@@ -371,7 +372,7 @@ export const addCuts = guarded<AddCutsInput>((rm, input, ctx) => {
   const changes: Change[] = [];
   const cuts: CutRow[] = [];
   const after = input.afterCutId ? mustGet(rm, ctx, "cuts", input.afterCutId, "卡") : null;
-  if (after && after.projectId !== p.id) rejectT("not_found", "cut_after_missing", { cut: "?" });
+  if (after && after.projectId !== p.id) rejectT("not_found", "cut_after_missing", { cut: cutCode2(after, p.group) });
   const used = new Set(all.filter((c) => after && c.number === after.number).map((c) => c.suffix ?? ""));
   let nextNumber = (last?.number ?? 0) + 1;
   for (let i = 0; i < count; i++) {
@@ -380,7 +381,7 @@ export const addCuts = guarded<AddCutsInput>((rm, input, ctx) => {
     if (after) {
       number = after.number;
       const letter = "abcdefghijklmnopqrstuvwxyz".split("").find((l) => !used.has(l));
-      if (!letter) rejectT("state", "cut_suffix_full", { cut: cutCode(after, p.group) });
+      if (!letter) rejectT("state", "cut_suffix_full", { cut: cutCode2(after, p.group) });
       used.add(letter);
       suffix = letter;
     } else nextNumber += 1;
@@ -478,7 +479,7 @@ export const archiveCut = guarded<ArchiveCutInput>((rm, input, ctx) => {
   mustReason(input.reason);
   const cut = mustGet(rm, ctx, "cuts", input.cutId, "卡");
   const p = mustGet(rm, ctx, "projects", cut.projectId, "项目");
-  if (cut.disabled) rejectT("state", "cut_already_disabled", { cut: cutCode(cut, p.group) });
+  if (cut.disabled) rejectT("state", "cut_already_disabled", { cut: cutCode2(cut, p.group) });
   const changes: Change[] = [];
   const c = update("cuts", cut, { disabled: true });
   if (c) changes.push(c);

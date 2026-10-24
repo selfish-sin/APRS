@@ -16,18 +16,20 @@ import { useFiles } from "@/lib/files/FilesProvider";
 import { Link, navigate, useRoute } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 import { NotFound } from "./NotFound";
+import { U, useI18n } from "@/i18n/I18n";
 
-const BLOCK_LABEL: Record<BlockType, string> = { heading: "标题", text: "段落", image: "图片", gallery: "图片网格", file: "文件", checklist: "清单", divider: "分割线" };
+const BLOCK_TYPES: BlockType[] = ["heading", "text", "image", "gallery", "file", "checklist", "divider"];
 
 export function DocPage() {
   const { world, dispatch, notify } = useGuild();
+  const { L, f, r: rich, say } = useI18n();
   const route = useRoute();
   const page = pageById(world, route.segments[1]);
   const [viewer, setViewer] = useState<{ files: FileRow[]; start: Id } | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(page?.title ?? "");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  if (!page) return <NotFound what="这一页" />;
+  if (!page) return <NotFound what="doc" />;
   const project = projectById(world, page.projectId);
   const blocks = blocksOf(world, page.id);
   const pageImages = blocks.flatMap((b) => (b.type === "image" || b.type === "gallery" ? b.fileIds : [])).map((id) => world.files[id]).filter((f): f is FileRow => !!f && !f.archivedAt);
@@ -37,11 +39,13 @@ export function DocPage() {
       <div className="page-head">
         <div className="page-head-text">
           <div className="crumbs">
-            <Link to="/library">资料库</Link>
+            <Link to="/library">{L.library.title}</Link>
             <span>/</span>
-            <Link to={`/library/${page.projectId}`}>{project?.name}</Link>
+            <Link to={`/library/${page.projectId}`}>
+              <U>{project?.name}</U>
+            </Link>
             <span>/</span>
-            <span>资料页</span>
+            <span>{L.doc.page}</span>
           </div>
           {renaming ? (
             <form
@@ -52,24 +56,24 @@ export function DocPage() {
                 if (r.ok) setRenaming(false);
               }}
             >
-              <TextField label="页面标题" value={title} onChange={(e) => setTitle(e.target.value)} />
-              <Button Label="存" Size="Small" Style="Accent" type="submit" />
+              <TextField label={L.doc.pageTitle} value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Button Label={L.doc.save} Size="Small" Style="Accent" type="submit" />
             </form>
           ) : (
-            <h1 className="t-title-32 break" data-testid="page-title">
+            <h1 className="t-title-32 break" data-testid="page-title" data-uc="">
               {page.title}
             </h1>
           )}
-          <span className="label">{blocks.length} 块 · 大家一起写，每一步都记在日志里</span>
+          <span className="label">{f(L.doc.stats, { n: blocks.length })}</span>
         </div>
         <div className="page-head-actions">
-          <Button Label="改标题" Size="Small" Style="Secondary" onClick={() => { setTitle(page.title); setRenaming(true); }} />
-          <Button Label="删这页" Size="Small" Style="Ghost" onClick={() => setConfirmDelete(true)} />
+          <Button Label={L.doc.rename} Size="Small" Style="Secondary" onClick={() => { setTitle(page.title); setRenaming(true); }} />
+          <Button Label={L.doc.delete} Size="Small" Style="Ghost" onClick={() => setConfirmDelete(true)} />
         </div>
       </div>
 
       <article className="doc" data-testid="doc">
-        {blocks.length === 0 ? <Empty>这一页还是空的。在下面加一块。</Empty> : null}
+        {blocks.length === 0 ? <Empty>{L.doc.empty}</Empty> : null}
         {blocks.map((b, i) => (
           <BlockView key={b.id} block={b} first={i === 0} last={i === blocks.length - 1} onOpenImage={(start) => setViewer({ files: pageImages, start })} />
         ))}
@@ -80,20 +84,20 @@ export function DocPage() {
       {confirmDelete ? (
         <Drawer
           Type="Dialog"
-          Title={`删「${page.title}」？`}
-          Body="这一页从资料库里拿掉（日志里还留着）。页里的图还在资料库里。"
+          Title={rich(L.doc.deleteTitle, { title: <U>{page.title}</U> })}
+          Body={L.doc.deleteBody}
           open
           onClose={() => setConfirmDelete(false)}
           actions={
             <>
-              <Button Label="不删" Style="Secondary" onClick={() => setConfirmDelete(false)} />
+              <Button Label={L.doc.keep} Style="Secondary" onClick={() => setConfirmDelete(false)} />
               <Button
-                Label="删"
+                Label={L.doc.confirmDelete}
                 onClick={() => {
                   const r = dispatch("page.archive", { pageId: page.id });
                   setConfirmDelete(false);
                   if (r.ok) {
-                    notify("这一页删了", "Neutral");
+                    notify(say((d) => d.doc.deleted), "Neutral");
                     navigate(`/library/${page.projectId}`);
                   }
                 }}
@@ -108,6 +112,7 @@ export function DocPage() {
 
 function BlockView({ block, first, last, onOpenImage }: { block: BlockRow; first: boolean; last: boolean; onOpenImage: (fileId: Id) => void }) {
   const { world, dispatch } = useGuild();
+  const { L, f: tf } = useI18n();
   const [comments, setComments] = useState(false);
   const threads = Object.values(world.threads).filter((t) => t.subjectType === "block" && t.subjectId === block.id && !t.archivedAt);
   const files = block.fileIds.map((id) => world.files[id]).filter((f): f is FileRow => !!f);
@@ -119,7 +124,7 @@ function BlockView({ block, first, last, onOpenImage }: { block: BlockRow; first
         {block.type === "image" || block.type === "gallery" ? (
           <div className={block.type === "gallery" ? "doc-gallery" : "doc-image"}>
             {files.map((f) => (
-              <button key={f.id} type="button" className="doc-image-btn" onClick={() => onOpenImage(f.id)} aria-label={`看 ${f.name}`} data-testid="doc-image">
+              <button key={f.id} type="button" className="doc-image-btn" onClick={() => onOpenImage(f.id)} aria-label={tf(L.doc.viewImage, { name: f.name })} data-testid="doc-image">
                 <BlockImage file={f} />
               </button>
             ))}
@@ -134,18 +139,19 @@ function BlockView({ block, first, last, onOpenImage }: { block: BlockRow; first
         ) : null}
         {block.type === "checklist" ? <Checklist block={block} /> : null}
       </div>
-      <div className="doc-block-tools" role="toolbar" aria-label={`${BLOCK_LABEL[block.type]}块`}>
+      <div className="doc-block-tools" role="toolbar" aria-label={tf(L.doc.blockTools, { type: L.doc.block[block.type] })}>
         <button type="button" className="inline-link label" disabled={first} onClick={() => dispatch("block.move", { blockId: block.id, direction: "up" })} data-testid="block-up">
-          ↑ 上移
+          {L.doc.up}
         </button>
         <button type="button" className="inline-link label" disabled={last} onClick={() => dispatch("block.move", { blockId: block.id, direction: "down" })} data-testid="block-down">
-          ↓ 下移
+          {L.doc.down}
         </button>
         <button type="button" className="inline-link label" onClick={() => setComments((v) => !v)} aria-expanded={comments} data-testid="block-comments">
-          评论{threads.length ? ` ${threads.length}` : ""}
+          {L.doc.comments}
+          {threads.length ? ` ${threads.length}` : ""}
         </button>
         <button type="button" className="inline-link label" onClick={() => dispatch("block.remove", { blockId: block.id })} data-testid="block-remove">
-          删
+          {L.doc.remove}
         </button>
       </div>
       {comments ? <BlockComments blockId={block.id} /> : null}
@@ -155,17 +161,19 @@ function BlockView({ block, first, last, onOpenImage }: { block: BlockRow; first
 
 function BlockImage({ file }: { file: FileRow }) {
   const { present, ready } = useFiles();
+  const { L } = useI18n();
   if (ready && !present.has(file.sha256) && !file.thumb) return <MissingPlaceholder compact />;
   return (
     <>
       <FileImage file={file} className="doc-img" />
-      {ready && !present.has(file.sha256) ? <span className="file-tile-missing">不在这台设备上</span> : null}
+      {ready && !present.has(file.sha256) ? <span className="file-tile-missing">{L.library.notHere}</span> : null}
     </>
   );
 }
 
 function EditableText({ block }: { block: BlockRow }) {
   const { dispatch } = useGuild();
+  const { L } = useI18n();
   const [text, setText] = useState(block.text ?? "");
   const [editing, setEditing] = useState(false);
   useEffect(() => {
@@ -180,7 +188,7 @@ function EditableText({ block }: { block: BlockRow }) {
       <textarea
         className="field-control doc-edit"
         data-heading={block.type === "heading" ? "yes" : "no"}
-        aria-label={block.type === "heading" ? "标题" : "段落"}
+        aria-label={L.doc.block[block.type]}
         value={text}
         autoFocus
         rows={block.type === "heading" ? 1 : Math.min(12, Math.max(3, text.split("\n").length + 1))}
@@ -202,14 +210,15 @@ function EditableText({ block }: { block: BlockRow }) {
   }
   const Tag = block.type === "heading" ? "h2" : "p";
   return (
-    <Tag className={block.type === "heading" ? "t-heading-18 doc-heading" : "doc-text break"} onClick={() => setEditing(true)} title="点一下改字" data-testid="block-text">
-      {block.text || <span className="label">（空的，点一下写）</span>}
+    <Tag className={block.type === "heading" ? "t-heading-18 doc-heading" : "doc-text break"} onClick={() => setEditing(true)} title={L.doc.clickToEdit} data-testid="block-text">
+      {block.text ? <U>{block.text}</U> : <span className="label">{L.doc.emptyText}</span>}
     </Tag>
   );
 }
 
 function Checklist({ block }: { block: BlockRow }) {
   const { dispatch } = useGuild();
+  const { L, f } = useI18n();
   const [adding, setAdding] = useState("");
   const set = (items: ChecklistItem[]) => dispatch("block.update", { blockId: block.id, items });
   return (
@@ -220,10 +229,10 @@ function Checklist({ block }: { block: BlockRow }) {
             <label className="check-row">
               <input type="checkbox" checked={it.done} onChange={() => set(block.items.map((x, j) => (j === i ? { ...x, done: !x.done } : x)))} />
               <span className="break" data-done={it.done ? "yes" : "no"}>
-                {it.text || "（空的一条）"}
+                {it.text ? <U>{it.text}</U> : L.doc.emptyItem}
               </span>
             </label>
-            <button type="button" className="inline-link label" aria-label={`删掉「${it.text}」`} onClick={() => set(block.items.filter((_, j) => j !== i))}>
+            <button type="button" className="inline-link label" aria-label={f(L.doc.removeItem, { text: it.text })} onClick={() => set(block.items.filter((_, j) => j !== i))}>
               ✕
             </button>
           </li>
@@ -238,8 +247,8 @@ function Checklist({ block }: { block: BlockRow }) {
           setAdding("");
         }}
       >
-        <input className="field-control" aria-label="加一条" placeholder="加一条" value={adding} onChange={(e) => setAdding(e.target.value)} />
-        <Button Label="加" Size="Small" Style="Ghost" type="submit" />
+        <input className="field-control" aria-label={L.doc.addItem} placeholder={L.doc.addItem} value={adding} onChange={(e) => setAdding(e.target.value)} />
+        <Button Label={L.doc.add} Size="Small" Style="Ghost" type="submit" />
       </form>
     </div>
   );
@@ -247,6 +256,7 @@ function Checklist({ block }: { block: BlockRow }) {
 
 function BlockComments({ blockId }: { blockId: Id }) {
   const { world, dispatch } = useGuild();
+  const { L, err } = useI18n();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const threads = Object.values(world.threads).filter((t) => t.subjectType === "block" && t.subjectId === blockId && !t.archivedAt);
@@ -261,17 +271,17 @@ function BlockComments({ blockId }: { blockId: Id }) {
         onSubmit={(e) => {
           e.preventDefault();
           const r = dispatch("thread.open", { subjectType: "block", subjectId: blockId, kind: "comment", text }, { quiet: true });
-          if (!r.ok) setError(r.error.message);
+          if (!r.ok) setError(err(r.error));
           else {
             setText("");
             setError(null);
           }
         }}
       >
-        <textarea className="field-control" aria-label="对这一块的意见" placeholder="对这一块说的话" value={text} onChange={(e) => setText(e.target.value)} rows={2} data-testid="block-comment-text" />
+        <textarea className="field-control" aria-label={L.doc.commentLabel} placeholder={L.doc.commentPlaceholder} value={text} onChange={(e) => setText(e.target.value)} rows={2} data-testid="block-comment-text" />
         {error ? <p className="error-text">{error}</p> : null}
         <div className="form-actions">
-          <Button Label="留下" Size="Small" Style="Secondary" type="submit" data-testid="block-comment-send" />
+          <Button Label={L.doc.leave} Size="Small" Style="Secondary" type="submit" data-testid="block-comment-send" />
         </div>
       </form>
     </div>
@@ -281,6 +291,7 @@ function BlockComments({ blockId }: { blockId: Id }) {
 /** 加一块：选类型；图片 / 网格 / 文件块从资料库里选，或者直接放新的进来。 */
 function AddBlock({ pageId, projectId }: { pageId: Id; projectId: Id }) {
   const { world, dispatch, notify } = useGuild();
+  const { L, f, err } = useI18n();
   const files = useFiles();
   const [type, setType] = useState<BlockType>("text");
   const [text, setText] = useState("");
@@ -308,7 +319,7 @@ function AddBlock({ pageId, projectId }: { pageId: Id; projectId: Id }) {
             : { pageId, type, fileIds: picked };
     const r = dispatch("block.add", input, { quiet: true });
     if (!r.ok) {
-      setError(r.error.message);
+      setError(err(r.error));
       return;
     }
     setText("");
@@ -316,19 +327,19 @@ function AddBlock({ pageId, projectId }: { pageId: Id; projectId: Id }) {
     setError(null);
   };
   return (
-    <section className="doc-add card" data-tone="muted" aria-label="加一块" data-testid="block-add" {...drop.props} data-over={drop.over ? "yes" : "no"}>
-      <div className="chips" role="radiogroup" aria-label="块的类型">
-        {(Object.keys(BLOCK_LABEL) as BlockType[]).map((k) => (
+    <section className="doc-add card" data-tone="muted" aria-label={L.doc.addBlock} data-testid="block-add" {...drop.props} data-over={drop.over ? "yes" : "no"}>
+      <div className="chips" role="radiogroup" aria-label={L.doc.blockType}>
+        {BLOCK_TYPES.map((k) => (
           <button key={k} type="button" className="ui-chip" aria-pressed={type === k} onClick={() => { setType(k); setPicked([]); setError(null); }} data-testid={`block-type-${k}`}>
-            {BLOCK_LABEL[k]}
+            {L.doc.block[k]}
           </button>
         ))}
       </div>
       {type === "heading" || type === "text" || type === "checklist" ? (
         <textarea
           className="field-control"
-          aria-label={type === "checklist" ? "清单（一行一条）" : BLOCK_LABEL[type]}
-          placeholder={type === "checklist" ? "一行一条" : type === "heading" ? "标题" : "写一段"}
+          aria-label={type === "checklist" ? L.doc.checklistLabel : L.doc.block[type]}
+          placeholder={type === "checklist" ? L.doc.onePerLine : type === "heading" ? L.doc.block.heading : L.doc.writePara}
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={type === "heading" ? 1 : 3}
@@ -338,11 +349,11 @@ function AddBlock({ pageId, projectId }: { pageId: Id; projectId: Id }) {
       {needsFiles ? (
         <div className="stack" data-gap="small">
           <div className="row">
-            <AddFilesButton onFiles={(l) => void intake(l)} label="放新的进来" testId="block-add-files" accept={type === "file" ? undefined : "image/*"} />
-            <span className="label">{type === "image" ? "选一张" : "可以选几张"}；也能直接拖进来或粘贴。</span>
+            <AddFilesButton onFiles={(l) => void intake(l)} label={L.doc.addNew} testId="block-add-files" accept={type === "file" ? undefined : "image/*"} />
+            <span className="label">{type === "image" ? L.doc.pickOne : L.doc.pickSome}</span>
           </div>
           {choices.length ? (
-            <div className="pick-grid" role="group" aria-label="从资料库里选">
+            <div className="pick-grid" role="group" aria-label={L.doc.pickFromLibrary}>
               {choices.map((v) => (
                 <button
                   key={v.file.id}
@@ -353,12 +364,14 @@ function AddBlock({ pageId, projectId }: { pageId: Id; projectId: Id }) {
                   data-testid="block-pick"
                 >
                   {fileKind(v.file) === "image" ? <FileImage file={v.file} className="pick-img" /> : <span className="file-ext">{v.file.name.split(".").pop()?.toUpperCase()}</span>}
-                  <span className="label break">{v.file.name}</span>
+                  <span className="label break" data-uc="">
+                    {v.file.name}
+                  </span>
                 </button>
               ))}
             </div>
           ) : (
-            <p className="label">资料库里还没有{type === "file" ? "文件" : "图"}。</p>
+            <p className="label">{type === "file" ? L.doc.noFiles : L.doc.noImages}</p>
           )}
         </div>
       ) : null}
@@ -368,7 +381,7 @@ function AddBlock({ pageId, projectId }: { pageId: Id; projectId: Id }) {
         </p>
       ) : null}
       <div className="form-actions">
-        <Button Label={`加一块${BLOCK_LABEL[type]}`} Size="Small" Style="Accent" onClick={add} data-testid="block-add-go" />
+        <Button Label={f(L.doc.addBlockOf, { type: L.doc.block[type] })} Size="Small" Style="Accent" onClick={add} data-testid="block-add-go" />
       </div>
     </section>
   );

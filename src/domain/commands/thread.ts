@@ -6,7 +6,8 @@
 import { THREAD_SUBJECT, type Change, type Id, type ThreadKind, type ThreadSubject } from "../model";
 import type { ReadModel } from "../readmodel";
 import { stageTemplate } from "../templates";
-import { guarded, insert, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustMember, mustText, ok, reject, update, type Ctx } from "./core";
+import { guarded, insert, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustMember, mustText, ok, rejectT, update, type Ctx } from "./core";
+import { whatText } from "../what";
 
 function subjectOf(rm: ReadModel, ctx: Ctx, type: ThreadSubject, id: Id) {
   if (type === "project") {
@@ -48,7 +49,7 @@ export const openThread = guarded<OpenThreadInput>((rm, input, ctx) => {
   const text = mustText(input.text, kind === "ask" ? "问题" : kind === "setting" ? "设定问题" : "意见", 500);
   const checkKey = (key: string | null | undefined, what: string) => {
     if (!key) return null;
-    if (!stageTemplate(project.group, key)) reject("invalid", `${what}不在这个项目的流程里`);
+    if (!stageTemplate(project.group, key)) rejectT("invalid", "stage_not_in_flow", { what: whatText(what) });
     return key;
   };
   const stageKey = subject.stageKey ?? checkKey(input.stageKey, "环节");
@@ -57,8 +58,8 @@ export const openThread = guarded<OpenThreadInput>((rm, input, ctx) => {
   if (kind === "ask") {
     askStageKey = checkKey(input.askStageKey, "要问的环节");
     if (input.askMemberId) askMemberId = mustGet(rm, ctx, "members", input.askMemberId, "要问的人").id;
-    if (!askStageKey && !askMemberId) reject("invalid", "提问上游要选问哪个环节或问谁");
-    if (askMemberId === me.id) reject("invalid", "不用问自己");
+    if (!askStageKey && !askMemberId) rejectT("invalid", "ask_target");
+    if (askMemberId === me.id) rejectT("invalid", "ask_self");
   }
   const t = insert(ctx, "threads", {
     projectId: project.id,
@@ -89,7 +90,7 @@ export const replyThread = guarded<ReplyInput>((rm, input, ctx) => {
   const me = mustMember(rm, ctx);
   const t = mustGet(rm, ctx, "threads", input.threadId, "这条意见");
   const text = mustText(input.text, "回复", 500);
-  if (t.replies.length >= 100) reject("state", "这条回复太多了，另开一条吧");
+  if (t.replies.length >= 100) rejectT("state", "replies_full");
   const replies = [...t.replies, { byMemberId: me.id, text, at: ctx.worldNow }];
   const status = t.kind === "ask" && t.status === "open" && me.id !== t.byMemberId ? "answered" : t.status;
   const ch = update("threads", t, { replies, status });
@@ -104,9 +105,9 @@ export interface ResolveInput {
 export const resolveThread = guarded<ResolveInput>((rm, input, ctx) => {
   const me = mustMember(rm, ctx);
   const t = mustGet(rm, ctx, "threads", input.threadId, "这条意见");
-  if (t.kind === "setting" && t.status === "open") reject("state", "设定问题要管理员拍板");
-  if (t.status === "done") reject("state", "这条已经关了");
-  if (t.kind !== "todo" && t.byMemberId !== me.id && !isReviewer(me)) reject("forbidden", "只有提的人、审核员或管理员可以关这条");
+  if (t.kind === "setting" && t.status === "open") rejectT("state", "setting_needs_ruling");
+  if (t.status === "done") rejectT("state", "thread_closed");
+  if (t.kind !== "todo" && t.byMemberId !== me.id && !isReviewer(me)) rejectT("forbidden", "thread_close_forbidden");
   const ch = update("threads", t, { status: "done" });
   return ok(ch ? [ch] : [], { threadId: t.id });
 });
@@ -128,28 +129,28 @@ export const makeRuling = guarded<RulingInput>((rm, input, ctx) => {
   const me = mustAdmin(rm, ctx, "拍板");
   const decision = mustText(input.decision, "结论", 300);
   const thread = input.threadId ? mustGet(rm, ctx, "threads", input.threadId, "设定问题") : null;
-  if (thread && thread.kind !== "setting") reject("invalid", "只有设定问题要拍板");
-  if (thread && thread.status !== "open") reject("state", "这条设定问题已经拍过板了");
+  if (thread && thread.kind !== "setting") rejectT("invalid", "ruling_only_setting");
+  if (thread && thread.status !== "open") rejectT("state", "ruling_done");
   const projectId = thread?.projectId ?? input.projectId;
   const project = mustGet(rm, ctx, "projects", projectId, "项目");
   const question = thread?.text ?? mustText(input.question, "问题", 500);
   let stageKey: string | null = null;
   if (input.stageKey) {
-    if (!stageTemplate(project.group, input.stageKey)) reject("invalid", "要补的环节不在这个项目的流程里");
+    if (!stageTemplate(project.group, input.stageKey)) rejectT("invalid", "fix_stage_not_in_flow");
     stageKey = input.stageKey;
   } else if (thread?.stageKey) stageKey = thread.stageKey;
   const cutIds = Array.from(new Set(Array.isArray(input.cutIds) ? input.cutIds : []));
-  if (cutIds.length > 200) reject("invalid", "要补的卡太多了");
+  if (cutIds.length > 200) rejectT("invalid", "fix_cuts_too_many");
   const cuts = cutIds.map((id) => {
     const c = mustGet(rm, ctx, "cuts", id, "要补的卡");
-    if (c.projectId !== project.id) reject("invalid", "要补的卡不在这个项目里");
+    if (c.projectId !== project.id) rejectT("invalid", "fix_cut_other_project");
     return c;
   });
   cuts.sort((a, b) => a.number - b.number);
   const r = insert(ctx, "rulings", { projectId: project.id, threadId: thread?.id ?? null, question, decision, cutIds: cuts.map((c) => c.id), stageKey, byMemberId: me.id, at: ctx.worldNow });
   const changes: Change[] = [r.change];
   if (thread) {
-    const ch = update("threads", thread, { status: "ruled", rulingId: r.row.id, replies: [...thread.replies, { byMemberId: me.id, text: `拍板：${decision}`, at: ctx.worldNow }] });
+    const ch = update("threads", thread, { status: "ruled", rulingId: r.row.id, replies: [...thread.replies, { byMemberId: me.id, text: decision, ruling: true as const, at: ctx.worldNow }] });
     if (ch) changes.push(ch);
   }
   for (const c of cuts) {
@@ -163,7 +164,8 @@ export const makeRuling = guarded<RulingInput>((rm, input, ctx) => {
       askStageKey: null,
       askMemberId: null,
       status: "open",
-      text: `要补：${decision}`,
+      // 只存结论；「要补」是这一条的种类（界面按语言写）。
+      text: decision,
       byMemberId: me.id,
       at: ctx.worldNow,
       replies: [],

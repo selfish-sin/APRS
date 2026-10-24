@@ -3,7 +3,7 @@
  *   - 句子里的参数写 {name}；英文要分单复数的写 { one, other }（参数 n 决定用哪个）。
  *   - 用户写的内容（项目名、昵称、意见……）不翻译，照原样塞进参数。
  */
-import { fill, type Lang, type Text2, type TextParam } from "@/domain/text";
+import { fill, type Lang, type Phrase, type Text2, type TextParam } from "@/domain/text";
 
 export type { Lang, Text2 };
 
@@ -35,3 +35,14 @@ export function detectLang(languages: readonly string[] | undefined): Lang {
 }
 
 export const LANG_KEY = "arps:lang";
+
+/** 选单复数（参数 n 决定）。 */
+export function pickMsg(msg: Msg, n?: number): string {
+  return isPlural(msg) ? (n === 1 ? msg.one : msg.other) : msg;
+}
+
+/** 词典里的两条 → 一句话（不在 React 里的地方用，例如 store、StorageUi）。 */
+export function msgPhrase(zh: Msg, en: Msg, params?: Record<string, TextParam>): Phrase {
+  const n = params && typeof params.n === "number" ? params.n : undefined;
+  return { t: { zh: pickMsg(zh, n), en: pickMsg(en, n) }, p: params };
+}

@@ -37,8 +37,8 @@ describe("口令", () => {
   });
 
   it("口令的规矩", () => {
-    expect(passcodeProblem("12345")).toBe("口令至少 6 位");
-    expect(passcodeProblem("123456", "123457")).toBe("两次输的口令不一样");
+    expect(passcodeProblem("12345")?.zh).toBe("口令至少 6 位");
+    expect(passcodeProblem("123456", "123457")?.zh).toBe("两次输的口令不一样");
     expect(passcodeProblem("123456", "123456")).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ import { projectById, todayOf } from "@/domain/queries";
 import { saveToDevice } from "@/lib/download";
 import { useGuild } from "@/lib/store";
 import { SelectField } from "./bits";
+import { useI18n } from "@/i18n/I18n";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -30,6 +31,7 @@ function monthsBetween(from: string, to: string): string[] {
 
 export function ReportDialog({ projectId, onClose }: { projectId: Id; onClose: () => void }) {
   const { world, notify } = useGuild();
+  const { L, f, pt, lang, t2 } = useI18n();
   const project = projectById(world, projectId);
   const [keys, setKeys] = useState<ReportKey[]>([...REPORT_KEYS]);
   const [month, setMonth] = useState("");
@@ -42,35 +44,35 @@ export function ReportDialog({ projectId, onClose }: { projectId: Id; onClose: (
     setBusy(true);
     setError(null);
     try {
-      const tables = buildReport(world, projectId, REPORT_KEYS.filter((k) => keys.includes(k)), { month: month || null, lang: "zh" });
+      const tables = buildReport(world, projectId, REPORT_KEYS.filter((k) => keys.includes(k)), { month: month || null, lang });
       if (!tables.length) {
-        setError("至少选一张表");
+        setError(L.report.pickOne);
         return;
       }
       if (format === "xlsx") {
         const { tablesToXlsx } = await import("@/lib/sheets/write");
         const bytes = await tablesToXlsx(tables);
-        const name = reportFileName(world, projectId, "xlsx");
+        const name = reportFileName(world, projectId, "xlsx", lang);
         const r = await saveToDevice(name, new Blob([new Uint8Array(bytes)], { type: XLSX_MIME }));
         if (!r.ok) {
-          if (r.reason !== "declined") setError(r.message);
+          if (r.reason !== "declined") setError(pt(r.message));
           return;
         }
-        notify(`导出好了：${name}（${tables.length} 张表）`);
+        notify(f(L.report.exportedXlsx, { name, n: tables.length }));
       } else {
         const { tableToCsv } = await import("@/lib/sheets/write");
         for (const t of tables) {
-          const r = await saveToDevice(reportFileName(world, projectId, "csv", "zh", t.name), new Blob([tableToCsv(t)], { type: "text/csv;charset=utf-8" }));
+          const r = await saveToDevice(reportFileName(world, projectId, "csv", lang, t.name), new Blob([tableToCsv(t)], { type: "text/csv;charset=utf-8" }));
           if (!r.ok) {
-            if (r.reason !== "declined") setError(r.message);
+            if (r.reason !== "declined") setError(pt(r.message));
             return;
           }
         }
-        notify(`导出好了：${tables.length} 个 .csv`);
+        notify(f(L.report.exportedCsv, { n: tables.length }));
       }
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "没能导出");
+      setError(e instanceof Error ? e.message : L.report.failed);
     } finally {
       setBusy(false);
     }
@@ -78,14 +80,14 @@ export function ReportDialog({ projectId, onClose }: { projectId: Id; onClose: (
   return (
     <Drawer
       Type="Dialog"
-      Title="导出汇报"
-      Body="照工会已有的表的列，导进同一个 Excel 文件（.csv 一张表一个文件）。"
+      Title={L.report.title}
+      Body={L.report.body}
       open
       onClose={onClose}
       actions={
         <>
-          <Button Label="取消" Style="Secondary" onClick={onClose} />
-          <Button Label={busy ? "正在导出…" : "导出"} Style="Accent" disabled={busy || !keys.length} onClick={() => void go()} data-testid="report-go" />
+          <Button Label={L.report.cancel} Style="Secondary" onClick={onClose} />
+          <Button Label={busy ? L.report.exporting : L.report.go} Style="Accent" disabled={busy || !keys.length} onClick={() => void go()} data-testid="report-go" />
         </>
       }
     >
@@ -94,24 +96,24 @@ export function ReportDialog({ projectId, onClose }: { projectId: Id; onClose: (
           <label key={k} className="check-row">
             <input type="checkbox" checked={keys.includes(k)} onChange={(e) => setKeys((xs) => (e.target.checked ? [...xs, k] : xs.filter((x) => x !== k)))} data-testid={`report-key-${k}`} />
             <span>
-              {i + 1}. {REPORT_LABEL[k].zh}
+              {i + 1}. {t2(REPORT_LABEL[k])}
             </span>
           </label>
         ))}
-        <SelectField label="必要劳动时间统计表按" value={month} onChange={(e) => setMonth(e.target.value)} data-testid="report-month">
-          <option value="">整个项目</option>
+        <SelectField label={L.report.hoursBy} value={month} onChange={(e) => setMonth(e.target.value)} data-testid="report-month">
+          <option value="">{L.report.wholeProject}</option>
           {months.map((m) => (
             <option key={m} value={m}>
               {m}
             </option>
           ))}
         </SelectField>
-        <div className="chips" role="radiogroup" aria-label="格式">
+        <div className="chips" role="radiogroup" aria-label={L.report.format}>
           <button type="button" className="ui-chip" aria-pressed={format === "xlsx"} onClick={() => setFormat("xlsx")}>
-            .xlsx（一个文件）
+            {L.report.xlsx}
           </button>
           <button type="button" className="ui-chip" aria-pressed={format === "csv"} onClick={() => setFormat("csv")} data-testid="report-csv">
-            .csv（一张表一个）
+            {L.report.csv}
           </button>
         </div>
         {error ? (
@@ -127,10 +129,11 @@ export function ReportDialog({ projectId, onClose }: { projectId: Id; onClose: (
 /** 成员页：导出我的记录（我的任务 · 工时 · 活力点流水）。 */
 export function ExportMyRecord({ memberId }: { memberId: Id }) {
   const { world, notify } = useGuild();
+  const { L, f, lang } = useI18n();
   const [busy, setBusy] = useState(false);
   return (
     <Button
-      Label={busy ? "正在导出…" : "导出我的记录"}
+      Label={busy ? L.report.exporting : L.report.myRecord}
       Size="Small"
       Style="Secondary"
       disabled={busy}
@@ -139,10 +142,10 @@ export function ExportMyRecord({ memberId }: { memberId: Id }) {
         setBusy(true);
         try {
           const { tablesToXlsx } = await import("@/lib/sheets/write");
-          const bytes = await tablesToXlsx(memberRecord(world, memberId, "zh"));
-          const name = memberFileName(world, memberId);
+          const bytes = await tablesToXlsx(memberRecord(world, memberId, lang));
+          const name = memberFileName(world, memberId, lang);
           const r = await saveToDevice(name, new Blob([new Uint8Array(bytes)], { type: XLSX_MIME }));
-          if (r.ok) notify(`导出好了：${name}`);
+          if (r.ok) notify(f(L.report.exported, { name }));
           else if (r.reason !== "declined") notify(r.message, "Error");
         } finally {
           setBusy(false);

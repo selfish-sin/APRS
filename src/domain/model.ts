@@ -436,6 +436,8 @@ export interface ThreadReply {
   byMemberId: Id;
   text: string;
   at: IsoDateTime;
+  /** 管理员拍板时留的那一条（text 只是结论；界面按语言加「拍板：」/「Ruling:」）。 */
+  ruling?: true;
 }
 
 export interface ThreadRow extends RowHeader {

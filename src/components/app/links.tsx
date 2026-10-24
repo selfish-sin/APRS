@@ -10,6 +10,8 @@ import type { SubmissionRow } from "@/domain/model";
 import { memberById, submissionLinks } from "@/domain/queries";
 import { useGuild } from "@/lib/store";
 import { SelectField, TextField } from "./bits";
+import { U, useI18n } from "@/i18n/I18n";
+import type { Text2 } from "@/domain/text";
 
 export interface LinkDraft {
   url: string;
@@ -25,7 +27,7 @@ export function emptyLink(): LinkDraft {
 export function checkDraft(d: LinkDraft, all: LinkDraft[], i: number) {
   if (!d.url.trim()) return { state: "empty" as const };
   const n = normalizeLink(d.url);
-  if (!n.ok) return { state: "error" as const, message: LINK_REASON[n.reason].zh };
+  if (!n.ok) return { state: "error" as const, message: LINK_REASON[n.reason] as Text2 };
   const info = recognizeLink(n.url);
   const dup = all.findIndex((x, j) => {
     if (j >= i || !x.url.trim()) return false;
@@ -45,58 +47,59 @@ export function PlatformBadge({ platform, label }: { platform: string; label: st
 
 /** 交一版时编辑几条链接。 */
 export function LinksEditor({ value, onChange }: { value: LinkDraft[]; onChange: (next: LinkDraft[]) => void }) {
+  const { L, f, t2, lang } = useI18n();
   const set = (i: number, patch: Partial<LinkDraft>) => onChange(value.map((d, j) => (j === i ? { ...d, ...patch } : d)));
   return (
     <div className="stack" data-gap="small" data-testid="links-editor">
-      <span className="label">链接（一版可以挂几条：飞书、腾讯文档、Google、Dropbox、Discord……）</span>
+      <span className="label">{L.thread.linksLabel}</span>
       {value.map((d, i) => {
         const c = checkDraft(d, value, i);
         return (
           <div key={i} className="link-row" data-testid={`link-row-${i}`}>
             <div className="link-row-main">
               <TextField
-                label={`第 ${i + 1} 条`}
+                label={f(L.thread.linkN, { n: i + 1 })}
                 type="url"
                 inputMode="url"
                 placeholder="https://…"
                 value={d.url}
                 onChange={(e) => set(i, { url: e.target.value })}
                 data-testid={`link-url-${i}`}
-                error={c.state === "error" ? c.message : c.state === "ok" && c.dup ? `和第 ${c.dup} 条是同一个链接` : undefined}
+                error={c.state === "error" ? t2(c.message) : c.state === "ok" && c.dup ? f(L.thread.sameAs, { n: c.dup }) : undefined}
               />
               {c.state === "ok" ? (
                 <div className="row" data-testid={`link-info-${i}`}>
-                  <PlatformBadge platform={c.info.platform} label={c.info.platformLabel.zh} />
-                  <span className="label">{c.info.platform === "other" ? "网址" : c.info.typeLabel.zh}</span>
+                  <PlatformBadge platform={c.info.platform} label={t2(c.info.platformLabel)} />
+                  <span className="label">{c.info.platform === "other" ? L.thread.web : t2(c.info.typeLabel)}</span>
                 </div>
               ) : null}
               {c.state === "ok"
                 ? c.hints.map((h) => (
                     <p key={h.kind} className="link-hint" data-kind={h.kind} data-testid={`link-hint-${i}`}>
-                      {h.text.zh}
+                      {t2(h.text)}
                     </p>
                   ))
                 : null}
             </div>
             <div className="link-row-side">
-              <TextField label="名字" placeholder={c.state === "ok" ? defaultLinkName(c.info) : "不写就用平台的名字"} value={d.name} onChange={(e) => set(i, { name: e.target.value })} data-testid={`link-name-${i}`} />
-              <SelectField label="是什么" value={d.kind} onChange={(e) => set(i, { kind: e.target.value as LinkKind | "" })} data-testid={`link-kind-${i}`}>
-                <option value="">{c.state === "ok" ? `照链接认（${LINK_KIND_LABEL[c.info.kind].zh}）` : "照链接认"}</option>
+              <TextField label={L.thread.linkName} placeholder={c.state === "ok" ? defaultLinkName(c.info, lang) : L.thread.linkNamePlaceholder} value={d.name} onChange={(e) => set(i, { name: e.target.value })} data-testid={`link-name-${i}`} />
+              <SelectField label={L.thread.linkKind} value={d.kind} onChange={(e) => set(i, { kind: e.target.value as LinkKind | "" })} data-testid={`link-kind-${i}`}>
+                <option value="">{c.state === "ok" ? f(L.thread.byLinkKind, { kind: t2(LINK_KIND_LABEL[c.info.kind]) }) : L.thread.byLink}</option>
                 {LINK_KINDS.map((k) => (
                   <option key={k} value={k}>
-                    {LINK_KIND_LABEL[k].zh}
+                    {t2(LINK_KIND_LABEL[k])}
                   </option>
                 ))}
               </SelectField>
-              {value.length > 1 ? <Button Label="去掉" Size="Small" Style="Ghost" onClick={() => onChange(value.filter((_, j) => j !== i))} /> : null}
+              {value.length > 1 ? <Button Label={L.thread.remove} Size="Small" Style="Ghost" onClick={() => onChange(value.filter((_, j) => j !== i))} /> : null}
             </div>
           </div>
         );
       })}
       <div className="form-actions">
-        <Button Label="再加一条链接" Size="Small" Style="Secondary" onClick={() => onChange([...value, emptyLink()])} data-testid="link-add" disabled={value.length >= 10} />
+        <Button Label={L.thread.addLink} Size="Small" Style="Secondary" onClick={() => onChange([...value, emptyLink()])} data-testid="link-add" disabled={value.length >= 10} />
       </div>
-      <p className="label">浏览器替你打不开别家的网站去检查，所以审核员点开以后打不开会标出来，你在「等我处理」里看到，换一条就好。</p>
+      <p className="label">{L.thread.linksNote}</p>
     </div>
   );
 }
@@ -104,11 +107,12 @@ export function LinksEditor({ value, onChange }: { value: LinkDraft[]; onChange:
 /** 一版挂的链接：点了在新标签页打开；审核员能标「打不开」；交的人能换一条。 */
 export function LinkList({ submission, compact = false }: { submission: SubmissionRow; compact?: boolean }) {
   const { world, me, dispatch, notify } = useGuild();
+  const { L, f, t2, lang, err } = useI18n();
   const links = submissionLinks(submission);
   const [replacing, setReplacing] = useState<string | null>(null);
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
-  if (!links.length) return compact ? null : <span className="muted">没贴链接</span>;
+  if (!links.length) return compact ? null : <span className="muted">{L.thread.noLinks}</span>;
   const task = world.tasks[submission.taskId];
   const mine = submission.byMemberId === me.id || (!submission.byMemberId && task?.assigneeId === me.id);
   const canReplace = mine || isAdmin(me);
@@ -116,18 +120,24 @@ export function LinkList({ submission, compact = false }: { submission: Submissi
     <ul className="link-list" data-testid="link-list">
       {links.map((l) => {
         const info = recognizeLink(l.url);
+        // 没起名字、用的是平台的默认名字：按界面语言显示；自己起的照原样。
+        const isDefault = l.name === defaultLinkName(info, "zh") || l.name === defaultLinkName(info, "en");
         return (
           <li key={l.id} data-broken={l.broken ? "yes" : "no"} data-testid="link-item">
             <div className="row">
-              <PlatformBadge platform={info.platform} label={info.platformLabel.zh} />
+              <PlatformBadge platform={info.platform} label={t2(info.platformLabel)} />
               <a href={l.url} target="_blank" rel="noreferrer noopener" className="break" data-testid="link-open">
-                {l.name}
+                {isDefault ? defaultLinkName(info, lang) : <U>{l.name}</U>}
               </a>
-              <span className="label">{LINK_KIND_LABEL[l.kind].zh}</span>
-              {info.expires ? <span className="link-flag" data-kind="expires">会过期</span> : null}
+              <span className="label">{t2(LINK_KIND_LABEL[l.kind])}</span>
+              {info.expires ? (
+                <span className="link-flag" data-kind="expires">
+                  {L.thread.expires}
+                </span>
+              ) : null}
               {l.broken ? (
-                <span className="link-flag" data-kind="broken" data-testid="link-broken" title={`${memberById(world, l.broken.byMemberId)?.nickname ?? "审核员"} 标的`}>
-                  打不开
+                <span className="link-flag" data-kind="broken" data-testid="link-broken" title={f(L.thread.markedBy, { name: memberById(world, l.broken.byMemberId)?.nickname ?? L.thread.reviewer })}>
+                  {L.thread.broken}
                 </span>
               ) : null}
               {!compact && isReviewer(me) && !l.broken && !mine ? (
@@ -137,15 +147,15 @@ export function LinkList({ submission, compact = false }: { submission: Submissi
                   data-testid="link-mark-broken"
                   onClick={() => {
                     const r = dispatch("link.mark_broken", { submissionId: submission.id, linkId: l.id }, { quiet: true });
-                    if (r.ok) notify(`标了「${l.name}」打不开，交的人会在「等我处理」里看到`, "Neutral");
+                    if (r.ok) notify(f(L.thread.markedBroken, { name: isDefault ? defaultLinkName(info, lang) : l.name }), "Neutral");
                   }}
                 >
-                  标「打不开」
+                  {L.thread.markBroken}
                 </button>
               ) : null}
               {canReplace && (l.broken || !compact) && replacing !== l.id ? (
                 <button type="button" className="inline-link label" data-testid="link-replace-open" onClick={() => { setReplacing(l.id); setUrl(""); setError(null); }}>
-                  换一条
+                  {L.thread.replace}
                 </button>
               ) : null}
             </div>
@@ -155,16 +165,16 @@ export function LinkList({ submission, compact = false }: { submission: Submissi
                 onSubmit={(e) => {
                   e.preventDefault();
                   const r = dispatch("link.replace", { submissionId: submission.id, linkId: l.id, url }, { quiet: true });
-                  if (!r.ok) setError(r.error.message);
+                  if (!r.ok) setError(err(r.error));
                   else {
                     setReplacing(null);
-                    notify("换好了", "Neutral");
+                    notify(L.thread.replaced, "Neutral");
                   }
                 }}
               >
-                <TextField label="新的链接" type="url" value={url} onChange={(e) => setUrl(e.target.value)} data-testid="link-replace-url" error={error ?? undefined} />
-                <Button Label="换" Size="Small" Style="Accent" type="submit" data-testid="link-replace-go" />
-                <Button Label="算了" Size="Small" Style="Ghost" onClick={() => setReplacing(null)} />
+                <TextField label={L.thread.newLink} type="url" value={url} onChange={(e) => setUrl(e.target.value)} data-testid="link-replace-url" error={error ?? undefined} />
+                <Button Label={L.thread.replaceGo} Size="Small" Style="Accent" type="submit" data-testid="link-replace-go" />
+                <Button Label={L.thread.never} Size="Small" Style="Ghost" onClick={() => setReplacing(null)} />
               </form>
             ) : null}
           </li>

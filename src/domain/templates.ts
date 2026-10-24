@@ -576,19 +576,31 @@ export const STAGE_EN: Record<Group, Record<string, StageEn>> = {
 };
 
 /** 环节在这种语言里叫什么：模板里的（名字没改过）用模板的说法；管理员自己起的、改过名字的照原样（算用户写的）。 */
-export function stageText(group: Group, stage: { templateKey: string; name: string; indicator?: { receive: string; deliver: string; handTo: string }; note?: string | null }, lang: "zh" | "en"): { name: string; receive: string; deliver: string; handTo: string; note: string | null; custom: boolean } {
+export function stageText(
+  group: Group,
+  stage: { templateKey: string; name: string; indicator?: { receive: string; deliver: string; handTo: string }; note?: string | null },
+  lang: "zh" | "en"
+): { name: string; receive: string; deliver: string; handTo: string; note: string | null; custom: boolean; uc: { receive: boolean; deliver: boolean; handTo: boolean; note: boolean } } {
   const t = stageTemplate(group, stage.templateKey);
   const custom = !t || t.name !== stage.name;
   const ind = stage.indicator ?? { receive: "", deliver: "", handTo: "" };
-  if (lang === "zh" || !t) return { name: stage.name, receive: ind.receive, deliver: ind.deliver, handTo: ind.handTo, note: stage.note ?? null, custom };
+  // 哪几段是管理员自己写的（和模板不一样）：照原样显示，算用户内容。
+  const uc = {
+    receive: !t || ind.receive !== t.receive,
+    deliver: !t || ind.deliver !== t.deliver,
+    handTo: !t || ind.handTo !== t.handTo,
+    note: !!stage.note && (!t || stage.note !== t.note),
+  };
+  if (lang === "zh" || !t) return { name: stage.name, receive: ind.receive, deliver: ind.deliver, handTo: ind.handTo, note: stage.note ?? null, custom, uc };
   const e = STAGE_EN[group][t.key];
   return {
     name: custom ? stage.name : e?.name ?? stage.name,
-    receive: ind.receive === t.receive ? e?.receive ?? ind.receive : ind.receive,
-    deliver: ind.deliver === t.deliver ? e?.deliver ?? ind.deliver : ind.deliver,
-    handTo: ind.handTo === t.handTo ? e?.handTo ?? ind.handTo : ind.handTo,
-    note: stage.note && stage.note === t.note ? e?.note ?? stage.note : stage.note ?? null,
+    receive: uc.receive ? ind.receive : e?.receive ?? ind.receive,
+    deliver: uc.deliver ? ind.deliver : e?.deliver ?? ind.deliver,
+    handTo: uc.handTo ? ind.handTo : e?.handTo ?? ind.handTo,
+    note: stage.note ? (uc.note ? stage.note : e?.note ?? stage.note) : null,
     custom,
+    uc,
   };
 }
 

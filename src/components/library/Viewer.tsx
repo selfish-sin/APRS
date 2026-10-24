@@ -10,9 +10,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { Button } from "@/components/ui/Button";
 import { MemberLink, SelectField, Tag, TextField } from "@/components/app/bits";
 import { isReviewer } from "@/domain/commands/core";
-import { relativeZh } from "@/domain/clock";
+import { Joined, U, useI18n } from "@/i18n/I18n";
 import type { FileRow, Id, PinRow } from "@/domain/model";
-import { compareCandidates, fileKind, fileWhere, members, memberById, pinsOf } from "@/domain/queries";
+import { compareCandidates, fileKind, fileWhereP, members, memberById, pinsOf } from "@/domain/queries";
 import { RETURN_TAGS } from "@/domain/rules";
 import { useFiles, useFileUrl } from "@/lib/files/FilesProvider";
 import { useGuild } from "@/lib/store";
@@ -46,6 +46,7 @@ export interface ViewerProps {
 
 export function Viewer({ files, startId, onClose, forReview = false, focusPinId = null }: ViewerProps) {
   const { world } = useGuild();
+  const { L, f, ph } = useI18n();
   const images = files.filter((f) => !f.archivedAt);
   const [index, setIndex] = useState(() => Math.max(0, images.findIndex((f) => f.id === startId)));
   const file = images[index] ?? images[0];
@@ -89,35 +90,37 @@ export function Viewer({ files, startId, onClose, forReview = false, focusPinId 
   const other = compareId ? world.files[compareId] : null;
 
   return (
-    <div className="viewer" role="dialog" aria-modal="true" aria-label={`看图：${live.name}`} data-testid="viewer">
+    <div className="viewer" role="dialog" aria-modal="true" aria-label={f(L.viewer.dialog, { name: live.name })} data-testid="viewer">
       <header className="viewer-bar">
         <div className="viewer-title">
-          <span className="t-body-14m break">{live.name}</span>
+          <span className="t-body-14m break" data-uc="">
+            {live.name}
+          </span>
           <span className="label">
-            {fileWhere(world, live)}
-            {images.length > 1 ? ` · 第 ${index + 1} / ${images.length} 张` : ""}
+            {ph(fileWhereP(world, live))}
+            {images.length > 1 ? ` · ${f(L.viewer.position, { i: index + 1, n: images.length })}` : ""}
           </span>
         </div>
         <div className="viewer-actions">
           {images.length > 1 ? (
             <>
-              <button type="button" className="viewer-btn" onClick={() => go(-1)} aria-label="上一张" data-testid="viewer-prev">
+              <button type="button" className="viewer-btn" onClick={() => go(-1)} aria-label={L.viewer.prev} data-testid="viewer-prev">
                 ←
               </button>
-              <button type="button" className="viewer-btn" onClick={() => go(1)} aria-label="下一张" data-testid="viewer-next">
+              <button type="button" className="viewer-btn" onClick={() => go(1)} aria-label={L.viewer.next} data-testid="viewer-next">
                 →
               </button>
             </>
           ) : null}
           {isImage && candidates.length ? (
             <button type="button" className="viewer-btn" aria-pressed={!!compareId} onClick={() => setCompareId(compareId ? null : candidates[0].id)} data-testid="viewer-compare">
-              {compareId ? "不对比" : "两版对比"}
+              {compareId ? L.viewer.noCompare : L.viewer.compare}
             </button>
           ) : null}
           <button type="button" className="viewer-btn" aria-pressed={panel === "info"} onClick={() => setPanel(panel === "info" ? "pins" : "info")} data-testid="viewer-info">
-            信息
+            {L.viewer.info}
           </button>
-          <button type="button" className="viewer-btn" onClick={onClose} aria-label="关掉看图器" data-testid="viewer-close">
+          <button type="button" className="viewer-btn" onClick={onClose} aria-label={L.viewer.close} data-testid="viewer-close">
             ✕
           </button>
         </div>
@@ -146,6 +149,7 @@ export function Viewer({ files, startId, onClose, forReview = false, focusPinId 
 /** 一张图 + 钉 + 侧边。 */
 function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; forReview: boolean; panel: "pins" | "info"; focusPinId: Id | null }) {
   const { world, me, now } = useGuild();
+  const { L, f } = useI18n();
   const { present, ready } = useFiles();
   const url = useFileUrl(file.sha256);
   const stage = useRef<HTMLDivElement>(null);
@@ -306,27 +310,27 @@ function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; for
   return (
     <div className="viewer-body">
       <div className="viewer-main">
-        <div className="viewer-tools" role="toolbar" aria-label="看图">
-          <div className="chips" role="radiogroup" aria-label="点图做什么">
+        <div className="viewer-tools" role="toolbar" aria-label={L.viewer.tools}>
+          <div className="chips" role="radiogroup" aria-label={L.viewer.clickDoes}>
             <button type="button" className="ui-chip" aria-pressed={mode === "look"} onClick={() => setMode("look")} data-testid="viewer-mode-look">
-              看（拖动）
+              {L.viewer.look}
             </button>
             <button type="button" className="ui-chip" aria-pressed={mode === "pin"} onClick={() => setMode("pin")} data-testid="viewer-mode-pin">
-              评论（点 = 钉 · 拖 = 框）
+              {L.viewer.comment}
             </button>
           </div>
           <div className="row">
-            <button type="button" className="viewer-btn" onClick={() => zoomAt(1 / 1.25)} aria-label="缩小" data-testid="viewer-zoom-out">
+            <button type="button" className="viewer-btn" onClick={() => zoomAt(1 / 1.25)} aria-label={L.viewer.zoomOut} data-testid="viewer-zoom-out">
               −
             </button>
             <span className="num label viewer-zoom" data-testid="viewer-zoom">
               {pct}%
             </span>
-            <button type="button" className="viewer-btn" onClick={() => zoomAt(1.25)} aria-label="放大" data-testid="viewer-zoom-in">
-              ＋
+            <button type="button" className="viewer-btn" onClick={() => zoomAt(1.25)} aria-label={L.viewer.zoomIn} data-testid="viewer-zoom-in">
+              +
             </button>
             <button type="button" className="viewer-btn" onClick={fit} data-testid="viewer-fit">
-              适应
+              {L.viewer.fit}
             </button>
             <button type="button" className="viewer-btn" onClick={() => zoomAt(1 / view.s)}>
               1:1
@@ -368,7 +372,7 @@ function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; for
                     data-active={activePin === p.id ? "yes" : "no"}
                     className={p.kind === "box" ? "pin-box" : "pin-dot"}
                     style={box ? { ...pos, ...box } : pos}
-                    aria-label={`${p.number} 号：${p.text}`}
+                    aria-label={f(L.viewer.pinLabel, { n: p.number, text: p.text })}
                     onClick={() => setActivePin(p.id)}
                     data-testid="pin-mark"
                   >
@@ -380,7 +384,7 @@ function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; for
           {draft ? (
             draft.kind === "point" ? (
               <span className="pin-dot" data-pin="draft" style={screen(draft.x, draft.y)}>
-                <span className="pin-num">＋</span>
+                <span className="pin-num">+</span>
               </span>
             ) : draft.kind === "box" ? (
               <span className="pin-box" data-pin="draft" style={{ ...screen(draft.x, draft.y), width: draft.w * W * view.s, height: draft.h * H * view.s }} />
@@ -398,10 +402,10 @@ function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; for
           ) : null}
         </div>
       </div>
-      <aside className="viewer-side" aria-label={panel === "info" ? "文件信息" : "这张图上的意见"}>
+      <aside className="viewer-side" aria-label={panel === "info" ? L.viewer.sideInfo : L.viewer.sidePins}>
         {panel === "info" ? (
           <div className="stack" data-gap="small">
-            <h2 className="t-heading-18">文件信息</h2>
+            <h2 className="t-heading-18">{L.viewer.sideInfo}</h2>
             <FileFacts file={file} />
             <SaveFileButton file={file} />
           </div>
@@ -418,20 +422,20 @@ function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; for
                 }}
               />
             ) : (
-              <p className="label">{mode === "pin" ? "在图上点一下放钉，或者拖一下框一块。" : "切到「评论」以后在图上点一下放钉，拖一下框一块。"}</p>
+              <p className="label">{mode === "pin" ? L.viewer.pinHintOn : L.viewer.pinHintOff}</p>
             )}
             <div className="row" data-justify="between">
               <h2 className="t-heading-18">
-                意见 <span className="count">{pins.length}</span>
+                {L.viewer.notes} <span className="count">{pins.length}</span>
               </h2>
               {pins.some((p) => p.status === "resolved") ? (
                 <label className="check-row label">
                   <input type="checkbox" checked={hideResolved} onChange={(e) => setHideResolved(e.target.checked)} data-testid="pins-hide-resolved" />
-                  隐藏已解决的
+                  {L.viewer.hideResolved}
                 </label>
               ) : null}
             </div>
-            {shownPins.length === 0 ? <p className="label">这张图上还没有意见。</p> : null}
+            {shownPins.length === 0 ? <p className="label">{L.viewer.noNotes}</p> : null}
             <ol className="pin-list" data-testid="pin-list">
               {shownPins.map((p) => (
                 <PinItem key={p.id} pin={p} active={activePin === p.id} onJump={() => jumpTo(p)} now={now} />
@@ -446,6 +450,7 @@ function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; for
 
 export function PinForm({ file, draft, forReview, onDone }: { file: FileRow; draft: Draft; forReview: boolean; onDone: (pinId: Id | null) => void }) {
   const { world, me, dispatch, notify } = useGuild();
+  const { L, f, err, say, tag: tagText } = useI18n();
   const [text, setText] = useState("");
   const [layer, setLayer] = useState("");
   const [sheets, setSheets] = useState("");
@@ -459,10 +464,10 @@ export function PinForm({ file, draft, forReview, onDone }: { file: FileRow; dra
     const common = { fileId: file.id, text, layer: layer || null, sheets: sheets || null, tag: tag || null, mentions, forReview };
     const r = dispatch("pin.add", draft.kind === "cell" ? { ...common, cell: { sheet: draft.sheet, ref: draft.ref } } : { ...common, ...draft }, { quiet: true });
     if (!r.ok) {
-      setError(r.error.message);
+      setError(err(r.error));
       return;
     }
-    notify(draft.kind === "cell" ? "意见留在格子上了" : draft.kind === "box" ? "框好了" : "钉好了", "Neutral");
+    notify(say((d) => (draft.kind === "cell" ? d.viewer.cellDone : draft.kind === "box" ? d.viewer.boxDone : d.viewer.pinDone)), "Neutral");
     onDone(r.created.pinId);
   };
   return (
@@ -476,24 +481,24 @@ export function PinForm({ file, draft, forReview, onDone }: { file: FileRow; dra
       }}
     >
       <span className="t-body-14m">
-        {draft.kind === "cell" ? `在「${draft.sheet}」的 ${draft.ref} 留意见` : draft.kind === "box" ? "框了一块" : "放了一个钉"}
-        {forReview ? " · 审核意见" : ""}
+        {draft.kind === "cell" ? f(L.viewer.draftCell, { sheet: draft.sheet, ref: draft.ref }) : draft.kind === "box" ? L.viewer.draftBox : L.viewer.draftPin}
+        {forReview ? L.viewer.reviewNote : ""}
       </span>
-      <textarea ref={area} className="field-control" aria-label="意见" placeholder="哪里不对、要怎么改" value={text} onChange={(e) => setText(e.target.value)} data-testid="pin-text" />
+      <textarea ref={area} className="field-control" aria-label={L.viewer.notes} placeholder={L.viewer.notePlaceholder} value={text} onChange={(e) => setText(e.target.value)} data-testid="pin-text" />
       <div className="form-grid">
-        <TextField label="层" placeholder="A" value={layer} onChange={(e) => setLayer(e.target.value)} />
-        <TextField label="张号" placeholder="6、7" value={sheets} onChange={(e) => setSheets(e.target.value)} />
-        <SelectField label="退回标签" value={tag} onChange={(e) => setTag(e.target.value)}>
-          <option value="">不选</option>
+        <TextField label={L.viewer.layer} placeholder="A" value={layer} onChange={(e) => setLayer(e.target.value)} />
+        <TextField label={L.viewer.sheets} placeholder={L.review.sheetsPlaceholder} value={sheets} onChange={(e) => setSheets(e.target.value)} />
+        <SelectField label={L.viewer.returnTag} value={tag} onChange={(e) => setTag(e.target.value)}>
+          <option value="">{L.viewer.none}</option>
           {RETURN_TAGS.map((t) => (
             <option key={t} value={t}>
-              {t}
+              {tagText(t)}
             </option>
           ))}
         </SelectField>
       </div>
       {people.length ? (
-        <div className="chips" role="group" aria-label="@ 谁">
+        <div className="chips" role="group" aria-label={L.viewer.mention}>
           {people.map((m) => (
             <button
               key={m.id}
@@ -502,7 +507,7 @@ export function PinForm({ file, draft, forReview, onDone }: { file: FileRow; dra
               aria-pressed={mentions.includes(m.id)}
               onClick={() => setMentions((xs) => (xs.includes(m.id) ? xs.filter((x) => x !== m.id) : [...xs, m.id]))}
             >
-              @{m.nickname}
+              @<U>{m.nickname}</U>
             </button>
           ))}
         </div>
@@ -513,8 +518,8 @@ export function PinForm({ file, draft, forReview, onDone }: { file: FileRow; dra
         </p>
       ) : null}
       <div className="form-actions">
-        <Button Label="不钉了" Size="Small" Style="Ghost" onClick={() => onDone(null)} />
-        <Button Label="钉上" Size="Small" Style="Accent" type="submit" data-testid="pin-submit" />
+        <Button Label={L.viewer.cancelPin} Size="Small" Style="Ghost" onClick={() => onDone(null)} />
+        <Button Label={L.viewer.addPin} Size="Small" Style="Accent" type="submit" data-testid="pin-submit" />
       </div>
     </form>
   );
@@ -522,9 +527,10 @@ export function PinForm({ file, draft, forReview, onDone }: { file: FileRow; dra
 
 export function PinItem({ pin, active, onJump, now }: { pin: PinRow; active: boolean; onJump: () => void; now: string }) {
   const { world, dispatch, notify } = useGuild();
+  const { L, f, r: rich, err, say, relative, tag: tagText } = useI18n();
   const [reply, setReply] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const meta = [pin.layer ? `${pin.layer} 层` : null, pin.sheets ? `第 ${pin.sheets} 张` : null].filter(Boolean).join(" · ");
+  const meta = [pin.layer ? f(L.viewer.layerMeta, { layer: pin.layer }) : null, pin.sheets ? rich(L.viewer.sheetsMeta, { sheets: <U>{pin.sheets}</U> }) : null].filter(Boolean);
   const ref = useRef<HTMLLIElement>(null);
   useEffect(() => {
     if (active) ref.current?.scrollIntoView?.({ block: "nearest" });
@@ -535,26 +541,45 @@ export function PinItem({ pin, active, onJump, now }: { pin: PinRow; active: boo
         <span className="pin-num" data-status={pin.status}>
           {pin.number}
         </span>
-        <span className="break">{pin.text}</span>
+        <span className="break" data-uc="">
+          {pin.text}
+        </span>
       </button>
       <div className="row">
-        {pin.cell ? <Tag>{pin.cell.sheet} · {pin.cell.ref}</Tag> : pin.kind === "box" ? <Tag>框</Tag> : null}
-        {meta ? <span className="label">{meta}</span> : null}
-        {pin.tag ? <Tag tone="warning">{pin.tag}</Tag> : null}
-        {pin.reviewTaskId ? <Tag tone="danger">审核</Tag> : null}
-        {pin.status === "resolved" ? <Tag tone="success">已解决</Tag> : null}
+        {pin.cell ? (
+          <Tag>
+            <U>{pin.cell.sheet}</U> · {pin.cell.ref}
+          </Tag>
+        ) : pin.kind === "box" ? (
+          <Tag>{L.viewer.box}</Tag>
+        ) : null}
+        {meta.length ? (
+          <span className="label">
+            <Joined parts={meta} />
+          </span>
+        ) : null}
+        {pin.tag ? <Tag tone="warning">{tagText(pin.tag)}</Tag> : null}
+        {pin.reviewTaskId ? <Tag tone="danger">{L.viewer.review}</Tag> : null}
+        {pin.status === "resolved" ? <Tag tone="success">{L.viewer.resolved}</Tag> : null}
       </div>
       <span className="label">
-        <MemberLink member={memberById(world, pin.byMemberId)} /> · {relativeZh(pin.at, now)}
-        {pin.mentions.length ? ` · @${pin.mentions.map((id) => memberById(world, id)?.nickname ?? "").join(" @")}` : ""}
+        <MemberLink member={memberById(world, pin.byMemberId)} /> · {relative(pin.at, now)}
+        {pin.mentions.length ? (
+          <>
+            {" · "}
+            <U>{`@${pin.mentions.map((id) => memberById(world, id)?.nickname ?? "").join(" @")}`}</U>
+          </>
+        ) : null}
       </span>
       {pin.replies.length ? (
         <ul className="replies">
           {pin.replies.map((r, i) => (
             <li key={i} className="stack" data-gap="small">
-              <span className="break">{r.text}</span>
+              <span className="break" data-uc="">
+                {r.text}
+              </span>
               <span className="label">
-                <MemberLink member={memberById(world, r.byMemberId)} /> · {relativeZh(r.at, now)}
+                <MemberLink member={memberById(world, r.byMemberId)} /> · {relative(r.at, now)}
               </span>
             </li>
           ))}
@@ -567,37 +592,37 @@ export function PinItem({ pin, active, onJump, now }: { pin: PinRow; active: boo
           onSubmit={(e) => {
             e.preventDefault();
             const r = dispatch("pin.reply", { pinId: pin.id, text: reply }, { quiet: true });
-            if (!r.ok) setError(r.error.message);
+            if (!r.ok) setError(err(r.error));
             else {
               setReply("");
               setError(null);
             }
           }}
         >
-          <textarea className="field-control" aria-label="回复" placeholder="回复这个钉" value={reply} onChange={(e) => setReply(e.target.value)} rows={2} data-testid="pin-reply" />
+          <textarea className="field-control" aria-label={L.viewer.reply} placeholder={L.viewer.replyPlaceholder} value={reply} onChange={(e) => setReply(e.target.value)} rows={2} data-testid="pin-reply" />
           {error ? <p className="error-text">{error}</p> : null}
           <div className="form-actions">
-            <Button Label="回复" Size="Small" Style="Secondary" type="submit" data-testid="pin-reply-send" />
+            <Button Label={L.viewer.reply} Size="Small" Style="Secondary" type="submit" data-testid="pin-reply-send" />
             {pin.status === "open" ? (
               <Button
-                Label="解决"
+                Label={L.viewer.resolve}
                 Size="Small"
                 Style="Ghost"
                 data-testid="pin-resolve"
                 onClick={() => {
                   const r = dispatch("pin.resolve", { pinId: pin.id }, { quiet: true });
-                  if (!r.ok) setError(r.error.message);
-                  else notify(`${pin.number} 号解决了`, "Neutral");
+                  if (!r.ok) setError(err(r.error));
+                  else notify(say((d) => d.viewer.resolvedToast, { n: pin.number }), "Neutral");
                 }}
               />
             ) : (
               <Button
-                Label="重新打开"
+                Label={L.viewer.reopen}
                 Size="Small"
                 Style="Ghost"
                 onClick={() => {
                   const r = dispatch("pin.reopen", { pinId: pin.id }, { quiet: true });
-                  if (!r.ok) setError(r.error.message);
+                  if (!r.ok) setError(err(r.error));
                 }}
               />
             )}
@@ -611,6 +636,7 @@ export function PinItem({ pin, active, onJump, now }: { pin: PinRow; active: boo
 /** 两版对比：并排，或者滑块。 */
 function Compare({ left, right, mode, setMode, candidates, setCompareId }: { left: FileRow; right: FileRow; mode: "side" | "slider"; setMode: (m: "side" | "slider") => void; candidates: FileRow[]; setCompareId: (id: Id | null) => void }) {
   const [pos, setPos] = useState(50);
+  const { L } = useI18n();
   const leftUrl = useFileUrl(left.sha256);
   const rightUrl = useFileUrl(right.sha256);
   const area = useRef<HTMLDivElement>(null);
@@ -624,17 +650,17 @@ function Compare({ left, right, mode, setMode, candidates, setCompareId }: { lef
   return (
     <div className="viewer-body viewer-compare" data-testid="viewer-compare-view">
       <div className="viewer-tools">
-        <div className="chips" role="radiogroup" aria-label="怎么对比">
+        <div className="chips" role="radiogroup" aria-label={L.viewer.howCompare}>
           <button type="button" className="ui-chip" aria-pressed={mode === "side"} onClick={() => setMode("side")} data-testid="compare-side">
-            并排
+            {L.viewer.side}
           </button>
           <button type="button" className="ui-chip" aria-pressed={mode === "slider"} onClick={() => setMode("slider")} data-testid="compare-slider">
-            滑块
+            {L.viewer.slider}
           </button>
         </div>
-        <SelectField label="和哪一张比" value={left.id} onChange={(e) => setCompareId(e.target.value)}>
+        <SelectField label={L.viewer.compareWith} value={left.id} onChange={(e) => setCompareId(e.target.value)}>
           {candidates.map((c) => (
-            <option key={c.id} value={c.id}>
+            <option key={c.id} value={c.id} data-uc="">
               {c.name}
             </option>
           ))}
@@ -645,7 +671,9 @@ function Compare({ left, right, mode, setMode, candidates, setCompareId }: { lef
           {[left, right].map((f, i) => (
             <figure key={f.id} className="compare-pane">
               {(i === 0 ? leftUrl : rightUrl) ? <img src={(i === 0 ? leftUrl : rightUrl)!} alt={f.name} draggable={false} /> : <MissingPlaceholder compact />}
-              <figcaption className="label break">{f.name}</figcaption>
+              <figcaption className="label break" data-uc="">
+                {f.name}
+              </figcaption>
             </figure>
           ))}
         </div>
@@ -670,10 +698,14 @@ function Compare({ left, right, mode, setMode, candidates, setCompareId }: { lef
             </div>
             <span className="compare-slider-handle" style={{ left: `${pos}%` }} aria-hidden="true" />
           </div>
-          <input type="range" min={0} max={100} value={Math.round(pos)} onChange={(e) => setPos(Number(e.target.value))} aria-label="左右对比的位置" data-testid="compare-range" />
+          <input type="range" min={0} max={100} value={Math.round(pos)} onChange={(e) => setPos(Number(e.target.value))} aria-label={L.viewer.sliderPos} data-testid="compare-range" />
           <div className="row" data-justify="between">
-            <span className="label break">← {left.name}</span>
-            <span className="label break">{right.name} →</span>
+            <span className="label break">
+              ← <U>{left.name}</U>
+            </span>
+            <span className="label break">
+              <U>{right.name}</U> →
+            </span>
           </div>
         </div>
       )}

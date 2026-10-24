@@ -9,6 +9,7 @@
  * 对不上的条目留在 `skipped`，界面上有一行提示，没有丢。
  */
 import type { Id, IsoDateTime, JournalEntry } from "@/domain/model";
+import { t2, type Text2 } from "@/domain/text";
 import type { Session } from "@/lib/session";
 
 /** Bump when the envelope below changes; add a migration for the old number. */
@@ -130,7 +131,16 @@ export function migrateWorldFile(raw: unknown): MigrationResult {
   return { ok: true, file, from: raw.formatVersion === WORLD_FORMAT_VERSION ? "current" : `v${String(raw.formatVersion)}` };
 }
 
-/** Plain words for the import dialog. */
+/** Plain words for the import dialog（中英两种）。 */
+export function migrationReason(reason: string): Text2 {
+  if (reason === "not_an_object" || reason === "not_a_world_file") return t2("这不是工会导出的备份文件。", "This isn't a backup file exported from a guild.");
+  if (reason.startsWith("newer_than_app_")) return t2("这份备份是更新的版本导出的，先更新这里的程序再导入。", "This backup came from a newer version. Update the app here before importing.");
+  if (reason === "bad_journal_entry" || reason === "no_journal") return t2("备份文件里的记录不完整。", "The records in this backup are incomplete.");
+  if (reason === "no_world_id") return t2("备份文件里没有写是哪个工会。", "This backup doesn't say which guild it belongs to.");
+  if (reason === "bad_base") return t2("备份文件里没有写是示范工会还是自己的工会。", "This backup doesn't say whether it's the demo guild or your own.");
+  return t2(`备份读不了（${reason}）。`, `The backup can't be read (${reason}).`);
+}
+
 export function migrationReasonZh(reason: string): string {
   if (reason === "not_an_object" || reason === "not_a_world_file") return "这不是工会导出的备份文件。";
   if (reason.startsWith("newer_than_app_")) return "这份备份是更新的版本导出的，先更新这里的程序再导入。";

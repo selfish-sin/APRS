@@ -9,9 +9,10 @@ import { Empty, SelectField, TextField } from "@/components/app/bits";
 import { DropZone } from "@/components/library/intake";
 import { FileDialog, FileTile } from "@/components/library/tiles";
 import { Viewer } from "@/components/library/Viewer";
-import { dateZh, localDate } from "@/domain/clock";
+import { localDate } from "@/domain/clock";
+import { U, useI18n } from "@/i18n/I18n";
 import type { FileKind } from "@/domain/queries";
-import { FILE_KIND_LABEL, blocksOf, cutsOf, cutName, libraryFacets, libraryOf, pagesOf, projectById, projects, stagesOf, memberById } from "@/domain/queries";
+import { FILE_KIND_LABEL, blocksOf, cutsOf, libraryFacets, libraryOf, pagesOf, projectById, projects, stagesOf, memberById } from "@/domain/queries";
 import type { Id } from "@/domain/model";
 import { useFiles } from "@/lib/files/FilesProvider";
 import { Link, navigate, useRoute } from "@/lib/router";
@@ -21,18 +22,19 @@ import { NotFound } from "./NotFound";
 /** #/library：选一个项目。 */
 export function LibraryIndexPage() {
   const { world } = useGuild();
+  const { L, f } = useI18n();
   const list = projects(world);
   return (
     <>
       <div className="page-head">
         <div className="page-head-text">
-          <span className="label">资料库</span>
-          <h1 className="t-title-32">资料库</h1>
-          <p className="muted">每个项目一个：设定图、截图、表格、文件，断网也能看；图上能钉意见。</p>
+          <span className="label">{L.library.title}</span>
+          <h1 className="t-title-32">{L.library.title}</h1>
+          <p className="muted">{L.library.indexLead}</p>
         </div>
       </div>
       {list.length === 0 ? (
-        <Empty>还没有项目。</Empty>
+        <Empty>{L.library.noProjects}</Empty>
       ) : (
         <div className="cards">
           {list.map((p) => {
@@ -40,10 +42,10 @@ export function LibraryIndexPage() {
             return (
               <Link key={p.id} to={`/library/${p.id}`} className="card project-card" data-testid="library-project">
                 <span className="label">{p.code}</span>
-                <span className="t-heading-18">{p.name}</span>
-                <span className="label">
-                  {n} 个文件 · {pagesOf(world, p.id).length} 页资料
+                <span className="t-heading-18">
+                  <U>{p.name}</U>
                 </span>
+                <span className="label">{f(L.library.projectStats, { n, pages: pagesOf(world, p.id).length })}</span>
               </Link>
             );
           })}
@@ -55,6 +57,7 @@ export function LibraryIndexPage() {
 
 export function LibraryPage() {
   const { world, notify } = useGuild();
+  const { L, f, r: rich, stageName, cut: cutOf } = useI18n();
   const files = useFiles();
   const route = useRoute();
   const project = projectById(world, route.segments[1]);
@@ -75,7 +78,7 @@ export function LibraryPage() {
     () => (project ? libraryOf(world, project.id, { cutId: cutId || null, stageKey: stageKey || null, kind: kind || null, tag: tag || null, byMemberId: by || null, q, order }) : []),
     [world, project, cutId, stageKey, kind, tag, by, q, order]
   );
-  if (!project) return <NotFound what="这个项目" />;
+  if (!project) return <NotFound what="project" />;
   const facets = libraryFacets(world, project.id);
   const cuts = cutsOf(world, project.id);
   const stages = stagesOf(world, project.id);
@@ -91,9 +94,9 @@ export function LibraryPage() {
         stageKey: toStage || null,
         tags: toTags.split(/[,，、\s]+/).map((t) => t.trim()).filter(Boolean),
       });
-      const parts = [r.fileIds.length ? `放进来 ${r.fileIds.length} 个` : null, r.matched ? `${r.matched} 个对上了原来的记录` : null, r.duplicates ? `${r.duplicates} 个已经在了` : null].filter(Boolean);
+      const parts = [r.fileIds.length ? f(L.library.added, { n: r.fileIds.length }) : null, r.matched ? f(L.library.matched, { n: r.matched }) : null, r.duplicates ? f(L.library.duplicates, { n: r.duplicates }) : null].filter(Boolean);
       if (r.errors.length) notify(r.errors[0], "Error");
-      else notify(parts.join("，") || "没有放进来", parts.length ? "Success" : "Neutral");
+      else notify(parts.join(L.common.clauseSep) || L.library.nothingAdded, parts.length ? "Success" : "Neutral");
     } finally {
       setBusy(false);
     }
@@ -106,100 +109,100 @@ export function LibraryPage() {
       <div className="page-head">
         <div className="page-head-text">
           <div className="crumbs">
-            <Link to="/library">资料库</Link>
+            <Link to="/library">{L.library.title}</Link>
             <span>/</span>
-            <span>{project.name}</span>
+            <span>
+              <U>{project.name}</U>
+            </span>
           </div>
-          <h1 className="t-title-32">{project.name} · 资料库</h1>
-          <span className="label">
-            {libraryOf(world, project.id).length} 个文件 · {pages.length} 页资料 · 文件存在这台设备的浏览器里，断网也能看
-          </span>
+          <h1 className="t-title-32">{rich(L.library.titleOf, { project: <U>{project.name}</U> })}</h1>
+          <span className="label">{f(L.library.stats, { n: libraryOf(world, project.id).length, pages: pages.length })}</span>
         </div>
         <div className="page-head-actions">
-          <Button Label="项目总览" Size="Small" Style="Secondary" onClick={() => navigate(`/project/${project.id}`)} />
+          <Button Label={L.library.projectHome} Size="Small" Style="Secondary" onClick={() => navigate(`/project/${project.id}`)} />
         </div>
       </div>
 
-      <section className="card" aria-label="放文件进来">
-        <DropZone onFiles={(f) => void intake(f)} testId="library-drop" hint={busy ? "正在放…" : "多选、多个文件一次放都行。图片、PDF、.clip、.rar、表格……什么都能放。"} />
+      <section className="card" aria-label={L.library.addFiles}>
+        <DropZone onFiles={(fs) => void intake(fs)} testId="library-drop" hint={busy ? L.library.adding : L.library.dropHint} />
         <div className="form-grid">
-          <SelectField label="挂到哪一卡" value={toCut} onChange={(e) => setToCut(e.target.value)} data-testid="library-to-cut">
-            <option value="">不挂卡（资料库）</option>
+          <SelectField label={L.library.toCut} value={toCut} onChange={(e) => setToCut(e.target.value)} data-testid="library-to-cut">
+            <option value="">{L.library.noCut}</option>
             {cuts.map((c) => (
               <option key={c.id} value={c.id}>
-                {cutName(world, c)}
+                {cutOf(c, project.group)}
               </option>
             ))}
           </SelectField>
-          <SelectField label="哪个环节" value={toStage} onChange={(e) => setToStage(e.target.value)}>
-            <option value="">不选</option>
+          <SelectField label={L.library.stage} value={toStage} onChange={(e) => setToStage(e.target.value)}>
+            <option value="">{L.library.none}</option>
             {stages.map((s) => (
               <option key={s.id} value={s.templateKey}>
-                {s.name}
+                {stageName(project.group, s)}
               </option>
             ))}
           </SelectField>
-          <TextField label="标签" placeholder="设定，参考" value={toTags} onChange={(e) => setToTags(e.target.value)} hint="用逗号隔开" />
+          <TextField label={L.library.tags} placeholder={L.library.tagsPlaceholder} value={toTags} onChange={(e) => setToTags(e.target.value)} hint={L.library.tagsHint} />
         </div>
       </section>
 
       <section className="card" aria-labelledby="files-title">
         <div className="row" data-justify="between">
           <h2 id="files-title" className="t-heading-18">
-            文件 <span className="count">{list.length}</span>
+            {L.library.files} <span className="count">{list.length}</span>
           </h2>
-          <TextField label="搜文件名" type="search" value={q} onChange={(e) => setQ(e.target.value)} data-testid="library-search" />
+          <TextField label={L.library.search} type="search" value={q} onChange={(e) => setQ(e.target.value)} data-testid="library-search" />
         </div>
-        <div className="filters" role="group" aria-label="筛">
-          <SelectField label="卡" value={cutId} onChange={(e) => setCutId(e.target.value)} data-testid="library-filter-cut">
-            <option value="">全部</option>
+        <div className="filters" role="group" aria-label={L.library.filters}>
+          <SelectField label={L.library.cut} value={cutId} onChange={(e) => setCutId(e.target.value)} data-testid="library-filter-cut">
+            <option value="">{L.library.all}</option>
             {cuts.map((c) => (
               <option key={c.id} value={c.id}>
-                {cutName(world, c)}
+                {cutOf(c, project.group)}
               </option>
             ))}
           </SelectField>
-          <SelectField label="环节" value={stageKey} onChange={(e) => setStageKey(e.target.value)}>
-            <option value="">全部</option>
+          <SelectField label={L.library.stageCol} value={stageKey} onChange={(e) => setStageKey(e.target.value)}>
+            <option value="">{L.library.all}</option>
             {stages
               .filter((s) => facets.stageKeys.includes(s.templateKey))
               .map((s) => (
                 <option key={s.id} value={s.templateKey}>
-                  {s.name}
+                  {stageName(project.group, s)}
                 </option>
               ))}
           </SelectField>
-          <SelectField label="类型" value={kind} onChange={(e) => setKind(e.target.value as "" | FileKind)} data-testid="library-filter-kind">
-            <option value="">全部</option>
+          <SelectField label={L.library.kind} value={kind} onChange={(e) => setKind(e.target.value as "" | FileKind)} data-testid="library-filter-kind">
+            <option value="">{L.library.all}</option>
             {(Object.keys(FILE_KIND_LABEL) as FileKind[]).map((k) => (
               <option key={k} value={k}>
-                {FILE_KIND_LABEL[k]}
+                {L.labels.fileKind[k]}
               </option>
             ))}
           </SelectField>
-          <SelectField label="标签" value={tag} onChange={(e) => setTag(e.target.value)}>
-            <option value="">全部</option>
+          <SelectField label={L.library.tags} value={tag} onChange={(e) => setTag(e.target.value)}>
+            <option value="">{L.library.all}</option>
             {facets.tags.map((t) => (
-              <option key={t} value={t}>
+              <option key={t} value={t} data-uc="">
                 {t}
               </option>
             ))}
           </SelectField>
-          <SelectField label="谁传的" value={by} onChange={(e) => setBy(e.target.value)}>
-            <option value="">全部</option>
+          <SelectField label={L.library.uploader} value={by} onChange={(e) => setBy(e.target.value)}>
+            <option value="">{L.library.all}</option>
             {facets.uploaders.map((m) => (
-              <option key={m.id} value={m.id}>
+              <option key={m.id} value={m.id} data-uc="">
                 {m.nickname}
               </option>
             ))}
           </SelectField>
-          <SelectField label="排" value={order} onChange={(e) => setOrder(e.target.value as "new" | "old")}>
-            <option value="new">新的在前</option>
-            <option value="old">旧的在前</option>
+          <SelectField label={L.library.order} value={order} onChange={(e) => setOrder(e.target.value as "new" | "old")}>
+            <option value="new">{L.library.newest}</option>
+            <option value="old">{L.library.oldest}</option>
           </SelectField>
         </div>
         {list.length === 0 ? (
-          <Empty>{q || cutId || stageKey || kind || tag || by ? "没有对得上的文件。" : "还没有文件。把设定图、截图拖进来，或者直接粘贴。"}</Empty>
+          <Empty>{q || cutId || stageKey || kind || tag || by ? L.library.noMatch : L.library.empty}</Empty>
         ) : (
           <div className="file-grid" data-testid="library-grid">
             {list.map((v) => (
@@ -219,13 +222,14 @@ export function LibraryPage() {
 
 function PagesSection({ projectId }: { projectId: Id }) {
   const { world, dispatch } = useGuild();
+  const { L, r: rich, err, date } = useI18n();
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const pages = pagesOf(world, projectId);
   return (
     <section className="card" aria-labelledby="pages-title">
       <h2 id="pages-title" className="t-heading-18">
-        资料页 <span className="count">{pages.length}</span>
+        {L.library.pages} <span className="count">{pages.length}</span>
       </h2>
       {pages.length ? (
         <ul className="list">
@@ -233,24 +237,28 @@ function PagesSection({ projectId }: { projectId: Id }) {
             <li key={p.id}>
               <div className="list-main">
                 <Link to={`/page/${p.id}`} className="t-body-14m" data-testid="page-link">
-                  {p.title}
+                  <U>{p.title}</U>
                 </Link>
                 <span className="label">
-                  {blocksOf(world, p.id).length} 块 · {memberById(world, p.byMemberId)?.nickname ?? "有人"} · {dateZh(localDate(p.at))}
+                  {rich(L.library.pageStats, {
+                    n: blocksOf(world, p.id).length,
+                    who: memberById(world, p.byMemberId) ? <U>{memberById(world, p.byMemberId)!.nickname}</U> : L.library.someone,
+                    date: date(localDate(p.at)),
+                  })}
                 </span>
               </div>
             </li>
           ))}
         </ul>
       ) : (
-        <Empty>还没有资料页。</Empty>
+        <Empty>{L.library.noPages}</Empty>
       )}
       <form
         className="row"
         onSubmit={(e) => {
           e.preventDefault();
           const r = dispatch("page.create", { projectId, title }, { quiet: true });
-          if (!r.ok) setError(r.error.message);
+          if (!r.ok) setError(err(r.error));
           else {
             setTitle("");
             setError(null);
@@ -258,8 +266,8 @@ function PagesSection({ projectId }: { projectId: Id }) {
           }
         }}
       >
-        <TextField label="新的一页" placeholder="色指定表" value={title} onChange={(e) => setTitle(e.target.value)} data-testid="page-new-title" />
-        <Button Label="建一页" Size="Small" Style="Secondary" type="submit" data-testid="page-new" />
+        <TextField label={L.library.newPage} placeholder={L.library.newPagePlaceholder} value={title} onChange={(e) => setTitle(e.target.value)} data-testid="page-new-title" />
+        <Button Label={L.library.createPage} Size="Small" Style="Secondary" type="submit" data-testid="page-new" />
       </form>
       {error ? <p className="error-text">{error}</p> : null}
     </section>

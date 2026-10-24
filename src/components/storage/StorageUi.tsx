@@ -1,6 +1,9 @@
 /** 本机存储 · 备份和提示的浮层。 */
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
-import { migrationReasonZh, type WorldFile } from "@/lib/migrations";
+import { migrationReason, type WorldFile } from "@/lib/migrations";
+import type { Phrase, Say } from "@/domain/text";
+import { msgPhrase as phrase } from "@/i18n/core";
+import { zh as Z, en as E } from "@/i18n/ns/storage";
 import { parseImport } from "@/lib/storage/local";
 import { useFiles } from "@/lib/files/FilesProvider";
 import { useStore, type ImportReport } from "@/lib/store";
@@ -11,7 +14,7 @@ export type StoragePanel =
   | { kind: "skipped" }
   | { kind: "confirm"; file: WorldFile; title: string }
   | { kind: "report"; report: Extract<ImportReport, { ok: true }> }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: Say };
 
 interface StorageUiApi {
   panel: StoragePanel | null;
@@ -61,7 +64,7 @@ export function StorageUiProvider({ children }: { children: ReactNode }) {
     (text: string) => {
       const parsed = parseImport(text);
       if (!parsed.ok) {
-        setPanel({ kind: "error", message: migrationReasonZh(parsed.reason) });
+        setPanel({ kind: "error", message: migrationReason(parsed.reason) });
         return;
       }
       // 这台设备上已经有这个工会（做过事）：先问一句再替换。
@@ -86,7 +89,7 @@ export function StorageUiProvider({ children }: { children: ReactNode }) {
       file
         .text()
         .then(importText)
-        .catch(() => setPanel({ kind: "error", message: "这个文件读不了。" }));
+        .catch(() => setPanel({ kind: "error", message: phrase(Z.fileUnreadable, E.fileUnreadable) }));
     },
     [importText]
   );
@@ -120,16 +123,16 @@ export function useStorageUi(): StorageUiApi {
 }
 
 /** 「已用 1% · 还很宽裕」 / 「已用 72% · 该备份了」 */
-export function usageLabel(ratio: number): string {
+export function usageLabel(ratio: number): Phrase {
   const pct = Math.round(ratio * 100);
-  if (ratio >= 0.9) return `已用 ${pct}% · 快满了`;
-  if (ratio >= 0.7) return `已用 ${pct}% · 该备份了`;
-  return `已用 ${pct}% · 还很宽裕`;
+  if (ratio >= 0.9) return phrase(Z.usageFull, E.usageFull, { pct });
+  if (ratio >= 0.7) return phrase(Z.usageWarn, E.usageWarn, { pct });
+  return phrase(Z.usageOk, E.usageOk, { pct });
 }
 
 /** 「上次备份：3 天前」 / 「还没有备份过」 */
-export function backupLabel(days: number | null): string {
-  if (days === null) return "还没有备份过";
-  if (days === 0) return "上次备份：今天";
-  return `上次备份：${days} 天前`;
+export function backupLabel(days: number | null): Phrase {
+  if (days === null) return phrase(Z.neverBackedUp, E.neverBackedUp);
+  if (days === 0) return phrase(Z.backedUpToday, E.backedUpToday);
+  return phrase(Z.backedUpDays, E.backedUpDays, { n: days });
 }

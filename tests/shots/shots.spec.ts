@@ -58,3 +58,61 @@ test("截图", async ({ page }, info) => {
   await open(page, "/backup");
   await shot("p10-backup");
 });
+
+test.describe("English", () => {
+  test.use({ storageState: { cookies: [], origins: [{ origin: new URL(process.env.SMOKE_BASE_URL ?? "http://localhost:4173").origin, localStorage: [{ name: "arps:lang", value: "en" }] }] } });
+
+  test("截图（English）", async ({ page }, info) => {
+    test.setTimeout(120_000);
+    const tag = `${info.project.name}-en`;
+    const shot = (name: string) => page.screenshot({ path: `artifacts/shots/${name}-${tag}.png`, fullPage: true });
+    const signIn = async (who: "admin" | "member01") => {
+      await page.getByTestId(`account-${who}`).click();
+      await page.getByTestId("passcode").fill(who === "admin" ? process.env.ARPS_PASS_ADMIN! : process.env.ARPS_PASS_MEMBER!);
+      await page.getByTestId("login-submit").click();
+      await expect(page).toHaveURL(/#\/hall/);
+    };
+    await noExternal(page);
+    await open(page, "/");
+    await shot("p1-entry");
+    await page.getByTestId("open-demo").click();
+    await shot("login");
+    await signIn("member01");
+    await shot("p2-hall-member01");
+    await open(page, "/enroll?group=animation&stage=inbetween");
+    await shot("p3-enroll");
+    await open(page, "/me");
+    await shot("p9-member");
+    const menu = page.getByRole("button", { name: "Open menu" });
+    if (await menu.isVisible()) await menu.click();
+    await page.getByTestId("logout").click();
+    await signIn("admin");
+    await open(page, "/projects");
+    await shot("p4-projects");
+    await page.locator("a.project-card").first().click();
+    await expect(page.getByTestId("board")).toBeVisible();
+    await shot("p5-project");
+    const projectPath = new URL(page.url()).hash.slice(1);
+    await page.getByTestId("project-settings").click();
+    await expect(page.getByTestId("stages-card")).toBeVisible();
+    await shot("p12-settings-stages");
+    await open(page, "/projects");
+    await page.getByRole("link", { name: /（模板）动画短片/ }).first().click();
+    await expect(page.getByTestId("staff-card")).toBeVisible();
+    await shot("p12-zero-day");
+    await open(page, projectPath);
+    await page.locator("table.board tbody th a").nth(4).click();
+    await expect(page).toHaveURL(/#\/cut\//);
+    await shot("p6-cut");
+    await open(page, "/review");
+    await shot("p7-review");
+    await open(page, "/admin?tab=dispatch");
+    await shot("p8-admin-dispatch");
+    await open(page, "/library");
+    await page.getByTestId("library-project").first().click();
+    await shot("p11-library");
+    await page.getByTestId("file-tile").first().locator(".file-tile-open").click();
+    await expect(page.getByTestId("viewer")).toBeVisible();
+    await shot("p11-viewer");
+  });
+});

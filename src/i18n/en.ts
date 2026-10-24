@@ -2,7 +2,48 @@
 import type { Shape } from "./core";
 import type { zh } from "./zh";
 
+import { en as nav } from "./ns/nav";
+import { en as doc } from "./ns/doc";
+import { en as viewer } from "./ns/viewer";
+import { en as library } from "./ns/library";
+import { en as enroll } from "./ns/enroll";
+import { en as review } from "./ns/review";
+import { en as cut } from "./ns/cut";
+import { en as project } from "./ns/project";
+import { en as report } from "./ns/report";
+import { en as flex } from "./ns/flex";
+import { en as board } from "./ns/board";
+import { en as thread } from "./ns/thread";
+import { en as task } from "./ns/task";
+import { en as quest } from "./ns/quest";
+import { en as hall } from "./ns/hall";
+import { en as member } from "./ns/member";
+import { en as backup } from "./ns/backup";
+import { en as admin } from "./ns/admin";
+import { en as storage } from "./ns/storage";
+import { en as entry } from "./ns/entry";
+
 export const en: Shape<typeof zh> = {
+  nav,
+  doc,
+  viewer,
+  library,
+  enroll,
+  review,
+  cut,
+  project,
+  report,
+  flex,
+  board,
+  thread,
+  task,
+  quest,
+  hall,
+  member,
+  backup,
+  admin,
+  storage,
+  entry,
   common: {
     language: "Language",
     save: "Save",
@@ -25,6 +66,21 @@ export const en: Shape<typeof zh> = {
     down: "↓ Down",
     yes: "Yes",
     no: "No",
+    listSep: ", ",
+    period: ".",
+    notFound: "Not found",
+    notFoundWhat: { page: "This page can't be found", project: "This project can't be found", cut: "This cut can't be found", member: "This member can't be found", doc: "This page can't be found" },
+    notFoundLead: "The link may be wrong, or it was deleted.",
+    backToHall: "Back to the hall",
+    colon: ": ",
+    quoteOpen: "“",
+    quoteClose: "”",
+    clauseSep: ", ",
+    nobody: "Nobody",
+    xpAria: "{points} points, Lv {level}",
+    points: "{points} pts",
+    maxLevel: "Max level",
+    nextLevel: "Next level at {next}",
     projects: "Projects",
     library: "Library",
   },
@@ -183,8 +239,14 @@ export const en: Shape<typeof zh> = {
     grain: { project: "One per project", cut: "One per cut", layer: "One per cut and layer" },
     unit: { sheet: "drawing", second: "s", cut: "cut", item: "item" },
     unitVideoCut: "episode",
-    taskStatus: { locked: "Locked", open: "Open", claimed: "Claimed", submitted: "In review", returned: "Returned", passed: "Passed", reclaimed: "Reclaimed" },
-    verdict: { pass: "Pass", return: "Return", fix_pass: "Fixed & passed" },
+    unitPlural: { sheet: "drawings", second: "s", cut: "cuts", item: "items" },
+    unitVideoCutPlural: "episodes",
+    cutLabel: { animation: "cut", video: "episode" },
+    cutLabelPlural: { animation: "cuts", video: "episodes" },
+    adminSet: " (set by admin)",
+    perUnits: "{per} {unit}",
+    taskStatus: { locked: "Locked", open: "Open", claimed: "Claimed", submitted: "In review", returned: "Sent back", passed: "Passed", reclaimed: "Reclaimed" },
+    verdict: { pass: "Passed", return: "Sent back", fix_pass: "Fixed & passed" },
     threadKind: { comment: "Comment", ask: "Question upstream", setting: "Settings question", todo: "To fix" },
     threadStatus: { open: "Open", answered: "Answered", ruled: "Ruled", done: "Fixed" },
     projectStatus: { zero: "Pre-start", active: "In progress", paused: "Paused", done: "Done" },
@@ -193,6 +255,7 @@ export const en: Shape<typeof zh> = {
     linkKind: { file: "File", folder: "Folder", sheet: "Spreadsheet", doc: "Document" },
     fileKind: { image: "Image", sheet: "Spreadsheet", pdf: "PDF", video: "Video", archive: "Archive", clip: "CLIP file", other: "File" },
     layer: "Layer {layer}",
+    layerShort: "{layer}",
     rate: "{tn} h / {per}",
   },
 };

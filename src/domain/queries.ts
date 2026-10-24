@@ -35,11 +35,13 @@ import type {
   TaskRow,
   TaskStatus,
   ThreadRow,
+  Verdict,
   WorldRow,
   WorldState,
 } from "./model";
 import { ACTIVE_STATUS, PHASE } from "./model";
-import { cutCode, fileNameFor, folderFor, taskLabel } from "./naming";
+import { EXTRA_KIND_TEXT, cutCode, cutCode2, fileNameFor, folderFor, stageParam, taskLabel, taskLabelP } from "./naming";
+import { phrase, phraseText, t2, uc, type Phrase, type Text2, type TextParam } from "./text";
 import { HOURS_PER_DAY, deadlineFactorOf, hoursOf, levelOf, rateFor, rewardOf, stageLocked, type LevelInfo } from "./rules";
 import { GROUPS, groupTemplate, type StageTemplate } from "./templates";
 import { isAdmin, isReviewer } from "./commands/core";
@@ -272,8 +274,11 @@ export interface TaskView {
   cut: CutRow | null;
   /** 「C009 · 中割 · B 层」 */
   label: string;
+  /** 两种语言的 label。 */
+  labelP: Phrase;
   /** 「安娜的旅程 · C009 · 中割 · B 层」 */
   title: string;
+  titleP: Phrase;
   statusLabel: string;
   assignee: MemberRow | null;
   /** 外包时的名字。 */
@@ -283,6 +288,7 @@ export interface TaskView {
   versionTag: string | null;
   /** 工作量的字：「20 张」。 */
   workloadLabel: string;
+  workloadP: Phrase;
 }
 
 export function workloadLabel(stage: StageRow, workload: number, group?: Group): string {
@@ -295,6 +301,15 @@ function groupUnitLabel(stage: StageRow, group?: Group): string {
   return { sheet: "张", second: "秒", cut: "卡", item: "项" }[stage.unit];
 }
 
+const UNIT_EN: Record<string, [string, string]> = { sheet: ["drawing", "drawings"], second: ["sec", "sec"], cut: ["cut", "cuts"], item: ["item", "items"], episode: ["episode", "episodes"] };
+
+/** 工作量（两种语言）：「20 张」/「20 drawings」。 */
+export function workloadP(stage: Pick<StageRow, "unit">, workload: number, group?: Group): Phrase {
+  const zh = group === "video" && stage.unit === "cut" ? "期" : { sheet: "张", second: "秒", cut: "卡", item: "项" }[stage.unit];
+  const [one, other] = UNIT_EN[group === "video" && stage.unit === "cut" ? "episode" : stage.unit];
+  return phrase(`{n} ${zh}`, `{n} {n|${one}|${other}}`, { n: Math.round(workload * 10) / 10 });
+}
+
 export function taskView(state: WorldState, task: TaskRow): TaskView | null {
   const idx = indexOf(state);
   const stage = idx.stageById.get(task.stageId);
@@ -302,6 +317,7 @@ export function taskView(state: WorldState, task: TaskRow): TaskView | null {
   if (!stage || !project) return null;
   const cut = task.cutId ? idx.cutById.get(task.cutId) ?? null : null;
   const label = taskLabel(stage, cut, task, project.group);
+  const labelP = taskLabelP(stage, cut, task, project.group);
   const subs = idx.subsByTask.get(task.id) ?? [];
   const latest = subs.length ? subs[subs.length - 1] : null;
   return {
@@ -310,13 +326,16 @@ export function taskView(state: WorldState, task: TaskRow): TaskView | null {
     project,
     cut,
     label,
+    labelP,
     title: `${project.name} · ${label}`,
+    titleP: phrase("{project} · {label}", "{project} · {label}", { project: uc(project.name), label: labelP }),
     statusLabel: TASK_STATUS_LABEL[task.status],
     assignee: task.assigneeId ? idx.memberById.get(task.assigneeId) ?? null : null,
     outsourceName: task.outsourced ? task.outsourceName : null,
     latest,
     versionTag: latest ? `v${String(latest.versionNo).padStart(2, "0")}` : null,
     workloadLabel: workloadLabel(stage, task.workload, project.group),
+    workloadP: workloadP(stage, task.workload, project.group),
   };
 }
 
@@ -527,7 +546,7 @@ export function gridOf(state: WorldState, projectId: Id, filter: GridFilter = "a
 
 export interface IndicatorSource {
   stage: StageRow;
-  tasks: { task: TaskRow; label: string; assignee: MemberRow | null; latest: SubmissionRow | null; folder: string }[];
+  tasks: { task: TaskRow; label: string; labelP: Phrase; assignee: MemberRow | null; latest: SubmissionRow | null; folder: string }[];
 }
 
 export interface Indicator {
@@ -559,6 +578,7 @@ export function indicatorOf(state: WorldState, taskId: Id): Indicator | null {
       return {
         task: t,
         label: taskLabel(g.stage, c, t, project.group),
+        labelP: taskLabelP(g.stage, c, t, project.group),
         assignee: t.assigneeId ? idx.memberById.get(t.assigneeId) ?? null : null,
         latest: subs[subs.length - 1] ?? null,
         folder: folderFor(project, g.stage, c),
@@ -638,18 +658,21 @@ export interface ReviewItem {
   waitingMs: number;
 }
 
-export function canReview(state: WorldState, memberId: Id, task: TaskRow): { ok: boolean; reason: string | null } {
+export function canReview(state: WorldState, memberId: Id, task: TaskRow): { ok: boolean; reason: string | null; reasonP: Phrase | null } {
+  const no = (ph: Phrase) => ({ ok: false, reason: phraseText(ph, "zh"), reasonP: ph });
   const me = memberById(state, memberId);
-  if (!isReviewer(me)) return { ok: false, reason: "只有审核员和管理员可以审核" };
-  if (task.status !== "submitted") return { ok: false, reason: "现在没有等审核的版本" };
+  if (!isReviewer(me)) return no(phrase("只有审核员和管理员可以审核", "Only reviewers and admins can review."));
+  if (task.status !== "submitted") return no(phrase("现在没有等审核的版本", "There's no version waiting for review."));
   const stage = stageById(state, task.stageId);
   const reviewerId = task.extra?.reviewerId ?? stage?.reviewerId ?? null;
   if (stage && reviewerId && reviewerId !== memberId && !isAdmin(me)) {
-    return { ok: false, reason: `「${task.extra ? task.extra.title : stage.name}」由${memberById(state, reviewerId)?.nickname ?? "指定的审核员"}审核` };
+    const nick = memberById(state, reviewerId)?.nickname;
+    const what = task.extra ? uc(task.extra.title) : stageParam(projectById(state, stage.projectId)?.group ?? "animation", stage);
+    return no(phrase("「{what}」由{who}审核", "“{what}” is reviewed by {who}.", { what, who: nick ? uc(nick) : t2("指定的审核员", "the assigned reviewer") }));
   }
   const subs = submissionsOf(state, task.id);
-  if (subs[subs.length - 1]?.byMemberId === memberId) return { ok: false, reason: "这一版是你交的，要别人来审" };
-  return { ok: true, reason: null };
+  if (subs[subs.length - 1]?.byMemberId === memberId) return no(phrase("这一版是你交的，要别人来审", "You submitted this version, so someone else has to review it."));
+  return { ok: true, reason: null, reasonP: null };
 }
 
 export function reviewItem(state: WorldState, task: TaskRow): ReviewItem | null {
@@ -777,6 +800,8 @@ export interface TimelineItem {
   task: TaskRow | null;
   stage: StageRow | null;
   text: string;
+  /** 两种语言的 text（用户写的放进 uc）。 */
+  phrase: Phrase;
   submission?: SubmissionRow;
   review?: ReviewRow;
   thread?: ThreadRow;
@@ -785,6 +810,12 @@ export interface TimelineItem {
   pin?: PinRow;
   seq: number;
 }
+
+const SOMEONE = t2("有人", "Someone");
+
+const THREAD_KIND_TEXT: Record<ThreadRow["kind"], Text2> = { comment: t2("意见", "comment"), ask: t2("提问上游", "question"), setting: t2("设定问题", "settings question"), todo: t2("要补", "to-do") };
+
+const VERDICT_TEXT: Record<Verdict, Text2> = { pass: t2("通过", "passed"), return: t2("退回", "sent back"), fix_pass: t2("自修后通过", "self-fixed and passed") };
 
 const JOURNAL_KIND: Record<string, TimelineKind> = {
   "task.claim": "claim",
@@ -802,15 +833,23 @@ export function timelineOfCut(state: WorldState, cutId: Id): TimelineItem[] {
   const cut = idx.cutById.get(cutId);
   if (!cut) return [];
   const project = idx.projectById.get(cut.projectId);
+  const group = project?.group ?? "animation";
   const tasks = [...(idx.tasksByCut.get(cutId) ?? []), ...(idx.extrasByCut.get(cutId) ?? [])];
   const taskIds = new Set(tasks.map((t) => t.id));
   const items: TimelineItem[] = [];
   const stageOfTask = (t: TaskRow | undefined) => (t ? idx.stageById.get(t.stageId) ?? null : null);
-  const name = (id: Id | null | undefined) => (id ? idx.memberById.get(id)?.nickname ?? "有人" : "有人");
-  const labelOf = (t: TaskRow) => {
-    const s = stageOfTask(t);
-    return s ? `${s.name}${t.layer ? ` ${t.layer} 层` : ""}` : "任务";
+  const name = (id: Id | null | undefined): TextParam => {
+    const m = id ? idx.memberById.get(id) : undefined;
+    return m ? uc(m.nickname) : SOMEONE;
   };
+  // 卡详情里不重复卡号：「中割 A 层」/「In-between Layer A」。
+  const labelOf = (t: TaskRow): TextParam => {
+    const s = stageOfTask(t);
+    if (!s) return t2("任务", "a task");
+    const st = stageParam(group, s);
+    return t.layer ? phrase("{stage} {layer} 层", "{stage} Layer {layer}", { stage: st, layer: t.layer }) : st;
+  };
+  const push = (item: Omit<TimelineItem, "text">) => items.push({ ...item, text: phraseText(item.phrase, "zh") });
   for (const e of state.journal) {
     const kind = JOURNAL_KIND[e.command];
     if (!kind) continue;
@@ -819,15 +858,23 @@ export function timelineOfCut(state: WorldState, cutId: Id): TimelineItem[] {
       const patch = ch.patch as Partial<TaskRow>;
       const prev = ch.prev as Partial<TaskRow>;
       const t = idx.taskById.get(ch.id)!;
-      let text: string | null = null;
-      if (kind === "claim" && patch.status === "claimed") text = patch.assigneeId ? `${name(patch.assigneeId)} 接了 ${labelOf(t)}` : `${labelOf(t)} 外包给 ${patch.outsourceName ?? "外包"}`;
-      else if (kind === "release" && patch.status === "open") text = e.actorMemberId === prev.assigneeId ? `${name(prev.assigneeId)} 放弃了 ${labelOf(t)}，回到可接` : `${name(e.actorMemberId)} 把 ${labelOf(t)} 从 ${name(prev.assigneeId)} 手上收回给大家`;
-      else if (kind === "expire") text = `${labelOf(t)} 超过时限没交，从 ${name(prev.assigneeId)} 手上收回到可接`;
-      else if (kind === "reclaim") text = `${name(e.actorMemberId)} 收回了 ${labelOf(t)}`;
-      else if (kind === "reopen") text = `${name(e.actorMemberId)} 重新放出了 ${labelOf(t)}`;
-      else if (kind === "dispatch") text = `${name(e.actorMemberId)} 派发了 ${labelOf(t)}（${formatNumber(patch.workload ?? t.workload)} ${groupUnitLabel(stageOfTask(t)!, project?.group)}）`;
-      if (!text) continue;
-      items.push({ key: `${e.id}:${ch.id}`, at: e.worldAt ?? e.createdAt, kind, memberId: e.actorMemberId, task: t, stage: stageOfTask(t), text, seq: e.seq });
+      const L = labelOf(t);
+      let ph: Phrase | null = null;
+      if (kind === "claim" && patch.status === "claimed")
+        ph = patch.assigneeId
+          ? phrase("{who} 接了 {task}", "{who} took {task}", { who: name(patch.assigneeId), task: L })
+          : phrase("{task} 外包给 {name}", "{task} outsourced to {name}", { task: L, name: patch.outsourceName ? uc(patch.outsourceName) : t2("外包", "an outsourcer") });
+      else if (kind === "release" && patch.status === "open")
+        ph =
+          e.actorMemberId === prev.assigneeId
+            ? phrase("{who} 放弃了 {task}，回到可接", "{who} gave up {task}; it's open again", { who: name(prev.assigneeId), task: L })
+            : phrase("{who} 把 {task} 从 {from} 手上收回给大家", "{who} took {task} back from {from} and opened it to everyone", { who: name(e.actorMemberId), task: L, from: name(prev.assigneeId) });
+      else if (kind === "expire") ph = phrase("{task} 超过时限没交，从 {from} 手上收回到可接", "{task} passed its deadline and was taken back from {from}; it's open again", { task: L, from: name(prev.assigneeId) });
+      else if (kind === "reclaim") ph = phrase("{who} 收回了 {task}", "{who} reclaimed {task}", { who: name(e.actorMemberId), task: L });
+      else if (kind === "reopen") ph = phrase("{who} 重新放出了 {task}", "{who} reopened {task}", { who: name(e.actorMemberId), task: L });
+      else if (kind === "dispatch") ph = phrase("{who} 派发了 {task}（{amount}）", "{who} dispatched {task} ({amount})", { who: name(e.actorMemberId), task: L, amount: workloadP(stageOfTask(t)!, patch.workload ?? t.workload, project?.group) });
+      if (!ph) continue;
+      push({ key: `${e.id}:${ch.id}`, at: e.worldAt ?? e.createdAt, kind, memberId: e.actorMemberId, task: t, stage: stageOfTask(t), phrase: ph, seq: e.seq });
     }
   }
   const seqOf = new Map<Id, number>();
@@ -836,47 +883,82 @@ export function timelineOfCut(state: WorldState, cutId: Id): TimelineItem[] {
   });
   for (const t of tasks) {
     for (const s of idx.subsByTask.get(t.id) ?? []) {
-      const who = s.byMemberId ? name(s.byMemberId) : t.outsourceName ?? "外包";
-      items.push({
+      const who = s.byMemberId ? name(s.byMemberId) : t.outsourceName ? uc(t.outsourceName) : t2("外包", "An outsourcer");
+      const v = `v${String(s.versionNo).padStart(2, "0")}`;
+      push({
         key: s.id,
         at: s.at,
         kind: "submit",
         memberId: s.byMemberId,
         task: t,
         stage: stageOfTask(t),
-        text: s.selfFix ? `${who} 自修出 v${String(s.versionNo).padStart(2, "0")}` : `${who} 交了 ${labelOf(t)} v${String(s.versionNo).padStart(2, "0")}${s.recordedById ? `（${name(s.recordedById)} 代交）` : ""}`,
+        phrase: s.selfFix
+          ? phrase("{who} 自修出 {v}", "{who} self-fixed {v}", { who, v })
+          : s.recordedById
+            ? phrase("{who} 交了 {task} {v}（{by} 代交）", "{who} submitted {task} {v} (entered by {by})", { who, task: labelOf(t), v, by: name(s.recordedById) })
+            : phrase("{who} 交了 {task} {v}", "{who} submitted {task} {v}", { who, task: labelOf(t), v }),
         submission: s,
         seq: seqOf.get(s.id) ?? 0,
       });
     }
     for (const r of idx.reviewsByTask.get(t.id) ?? []) {
-      const q = r.quality !== null ? `（质量 ${r.quality.toFixed(1)}）` : "";
-      items.push({ key: r.id, at: r.at, kind: "review", memberId: r.byMemberId, task: t, stage: stageOfTask(t), text: `${name(r.byMemberId)} ${VERDICT_LABEL[r.verdict]}了 ${labelOf(t)}${q}`, review: r, seq: seqOf.get(r.id) ?? 0 });
+      const base = { who: name(r.byMemberId), verdict: VERDICT_TEXT[r.verdict], task: labelOf(t) };
+      push({
+        key: r.id,
+        at: r.at,
+        kind: "review",
+        memberId: r.byMemberId,
+        task: t,
+        stage: stageOfTask(t),
+        phrase: r.quality !== null ? phrase("{who} {verdict}了 {task}（质量 {q}）", "{who} {verdict} {task} (quality {q})", { ...base, q: r.quality.toFixed(1) }) : phrase("{who} {verdict}了 {task}", "{who} {verdict} {task}", base),
+        review: r,
+        seq: seqOf.get(r.id) ?? 0,
+      });
     }
   }
   for (const th of idx.threads) {
     if (th.cutId !== cutId) continue;
     const t = th.subjectType === "task" ? idx.taskById.get(th.subjectId) ?? null : null;
     const stage = t ? stageOfTask(t) : null;
-    const text = th.kind === "todo" ? th.text : `${name(th.byMemberId)} ${th.kind === "ask" ? "提问" : th.kind === "setting" ? "提了设定问题" : "留了意见"}`;
-    items.push({ key: th.id, at: th.at, kind: "thread", memberId: th.byMemberId, task: t, stage, text, thread: th, seq: seqOf.get(th.id) ?? 0 });
+    const ph =
+      th.kind === "todo"
+        ? phrase("{text}", "{text}", { text: uc(th.text) })
+        : th.kind === "ask"
+          ? phrase("{who} 提问", "{who} asked a question", { who: name(th.byMemberId) })
+          : th.kind === "setting"
+            ? phrase("{who} 提了设定问题", "{who} raised a settings question", { who: name(th.byMemberId) })
+            : phrase("{who} 留了意见", "{who} left a comment", { who: name(th.byMemberId) });
+    push({ key: th.id, at: th.at, kind: "thread", memberId: th.byMemberId, task: t, stage, phrase: ph, thread: th, seq: seqOf.get(th.id) ?? 0 });
   }
   for (const f of idx.files) {
     if (f.cutId !== cutId) continue;
-    items.push({ key: f.id, at: f.at, kind: "file", memberId: f.byMemberId, task: null, stage: null, text: `${name(f.byMemberId)} 放了${f.width ? "图" : "文件"}「${f.name}」`, file: f, seq: seqOf.get(f.id) ?? 0 });
+    push({
+      key: f.id,
+      at: f.at,
+      kind: "file",
+      memberId: f.byMemberId,
+      task: null,
+      stage: null,
+      phrase: f.width ? phrase("{who} 放了图「{name}」", "{who} added the image “{name}”", { who: name(f.byMemberId), name: uc(f.name) }) : phrase("{who} 放了文件「{name}」", "{who} added the file “{name}”", { who: name(f.byMemberId), name: uc(f.name) }),
+      file: f,
+      seq: seqOf.get(f.id) ?? 0,
+    });
   }
   for (const p of idx.pins) {
     if (p.cutId !== cutId) continue;
     const f = idx.fileById.get(p.fileId);
     const t = p.taskId ? idx.taskById.get(p.taskId) ?? null : null;
-    items.push({
+    const params = { who: name(p.byMemberId), file: f ? uc(f.name) : t2("图", "an image"), n: p.number };
+    const zh = `{who} 在「{file}」上${p.kind === "box" ? "框了" : "钉了"} #{n}${p.reviewTaskId ? "（审核退回时）" : ""}`;
+    const en = `{who} ${p.kind === "box" ? "boxed" : "pinned"} #{n} on “{file}”${p.reviewTaskId ? " (when sending it back)" : ""}`;
+    push({
       key: p.id,
       at: p.at,
       kind: "pin",
       memberId: p.byMemberId,
       task: t,
       stage: stageOfTask(t ?? undefined),
-      text: `${name(p.byMemberId)} 在「${f?.name ?? "图"}」上${p.kind === "box" ? "框了" : "钉了"} #${p.number}${p.reviewTaskId ? "（审核退回时）" : ""}`,
+      phrase: phrase(zh, en, params),
       file: f,
       pin: p,
       seq: seqOf.get(p.id) ?? 0,
@@ -895,6 +977,7 @@ export interface ThreadView {
   cut: CutRow | null;
   /** 「安娜的旅程 · C011」 */
   where: string;
+  whereP: Phrase;
   by: MemberRow | null;
   kindLabel: string;
 }
@@ -907,9 +990,17 @@ export function threadView(state: WorldState, thread: ThreadRow): ThreadView {
     project,
     cut,
     where: [project?.name, cut ? cutCode(cut, project?.group) : null].filter(Boolean).join(" · "),
+    whereP: threadWhereP(project, cut),
     by: memberById(state, thread.byMemberId) ?? null,
     kindLabel: THREAD_KIND_LABEL[thread.kind],
   };
+}
+
+function threadWhereP(project: ProjectRow | null, cut: CutRow | null): Phrase {
+  if (project && cut) return phrase("{project} · {cut}", "{project} · {cut}", { project: uc(project.name), cut: cutCode2(cut, project.group) });
+  if (project) return phrase("{project}", "{project}", { project: uc(project.name) });
+  if (cut) return phrase("{cut}", "{cut}", { cut: cutCode2(cut) });
+  return phrase("", "");
 }
 
 export interface Inbox {
@@ -1011,184 +1102,259 @@ export interface FeedItem {
   at: IsoDateTime;
   memberId: Id | null;
   text: string;
+  phrase: Phrase;
 }
 
 function p0(p: Record<string, unknown>): Id {
   return String(p.pinId ?? "");
 }
 
-function taskShort(state: WorldState, id: unknown): string {
+function taskShort(state: WorldState, id: unknown): TextParam {
   const v = typeof id === "string" ? taskViewById(state, id) : null;
-  return v ? `${v.project.code} ${v.label}` : "一张任务";
+  return v ? phrase("{code} {label}", "{code} {label}", { code: v.project.code, label: v.labelP }) : t2("一张任务", "a task");
 }
 
-export function feedText(state: WorldState, e: JournalEntry): string | null {
-  const who = memberById(state, e.actorMemberId)?.nickname ?? "有人";
+function whoOf(state: WorldState, id: Id | null | undefined): TextParam {
+  const m = id ? memberById(state, id) : undefined;
+  return m ? uc(m.nickname) : SOMEONE;
+}
+
+function memberP(state: WorldState, id: unknown): TextParam {
+  const m = typeof id === "string" ? memberById(state, id) : undefined;
+  return m ? uc(m.nickname) : t2("成员", "a member");
+}
+
+function stageP(state: WorldState, id: unknown, fallback: Text2 = t2("环节", "a stage")): TextParam {
+  const st = typeof id === "string" ? stageById(state, id) : undefined;
+  if (!st) return fallback;
+  return stageParam(projectById(state, st.projectId)?.group ?? "animation", st);
+}
+
+function templateStageP(group: Group, key: unknown): TextParam {
+  const t = groupTemplate(group).stages.find((x) => x.key === key);
+  return t ? stageParam(group, { templateKey: t.key, name: t.name }) : t2("环节", "a stage");
+}
+
+function projectP(state: WorldState, id: unknown, fallback: unknown = ""): TextParam {
+  const pr = typeof id === "string" ? projectById(state, id) : undefined;
+  return uc(pr?.name ?? String(fallback ?? ""));
+}
+
+function cutP(state: WorldState, id: unknown): TextParam {
+  const c = typeof id === "string" ? state.cuts[id] : undefined;
+  return c ? cutCode2(c, projectById(state, c.projectId)?.group) : t2("一卡", "a cut");
+}
+
+const vOf = (n: number) => `v${String(n).padStart(2, "0")}`;
+
+/** 工会动态的一句（两种语言；名字、标题这些用户写的放进 uc）。 */
+export function feedPhrase(state: WorldState, e: JournalEntry): Phrase | null {
+  const who = whoOf(state, e.actorMemberId);
   const p = (e.payload ?? {}) as Record<string, unknown>;
   const created = e.created ?? {};
+  const P = (zh: string, en: string, params: Record<string, TextParam> = {}) => phrase(zh, en, { who, ...params });
   switch (e.command) {
     case "guild.create":
-      return `${who} 建了工会`;
+      return P("{who} 建了工会", "{who} created the guild");
     case "member.join":
-      return `${who} 把 ${String(p.nickname ?? "")} 加进了工会`;
+      return P("{who} 把 {name} 加进了工会", "{who} added {name} to the guild", { name: uc(String(p.nickname ?? "")) });
     case "member.set_role":
-      return `${who} 改了 ${memberById(state, p.memberId as Id)?.nickname ?? "成员"} 的角色`;
+      return P("{who} 改了 {name} 的角色", "{who} changed {name}'s role", { name: memberP(state, p.memberId) });
     case "enroll.add": {
-      const project = Object.values(GROUPS).find((g) => g.key === p.group);
-      const stage = project?.stages.find((s) => s.key === p.stageKey);
-      const got = created.taskId ? `，拿到 ${taskShort(state, created.taskId)}` : "";
-      return `${who} 报到了「${stage?.name ?? "环节"}」${got}`;
+      const stage = templateStageP((p.group as Group) ?? "animation", p.stageKey);
+      return created.taskId
+        ? P("{who} 报到了「{stage}」，拿到 {task}", "{who} signed up for “{stage}” and got {task}", { stage, task: taskShort(state, created.taskId) })
+        : P("{who} 报到了「{stage}」", "{who} signed up for “{stage}”", { stage });
     }
     case "task.claim":
-      return `${who} 接了 ${taskShort(state, created.taskId ?? p.taskId)}`;
+      return P("{who} 接了 {task}", "{who} took {task}", { task: taskShort(state, created.taskId ?? p.taskId) });
     case "task.submit": {
       const sub = created.submissionId ? state.submissions[created.submissionId] : undefined;
-      return `${who} 交了 ${taskShort(state, p.taskId)}${sub ? ` v${String(sub.versionNo).padStart(2, "0")}` : ""}`;
+      return sub
+        ? P("{who} 交了 {task} {v}", "{who} submitted {task} {v}", { task: taskShort(state, p.taskId), v: vOf(sub.versionNo) })
+        : P("{who} 交了 {task}", "{who} submitted {task}", { task: taskShort(state, p.taskId) });
     }
     case "task.review": {
       const r = created.reviewId ? state.reviews[created.reviewId] : undefined;
-      const q = r?.quality ? `（质量 ${r.quality.toFixed(1)}）` : "";
-      return `${who} ${VERDICT_LABEL[(p.verdict as "pass") ?? "pass"] ?? "审核"}了 ${taskShort(state, p.taskId)}${q}`;
+      const verdict = VERDICT_TEXT[(p.verdict as Verdict) ?? "pass"] ?? t2("审核", "reviewed");
+      const task = taskShort(state, p.taskId);
+      return r?.quality
+        ? P("{who} {verdict}了 {task}（质量 {q}）", "{who} {verdict} {task} (quality {q})", { verdict, task, q: r.quality.toFixed(1) })
+        : P("{who} {verdict}了 {task}", "{who} {verdict} {task}", { verdict, task });
     }
     case "task.release":
-      return `${who} 放弃了 ${taskShort(state, p.taskId)}`;
+      return P("{who} 放弃了 {task}", "{who} gave up {task}", { task: taskShort(state, p.taskId) });
     case "task.expire":
-      return `${taskShort(state, p.taskId)} 超时，收回到可接`;
+      return P("{task} 超时，收回到可接", "{task} ran past its deadline and is open again", { task: taskShort(state, p.taskId) });
     case "task.reclaim":
-      return `${who} 收回了 ${taskShort(state, p.taskId)}`;
+      return P("{who} 收回了 {task}", "{who} reclaimed {task}", { task: taskShort(state, p.taskId) });
     case "task.reopen":
-      return Array.isArray(p.comments) && p.comments.length ? `${who} 把 ${taskShort(state, p.taskId)} 打回重做` : `${who} 重新放出了 ${taskShort(state, p.taskId)}`;
+      return Array.isArray(p.comments) && p.comments.length
+        ? P("{who} 把 {task} 打回重做", "{who} sent {task} back for a redo", { task: taskShort(state, p.taskId) })
+        : P("{who} 重新放出了 {task}", "{who} reopened {task}", { task: taskShort(state, p.taskId) });
     case "task.assign": {
       const ids = Array.isArray(p.taskIds) && p.taskIds.length ? (p.taskIds as Id[]) : [p.taskId as Id];
-      const what = ids.length > 1 ? `${taskShort(state, ids[0])} 等 ${ids.length} 张` : taskShort(state, ids[0]);
-      return `${who} 把 ${what} 派给了 ${p.memberId ? memberById(state, p.memberId as Id)?.nickname ?? "成员" : `外包（${String(p.outsourceName ?? "")}）`}`;
+      const what = ids.length > 1 ? phrase("{task} 等 {n} 张", "{task} and {more} more", { task: taskShort(state, ids[0]), n: ids.length, more: ids.length - 1 }) : taskShort(state, ids[0]);
+      const to = p.memberId ? memberP(state, p.memberId) : phrase("外包（{name}）", "an outsourcer ({name})", { name: uc(String(p.outsourceName ?? "")) });
+      return P("{who} 把 {what} 派给了 {to}", "{who} assigned {what} to {to}", { what, to });
     }
     case "task.publish": {
       const t = created.taskId ? state.tasks[created.taskId] : undefined;
-      const stage = t ? stageById(state, t.stageId) : undefined;
       if (!t?.extra) return null;
-      const kind = { extra: "额外任务", fix: "修正", setting: "补设定" }[t.extra.kind];
-      const to = t.assigneeId ? `，派给 ${memberById(state, t.assigneeId)?.nickname ?? "成员"}` : "，等人认领";
-      return `${who} 在「${stage?.name ?? "环节"}」发了一张${kind}：${t.extra.title}${to}`;
+      const params = { stage: stageP(state, t.stageId), kind: EXTRA_KIND_TEXT[t.extra.kind], title: uc(t.extra.title), to: t.assigneeId ? memberP(state, t.assigneeId) : null };
+      return t.assigneeId
+        ? P("{who} 在「{stage}」发了一张{kind}：{title}，派给 {to}", "{who} posted a new {kind} on “{stage}”: {title}, assigned to {to}", params)
+        : P("{who} 在「{stage}」发了一张{kind}：{title}，等人认领", "{who} posted a new {kind} on “{stage}”: {title}, open to claim", params);
     }
     case "role.assign":
     case "role.unassign": {
-      const name = groupTemplate((p.group as Group) ?? "animation").stages.find((s) => s.key === p.stageKey)?.name ?? "环节";
-      const m = memberById(state, p.memberId as Id)?.nickname ?? "成员";
-      return e.command === "role.assign" ? `${who} 给 ${m} 指派了职位「${name}」` : `${who} 撤掉了 ${m} 的职位「${name}」`;
+      const params = { name: memberP(state, p.memberId), stage: templateStageP((p.group as Group) ?? "animation", p.stageKey) };
+      return e.command === "role.assign"
+        ? P("{who} 给 {name} 指派了职位「{stage}」", "{who} assigned {name} to “{stage}”", params)
+        : P("{who} 撤掉了 {name} 的职位「{stage}」", "{who} removed {name} from “{stage}”", params);
     }
     case "stage.set_lock":
-      return `${who} 把「${stageById(state, p.stageId as Id)?.name ?? "环节"}」${p.locked ? "锁成只给指派的人" : "放开给大家认领"}`;
+      return p.locked
+        ? P("{who} 把「{stage}」锁成只给指派的人", "{who} locked “{stage}” to assigned people", { stage: stageP(state, p.stageId) })
+        : P("{who} 把「{stage}」放开给大家认领", "{who} opened “{stage}” for anyone to claim", { stage: stageP(state, p.stageId) });
     case "stage.set_period":
-      return `${who} 改了「${stageById(state, p.stageId as Id)?.name ?? "环节"}」的计划周期（第 ${String(p.startWeek)} 周起，${String(p.weeks)} 周）`;
+      return P("{who} 改了「{stage}」的计划周期（第 {w} 周起，{n} 周）", "{who} changed the planned schedule of “{stage}” (from week {w}, {n} {n|week|weeks})", { stage: stageP(state, p.stageId), w: String(p.startWeek), n: Number(p.weeks) });
     case "link.mark_broken": {
       const sub = state.submissions[p.submissionId as Id];
-      return sub ? `${who} 标了 ${taskShort(state, sub.taskId)} v${String(sub.versionNo).padStart(2, "0")} 的一条链接「打不开」` : null;
+      return sub ? P("{who} 标了 {task} {v} 的一条链接「打不开」", "{who} marked a link on {task} {v} as broken", { task: taskShort(state, sub.taskId), v: vOf(sub.versionNo) }) : null;
     }
     case "link.replace": {
       const sub = state.submissions[p.submissionId as Id];
-      return sub ? `${who} 换了 ${taskShort(state, sub.taskId)} v${String(sub.versionNo).padStart(2, "0")} 的一条链接` : null;
+      return sub ? P("{who} 换了 {task} {v} 的一条链接", "{who} replaced a link on {task} {v}", { task: taskShort(state, sub.taskId), v: vOf(sub.versionNo) }) : null;
     }
     case "project.draft":
-      return `${who} 建了项目「${projectById(state, created.projectId)?.name ?? String(p.name ?? "")}」（零日）`;
+      return P("{who} 建了项目「{project}」（零日）", "{who} created the project “{project}” (pre-start)", { project: projectP(state, created.projectId, p.name) });
     case "project.set_structure": {
-      const s = p.structure as { episodes?: number; scenesPerEpisode?: number; cutsPerScene?: number } | undefined;
-      const n = (s?.episodes ?? 1) * (s?.scenesPerEpisode ?? 1) * (s?.cutsPerScene ?? 0);
-      return `${who} 改了「${projectById(state, p.projectId as Id)?.name ?? ""}」的结构（${n} 卡）`;
+      const st = p.structure as { episodes?: number; scenesPerEpisode?: number; cutsPerScene?: number } | undefined;
+      const n = (st?.episodes ?? 1) * (st?.scenesPerEpisode ?? 1) * (st?.cutsPerScene ?? 0);
+      return P("{who} 改了「{project}」的结构（{n} 卡）", "{who} changed the structure of “{project}” ({n} {n|cut|cuts})", { project: projectP(state, p.projectId), n });
     }
     case "project.start":
-      return `${who} 让「${projectById(state, p.projectId as Id)?.name ?? ""}」开工了`;
+      return P("{who} 让「{project}」开工了", "{who} started “{project}”", { project: projectP(state, p.projectId) });
     case "project.extend":
-      return `${who} 把「${projectById(state, p.projectId as Id)?.name ?? ""}」的计划结束改到 ${String(p.until ?? "")}`;
+      return P("{who} 把「{project}」的计划结束改到 {date}", "{who} moved the planned end of “{project}” to {date}", { project: projectP(state, p.projectId), date: String(p.until ?? "") });
     case "staff.set": {
       const proj = projectById(state, p.projectId as Id);
       const pos = proj?.staff?.find((x) => x.key === p.positionKey);
-      const name = pos?.custom?.name ?? positionTemplate(proj?.template, String(p.positionKey))?.name.zh ?? "职位";
-      return `${who} 改了人员表「${name}」`;
+      const tpl = positionTemplate(proj?.template, String(p.positionKey));
+      const name: TextParam = pos?.custom ? uc(pos.custom.name) : tpl ? tpl.name : t2("职位", "a position");
+      return P("{who} 改了人员表「{name}」", "{who} updated “{name}” in the staff list", { name });
     }
     case "staff.add_position":
-      return `${who} 在人员表里加了职位「${String(p.name ?? "")}」`;
-    case "stage.add":
-      return `${who} 加了环节「${String(p.name ?? "")}」${p.afterKey ? `，接在「${stagesOf(state, p.projectId as Id).find((s) => s.templateKey === p.afterKey)?.name ?? ""}」后面` : ""}`;
+      return P("{who} 在人员表里加了职位「{name}」", "{who} added the position “{name}” to the staff list", { name: uc(String(p.name ?? "")) });
+    case "stage.add": {
+      const after = p.afterKey ? stagesOf(state, p.projectId as Id).find((x) => x.templateKey === p.afterKey) : undefined;
+      const group = projectById(state, p.projectId as Id)?.group ?? "animation";
+      return p.afterKey
+        ? P("{who} 加了环节「{name}」，接在「{after}」后面", "{who} added the stage “{name}” after “{after}”", { name: uc(String(p.name ?? "")), after: after ? stageParam(group, after) : "" })
+        : P("{who} 加了环节「{name}」", "{who} added the stage “{name}”", { name: uc(String(p.name ?? "")) });
+    }
     case "stage.update":
-      return `${who} 改了环节「${stageById(state, p.stageId as Id)?.name ?? ""}」`;
+      return P("{who} 改了环节「{stage}」", "{who} edited the stage “{stage}”", { stage: stageP(state, p.stageId, t2("", "")) });
     case "stage.move":
-      return `${who} 把环节「${stageById(state, p.stageId as Id)?.name ?? ""}」${p.direction === "up" ? "往前" : "往后"}挪了`;
-    case "stage.remove":
-      return `${who} 删了环节「${state.stages[p.stageId as Id]?.name ?? ""}」`;
+      return p.direction === "up"
+        ? P("{who} 把环节「{stage}」往前挪了", "{who} moved the stage “{stage}” earlier", { stage: stageP(state, p.stageId, t2("", "")) })
+        : P("{who} 把环节「{stage}」往后挪了", "{who} moved the stage “{stage}” later", { stage: stageP(state, p.stageId, t2("", "")) });
+    case "stage.remove": {
+      const st = state.stages[p.stageId as Id];
+      return P("{who} 删了环节「{stage}」", "{who} deleted the stage “{stage}”", { stage: st ? stageParam(projectById(state, st.projectId)?.group ?? "animation", st) : "" });
+    }
     case "stage.disable":
-      return `${who} ${p.disabled ? "停用" : "重新启用"}了环节「${stageById(state, p.stageId as Id)?.name ?? ""}」`;
+      return p.disabled
+        ? P("{who} 停用了环节「{stage}」", "{who} disabled the stage “{stage}”", { stage: stageP(state, p.stageId, t2("", "")) })
+        : P("{who} 重新启用了环节「{stage}」", "{who} re-enabled the stage “{stage}”", { stage: stageP(state, p.stageId, t2("", "")) });
     case "stage.accept":
-      return `${who} 验收通过了「${stageById(state, p.stageId as Id)?.name ?? ""}」`;
+      return P("{who} 验收通过了「{stage}」", "{who} accepted “{stage}”", { stage: stageP(state, p.stageId, t2("", "")) });
     case "stage.extend":
-      return `${who} 给「${stageById(state, p.stageId as Id)?.name ?? ""}」在做的任务延期${extendText(p)}`;
+      return P("{who} 给「{stage}」在做的任务延期{by}", "{who} extended the tasks in progress in “{stage}”{by}", { stage: stageP(state, p.stageId, t2("", "")), by: extendP(p) });
     case "task.extend":
-      return `${who} 给 ${taskShort(state, p.taskId)} 延期${extendText(p)}`;
+      return P("{who} 给 {task} 延期{by}", "{who} extended {task}{by}", { task: taskShort(state, p.taskId), by: extendP(p) });
     case "cut.add": {
-      const after = p.afterCutId ? state.cuts[p.afterCutId as Id] : undefined;
-      return `${who} 加了 ${String(p.count ?? 1)} 卡${after ? `（插在 ${cutName(state, after)} 后面）` : ""}`;
+      const n = Number(p.count ?? 1);
+      return p.afterCutId && state.cuts[p.afterCutId as Id]
+        ? P("{who} 加了 {n} 卡（插在 {cut} 后面）", "{who} added {n} {n|cut|cuts} (after {cut})", { n, cut: cutP(state, p.afterCutId) })
+        : P("{who} 加了 {n} 卡", "{who} added {n} {n|cut|cuts}", { n });
     }
     case "cut.update":
-      return `${who} 改了 ${state.cuts[p.cutId as Id] ? cutName(state, state.cuts[p.cutId as Id]) : "一卡"}（层 / 张数 / 秒数）`;
+      return P("{who} 改了 {cut}（层 / 张数 / 秒数）", "{who} edited {cut} (layers / drawings / seconds)", { cut: cutP(state, p.cutId) });
     case "cut.archive":
-      return `${who} 停用了 ${state.cuts[p.cutId as Id] ? cutName(state, state.cuts[p.cutId as Id]) : "一卡"}`;
+      return P("{who} 停用了 {cut}", "{who} disabled {cut}", { cut: cutP(state, p.cutId) });
     case "stage.set_rate":
-      return `${who} 改了「${stageById(state, p.stageId as Id)?.name ?? "环节"}」的时限参数`;
+      return P("{who} 改了「{stage}」的时限参数", "{who} changed the deadline settings of “{stage}”", { stage: stageP(state, p.stageId) });
     case "project.create":
-      return `${who} 开了项目「${projectById(state, created.projectId)?.name ?? String(p.name ?? "")}」`;
+      return P("{who} 开了项目「{project}」", "{who} started the project “{project}”", { project: projectP(state, created.projectId, p.name) });
     case "project.update":
-      return `${who} 改了项目「${projectById(state, p.projectId as Id)?.name ?? ""}」`;
+      return P("{who} 改了项目「{project}」", "{who} edited the project “{project}”", { project: projectP(state, p.projectId) });
     case "hub.dispatch": {
-      const hub = stageById(state, p.hubStageId as Id);
       const n = (Array.isArray(p.rows) ? p.rows.length : 0) + (Array.isArray(p.add) ? p.add.length : 0);
-      return `${who} 在「${hub?.name ?? "枢纽"}」派发了 ${n} 张任务`;
+      return P("{who} 在「{stage}」派发了 {n} 张任务", "{who} dispatched {n} {n|task|tasks} from “{stage}”", { stage: stageP(state, p.hubStageId, t2("枢纽", "a hub")), n });
     }
     case "thread.open": {
       const t = created.threadId ? state.threads[created.threadId] : undefined;
       if (!t) return null;
-      const v = threadView(state, t);
-      return `${who} 在 ${v.where} ${t.kind === "ask" ? "提问" : t.kind === "setting" ? "提了设定问题" : "留了意见"}`;
+      const where = threadView(state, t).whereP;
+      if (t.kind === "ask") return P("{who} 在 {where} 提问", "{who} asked a question on {where}", { where });
+      if (t.kind === "setting") return P("{who} 在 {where} 提了设定问题", "{who} raised a settings question on {where}", { where });
+      return P("{who} 在 {where} 留了意见", "{who} left a comment on {where}", { where });
     }
     case "thread.reply": {
       const t = state.threads[p.threadId as Id];
-      return t ? `${who} 回复了 ${threadView(state, t).where} 的${THREAD_KIND_LABEL[t.kind]}` : null;
+      return t ? P("{who} 回复了 {where} 的{kind}", "{who} replied to a {kind} on {where}", { where: threadView(state, t).whereP, kind: THREAD_KIND_TEXT[t.kind] }) : null;
     }
     case "ruling.make":
-      return `${who} 拍板：${String(p.decision ?? "")}`;
+      return P("{who} 拍板：{decision}", "{who} ruled: {decision}", { decision: uc(String(p.decision ?? "")) });
     case "template.set_rate":
-      return `${who} 改了「${groupTemplate((p.group as Group) ?? "animation").stages.find((s) => s.key === p.stageKey)?.name ?? "环节"}」的工时`;
+      return P("{who} 改了「{stage}」的工时", "{who} changed the hours for “{stage}”", { stage: templateStageP((p.group as Group) ?? "animation", p.stageKey) });
     case "rules.set":
-      return `${who} 改了工会规则`;
+      return P("{who} 改了工会规则", "{who} changed the guild rules");
     case "file.add": {
       const f = created.fileId ? state.files[created.fileId] : undefined;
-      return f ? `${who} 放了${f.width ? "图" : "文件"}「${f.name}」` : null;
+      if (!f) return null;
+      return f.width ? P("{who} 放了图「{name}」", "{who} added the image “{name}”", { name: uc(f.name) }) : P("{who} 放了文件「{name}」", "{who} added the file “{name}”", { name: uc(f.name) });
     }
     case "pin.add": {
       const pin = created.pinId ? state.pins[created.pinId] : undefined;
-      const f = pin ? state.files[pin.fileId] : undefined;
-      return pin ? `${who} 在「${f?.name ?? "图"}」上${pin.kind === "box" ? "框了" : "钉了"} #${pin.number}：${pin.text}` : null;
+      if (!pin) return null;
+      const f = state.files[pin.fileId];
+      const params = { file: f ? uc(f.name) : t2("图", "an image"), n: pin.number, text: uc(pin.text) };
+      return pin.kind === "box" ? P("{who} 在「{file}」上框了 #{n}：{text}", "{who} boxed #{n} on “{file}”: {text}", params) : P("{who} 在「{file}」上钉了 #{n}：{text}", "{who} pinned #{n} on “{file}”: {text}", params);
     }
     case "pin.reply": {
       const pin = state.pins[p0(p)];
-      return pin ? `${who} 回复了 #${pin.number}（${state.files[pin.fileId]?.name ?? "图"}）` : null;
+      return pin ? P("{who} 回复了 #{n}（{file}）", "{who} replied to #{n} ({file})", { n: pin.number, file: state.files[pin.fileId] ? uc(state.files[pin.fileId].name) : t2("图", "image") }) : null;
     }
     case "pin.resolve": {
       const pin = state.pins[p0(p)];
-      return pin ? `${who} 解决了 #${pin.number}（${state.files[pin.fileId]?.name ?? "图"}）` : null;
+      return pin ? P("{who} 解决了 #{n}（{file}）", "{who} resolved #{n} ({file})", { n: pin.number, file: state.files[pin.fileId] ? uc(state.files[pin.fileId].name) : t2("图", "image") }) : null;
     }
     case "page.create":
-      return `${who} 建了资料页「${String(p.title ?? "")}」`;
+      return P("{who} 建了资料页「{title}」", "{who} created the page “{title}”", { title: uc(String(p.title ?? "")) });
     case "stage.set_reviewer":
-      return `${who} 指定了「${stageById(state, p.stageId as Id)?.name ?? "环节"}」的审核员`;
+      return P("{who} 指定了「{stage}」的审核员", "{who} set the reviewer for “{stage}”", { stage: stageP(state, p.stageId) });
     default:
       return null;
   }
 }
 
-function extendText(p: Record<string, unknown>): string {
-  if (p.until) return `到 ${String(p.until)}`;
-  const parts = [p.days ? `${String(p.days)} 天` : null, p.hours ? `${String(p.hours)} 小时` : null].filter(Boolean);
-  return parts.length ? ` ${parts.join(" ")}` : "";
+export function feedText(state: WorldState, e: JournalEntry): string | null {
+  const ph = feedPhrase(state, e);
+  return ph ? phraseText(ph, "zh") : null;
+}
+
+/** 延期的量：「 2 天 3 小时」「到 2026-11-02」/「 by 2 days 3 h」「 to 2026-11-02」。 */
+function extendP(p: Record<string, unknown>): Phrase {
+  if (p.until) return phrase("到 {d}", " to {d}", { d: String(p.until) });
+  const days = Number(p.days) || 0;
+  const hours = Number(p.hours) || 0;
+  if (days && hours) return phrase(" {d} 天 {h} 小时", " by {d} {d|day|days} {h} h", { d: days, h: hours });
+  if (days) return phrase(" {d} 天", " by {d} {d|day|days}", { d: days });
+  if (hours) return phrase(" {h} 小时", " by {h} h", { h: hours });
+  return phrase("", "");
 }
 
 /** 改项目的那些命令（项目时间线上列出来）。 */
@@ -1228,6 +1394,7 @@ export interface ProjectTimelineItem {
   command: string;
   memberId: Id | null;
   text: string;
+  phrase: Phrase;
   /** 为什么（延期、停用、加卡时写的原因）。 */
   reason: string | null;
 }
@@ -1250,13 +1417,14 @@ export function projectTimeline(state: WorldState, projectId: Id): ProjectTimeli
     if (!PROJECT_COMMANDS.has(e.command)) continue;
     if (e.command === "task.reopen" && !(Array.isArray((e.payload as { comments?: unknown[] })?.comments) && (e.payload as { comments: unknown[] }).comments.length)) continue;
     if (projectOfEntry(state, e) !== projectId) continue;
-    const text = feedText(state, e);
-    if (!text) continue;
+    const ph = feedPhrase(state, e);
+    if (!ph) continue;
+    const text = phraseText(ph, "zh");
     const p = (e.payload ?? {}) as Record<string, unknown>;
     // 打回重做的「为什么」= 写的意见。
     const comments = Array.isArray(p.comments) ? (p.comments as { text?: unknown }[]).map((c) => (typeof c?.text === "string" ? c.text.trim() : "")).filter(Boolean) : [];
     const reason = typeof p.reason === "string" && p.reason.trim() ? p.reason.trim() : comments.length ? comments.join("；") : null;
-    out.push({ key: e.id, seq: e.seq, at: e.worldAt ?? e.createdAt, command: e.command, memberId: e.actorMemberId, text, reason });
+    out.push({ key: e.id, seq: e.seq, at: e.worldAt ?? e.createdAt, command: e.command, memberId: e.actorMemberId, text, phrase: ph, reason });
   }
   return out.reverse();
 }
@@ -1268,8 +1436,8 @@ export function feedOf(state: WorldState, limit = 12): FeedItem[] {
   const out: FeedItem[] = [];
   for (const { e } of order) {
     if (out.length >= limit) break;
-    const text = feedText(state, e);
-    if (text) out.push({ entry: e, at: e.worldAt ?? e.createdAt, memberId: e.actorMemberId, text });
+    const ph = feedPhrase(state, e);
+    if (ph) out.push({ entry: e, at: e.worldAt ?? e.createdAt, memberId: e.actorMemberId, text: phraseText(ph, "zh"), phrase: ph });
   }
   return out;
 }
@@ -1458,32 +1626,39 @@ export interface FileView {
   uploader: MemberRow | null;
   /** 挂在哪：「C005 · 上色 · A 层 v04」「资料库」「资料页「设定集」」。 */
   where: string;
+  whereP: Phrase;
   cut: CutRow | null;
   pins: { open: number; total: number };
 }
 
 export function fileWhere(state: WorldState, f: FileRow): string {
+  return phraseText(fileWhereP(state, f), "zh");
+}
+
+export function fileWhereP(state: WorldState, f: FileRow): Phrase {
   const idx = indexOf(state);
   const project = idx.projectById.get(f.projectId);
   switch (f.subjectType) {
     case "project":
-      return "资料库";
+      return phrase("资料库", "Library");
     case "cut": {
       const c = idx.cutById.get(f.subjectId);
-      return c ? cutCode(c, project?.group) : "卡";
+      return c ? phrase("{cut}", "{cut}", { cut: cutCode2(c, project?.group) }) : phrase("卡", "Cut");
     }
-    case "task":
-      return taskViewById(state, f.subjectId)?.label ?? "任务";
+    case "task": {
+      const v = taskViewById(state, f.subjectId);
+      return v ? v.labelP : phrase("任务", "Task");
+    }
     case "submission": {
       const sub = state.submissions[f.subjectId];
       const v = sub ? taskViewById(state, sub.taskId) : null;
-      return v ? `${v.label} v${String(sub.versionNo).padStart(2, "0")}` : "版本";
+      return v ? phrase("{label} {v}", "{label} {v}", { label: v.labelP, v: vOf(sub.versionNo) }) : phrase("版本", "Version");
     }
     case "page":
-      return `资料页「${state.pages[f.subjectId]?.title ?? ""}」`;
+      return phrase("资料页「{title}」", "Page “{title}”", { title: uc(state.pages[f.subjectId]?.title ?? "") });
     case "thread": {
       const t = state.threads[f.subjectId];
-      return t ? `${THREAD_KIND_LABEL[t.kind]}里` : "意见里";
+      return t ? phrase("{kind}里", "In a {kind}", { kind: THREAD_KIND_TEXT[t.kind] }) : phrase("意见里", "In a comment");
     }
   }
 }
@@ -1498,6 +1673,7 @@ export function fileView(state: WorldState, f: FileRow): FileView {
     kindLabel: FILE_KIND_LABEL[kind],
     uploader: idx.memberById.get(f.byMemberId) ?? null,
     where: fileWhere(state, f),
+    whereP: fileWhereP(state, f),
     cut: f.cutId ? idx.cutById.get(f.cutId) ?? null : null,
     pins: { open: pins.filter((p) => p.status === "open").length, total: pins.length },
   };
@@ -1574,13 +1750,15 @@ export interface PinView {
   by: MemberRow | null;
   /** 「安娜的旅程 · C005 · 上色 A 层 v04」 */
   where: string;
+  whereP: Phrase;
 }
 
 export function pinView(state: WorldState, pin: PinRow): PinView | null {
   const f = indexOf(state).fileById.get(pin.fileId);
   if (!f) return null;
   const project = projectById(state, f.projectId);
-  return { pin, file: f, by: memberById(state, pin.byMemberId) ?? null, where: [project?.name, fileWhere(state, f)].filter(Boolean).join(" · ") };
+  const whereP = project ? phrase("{project} · {where}", "{project} · {where}", { project: uc(project.name), where: fileWhereP(state, f) }) : fileWhereP(state, f);
+  return { pin, file: f, by: memberById(state, pin.byMemberId) ?? null, where: phraseText(whereP, "zh"), whereP };
 }
 
 /**
@@ -1668,6 +1846,7 @@ export interface ScheduleRow {
   overrun: number;
   /** 下游计划开始早于上游计划结束：提醒一句（不拦）。 */
   warning: string | null;
+  warningP: Phrase | null;
 }
 
 export interface Schedule {
@@ -1749,15 +1928,17 @@ export function scheduleOf(state: WorldState, projectId: Id): Schedule | null {
     // 超出：实际条在计划结束以后的那一段有几周（图上画成红色的那几格）；还没开始、已经过了计划 = 晚了几周。
     const overrun = actual ? Math.max(0, actual.end - Math.max(plan.end, actual.start - 1)) : Math.max(0, today - plan.end);
     let warning: string | null = null;
+    let warningP: Phrase | null = null;
     for (const k of stage.upstream) {
       const up = byKey.get(k);
       const upPlan = up ? plans.get(up.id) : undefined;
       if (up && upPlan && plan.start < upPlan.end) {
-        warning = `计划开始（第 ${plan.start} 周）早于上游「${up.name}」计划结束（第 ${upPlan.end} 周）`;
+        warningP = phrase("计划开始（第 {a} 周）早于上游「{up}」计划结束（第 {b} 周）", "Planned start (week {a}) is before upstream “{up}” is planned to end (week {b})", { a: plan.start, up: stageParam(project.group, up), b: upPlan.end });
+        warning = phraseText(warningP, "zh");
         break;
       }
     }
-    return { stage, plan, actual, progress: tasks.length ? passed.length / tasks.length : 0, overrun, warning };
+    return { stage, plan, actual, progress: tasks.length ? passed.length / tasks.length : 0, overrun, warning, warningP };
   });
   const weeks = Math.max(planWeeks, today, ...rows.map((r) => Math.max(r.plan.end, r.actual?.end ?? 0)));
   const weekStarts = Array.from({ length: weeks }, (_, i) => addDays(project.startOn, i * cycleDays));

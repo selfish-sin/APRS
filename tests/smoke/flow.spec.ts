@@ -7,7 +7,7 @@
  */
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { HAS_PASS, createProject, enterDemo, expectClean, login, logout, noExternal, open, watch } from "./helpers";
+import { HAS_PASS, createProject, enterDemo, expectClean, login, logout, noExternal, open, watch, ZH_STATE } from "./helpers";
 
 test.skip(!HAS_PASS, "没有设 ARPS_PASS_ADMIN / ARPS_PASS_MEMBER，跳过端到端");
 
@@ -140,7 +140,7 @@ test("主流程：开项目 → 派发 → 报到拿任务单 → 交 → 退回
   expect(text).not.toContain(process.env.ARPS_PASS_MEMBER!);
   expectClean(errors, "主流程");
 
-  const fresh = await browser.newContext({ baseURL: info.project.use.baseURL, locale: info.project.use.locale, timezoneId: info.project.use.timezoneId, serviceWorkers: "block" });
+  const fresh = await browser.newContext({ baseURL: info.project.use.baseURL, locale: info.project.use.locale, timezoneId: info.project.use.timezoneId, serviceWorkers: "block", storageState: ZH_STATE });
   const page2 = await fresh.newPage();
   await noExternal(page2);
   const errors2 = watch(page2);

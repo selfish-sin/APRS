@@ -2,26 +2,31 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { MemberAvatar, TextField } from "@/components/app/bits";
-import { ROLE_LABEL } from "@/domain/labels";
+import { LangSwitch, U, useI18n } from "@/i18n/I18n";
+import type { Say } from "@/domain/text";
 import type { Id } from "@/domain/model";
 import { accounts, memberById, theWorld } from "@/domain/queries";
 import { navigate, useRoute } from "@/lib/router";
 import { useStore } from "@/lib/store";
+import { DEMO_TITLE } from "@/lib/worlds";
 
 export function LoginPage() {
-  const { world, login, leaveGuild } = useStore();
+  const { world, login, leaveGuild, base } = useStore();
+  const { L, ph } = useI18n();
   const route = useRoute();
   const list = world ? accounts(world) : [];
   const [accountId, setAccountId] = useState<Id | null>(list[0]?.id ?? null);
   const [passcode, setPasscode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Say | null>(null);
   const [busy, setBusy] = useState(false);
   if (!world) return null;
-  const title = theWorld(world)?.title ?? "工会";
+  const rawTitle = theWorld(world)?.title;
+  // 示范工会的名字跟着界面语言（自己起的名字照原样）。
+  const title = base === "demo" && rawTitle === DEMO_TITLE ? L.entry.kindDemo : rawTitle ?? L.nav.guild;
 
   const submit = async () => {
     if (!accountId) {
-      setError("先选一个账号");
+      setError(L.entry.pickAccount);
       return;
     }
     setBusy(true);
@@ -38,11 +43,14 @@ export function LoginPage() {
 
   return (
     <div className="door">
+      <LangSwitch className="page-lang" />
       <div className="door-inner" style={{ maxWidth: 640 }}>
         <header className="door-hero">
-          <span className="label">{title}</span>
-          <h1 className="t-title-32">选账号登录</h1>
-          <p className="muted">口令只用来在这台设备上换人，不是联网登录。</p>
+          <span className="label">
+            <U>{title}</U>
+          </span>
+          <h1 className="t-title-32">{L.entry.loginTitle}</h1>
+          <p className="muted">{L.entry.loginLead}</p>
         </header>
         <form
           className="card"
@@ -52,9 +60,9 @@ export function LoginPage() {
           }}
         >
           {list.length === 0 ? (
-            <p className="muted">这个工会还没有账号。</p>
+            <p className="muted">{L.entry.noAccounts}</p>
           ) : (
-            <div className="accounts" role="radiogroup" aria-label="账号">
+            <div className="accounts" role="radiogroup" aria-label={L.entry.accounts}>
               {list.map((a) => {
                 const m = memberById(world, a.memberId);
                 return (
@@ -73,9 +81,18 @@ export function LoginPage() {
                   >
                     <MemberAvatar member={m} size="40" />
                     <span className="list-main">
-                      <span className="t-body-14m">{a.displayName}</span>
+                      <span className="t-body-14m">
+                        <U>{a.displayName}</U>
+                      </span>
                       <span className="muted label">
-                        {a.login} · {m ? `${m.nickname} · ${ROLE_LABEL[m.role]}` : ""}
+                        {a.login}
+                        {m ? (
+                          <>
+                            {" · "}
+                            <U>{m.nickname}</U>
+                            {` · ${L.labels.role[m.role]}`}
+                          </>
+                        ) : null}
                       </span>
                     </span>
                   </button>
@@ -84,7 +101,7 @@ export function LoginPage() {
             </div>
           )}
           <TextField
-            label="口令"
+            label={L.entry.passcode}
             type="password"
             autoComplete="current-password"
             value={passcode}
@@ -92,13 +109,13 @@ export function LoginPage() {
               setPasscode(e.target.value);
               setError(null);
             }}
-            error={error}
+            error={error ? ph(error) : null}
             data-testid="passcode"
           />
           <div className="form-actions">
-            <Button Label={busy ? "正在核对…" : "登录"} Style="Accent" type="submit" disabled={busy || !list.length} data-testid="login-submit" />
+            <Button Label={busy ? L.entry.checking : L.entry.signIn} Style="Accent" type="submit" disabled={busy || !list.length} data-testid="login-submit" />
             <Button
-              Label="换一个工会"
+              Label={L.entry.otherGuild}
               Style="Ghost"
               onClick={() => {
                 leaveGuild();

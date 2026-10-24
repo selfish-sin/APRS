@@ -1,5 +1,6 @@
 /** 状态胶囊。颜色不单独表意：总带着字。 */
-import { STATUS_PILL_LABEL, type StatusPillStatus } from "./statusPillLabel";
+import { useI18n } from "@/i18n/I18n";
+import type { StatusPillStatus } from "./statusPillLabel";
 
 export type StatusPillProps = {
   Status: StatusPillStatus;
@@ -8,10 +9,11 @@ export type StatusPillProps = {
 };
 
 export function StatusPill({ Status, Label }: StatusPillProps) {
+  const { L } = useI18n();
   return (
     <span className="ui-pill" data-status={Status}>
       <span className="ui-pill-dot" aria-hidden="true" />
-      {Label ?? STATUS_PILL_LABEL[Status]}
+      {Label ?? L.labels.taskStatus[Status]}
     </span>
   );
 }

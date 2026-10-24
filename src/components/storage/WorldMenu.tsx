@@ -3,13 +3,16 @@ import { useEffect, useRef } from "react";
 import { daysSince } from "@/lib/storage/local";
 import { useStore } from "@/lib/store";
 import { backupLabel, usageLabel, useStorageUi } from "./StorageUi";
+import { U, useI18n } from "@/i18n/I18n";
+import type { ReactNode } from "react";
 import "./storage.css";
 
-type Item = { id: string; Label: string; Meta: string; onSelect: () => void };
+type Item = { id: string; Label: string; Meta: ReactNode; onSelect: () => void };
 
 /** The popover under the sidebar's world capsule: export · import · storage. Closes on outside click / Escape. */
 export function WorldMenu({ open, onClose, worldTitle }: { open: boolean; onClose: () => void; worldTitle: string }) {
   const { storage, exportWorld, leaveGuild } = useStore();
+  const { L, f, r, ph } = useI18n();
   const ui = useStorageUi();
   const root = useRef<HTMLDivElement>(null);
 
@@ -34,8 +37,8 @@ export function WorldMenu({ open, onClose, worldTitle }: { open: boolean; onClos
   const items: Item[] = [
     {
       id: "export",
-      Label: "导出备份",
-      Meta: backupLabel(days),
+      Label: L.storage.exportBackup,
+      Meta: ph(backupLabel(days)),
       onSelect: () => {
         onClose();
         void exportWorld().then((r) => {
@@ -45,8 +48,8 @@ export function WorldMenu({ open, onClose, worldTitle }: { open: boolean; onClos
     },
     {
       id: "import",
-      Label: "从备份导入",
-      Meta: "用你导出的那个文件",
+      Label: L.storage.importBackup,
+      Meta: L.storage.importMeta,
       onSelect: () => {
         onClose();
         ui.pickImport();
@@ -54,8 +57,8 @@ export function WorldMenu({ open, onClose, worldTitle }: { open: boolean; onClos
     },
     {
       id: "storage",
-      Label: "存储",
-      Meta: storage.available ? usageLabel(storage.ratio) : "这个浏览器不让存",
+      Label: L.storage.storageTitle,
+      Meta: storage.available ? ph(usageLabel(storage.ratio)) : L.storage.storageMetaBlocked,
       onSelect: () => {
         onClose();
         ui.open({ kind: "storage" });
@@ -63,8 +66,8 @@ export function WorldMenu({ open, onClose, worldTitle }: { open: boolean; onClos
     },
     {
       id: "leave",
-      Label: "换一个工会",
-      Meta: "回到进门",
+      Label: L.storage.otherGuild,
+      Meta: L.storage.backToDoor,
       onSelect: () => {
         onClose();
         leaveGuild();
@@ -74,9 +77,9 @@ export function WorldMenu({ open, onClose, worldTitle }: { open: boolean; onClos
 
   return (
     <div ref={root} className="storage-menu">
-      <ul className="ui-select-panel storage-menu-panel" role="menu" data-testid="world-menu" aria-label={`${worldTitle} 的菜单`}>
+      <ul className="ui-select-panel storage-menu-panel" role="menu" data-testid="world-menu" aria-label={f(L.storage.menuAria, { title: worldTitle })}>
         <li className="storage-menu-title t-caption-12" role="presentation">
-          {worldTitle} · 存在这台设备上
+          {r(L.storage.menuTitle, { title: <U>{worldTitle}</U> })}
         </li>
         {items.map((item) => (
           <li key={item.id} role="none">

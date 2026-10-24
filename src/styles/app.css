@@ -1161,12 +1161,17 @@ table.board thead th {
   max-width: 76px;
 }
 
+/* 环节名最多两行（英文长：「Animation direction」「In-between check」不截成看不懂），再长才省略。 */
 .board-col {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   width: 76px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.25;
 }
 
 table.board tbody th {
@@ -1369,13 +1374,16 @@ table.board td {
 
 .role-card-top {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
 
+/* 英文的环节名长：名字至少占一截，标签放不下就换到下一行，不压在名字上。 */
 .role-card-name {
-  flex: 1;
+  flex: 1 1 8rem;
   min-width: 0;
+  overflow-wrap: break-word;
   font-weight: 500;
   font-size: var(--font-size-body-lg);
 }
@@ -2072,4 +2080,52 @@ a.ui-button[data-size="Medium"] {
 
 .key-date-row .form-actions {
   padding-bottom: 6px;
+}
+
+/* —— 中 / EN ———————————————————————————————————————————————————— */
+
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-muted);
+  gap: 2px;
+  flex: none;
+}
+
+.lang-switch button {
+  min-width: 36px;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lang-switch button[aria-pressed="true"] {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  box-shadow: 0 0 0 1px var(--color-border-subtle);
+}
+
+.lang-switch button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.sidebar-lang {
+  align-self: flex-start;
+}
+
+.page-lang {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--gutter, var(--space-4));
+  z-index: 5;
 }

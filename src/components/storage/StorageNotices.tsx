@@ -6,17 +6,20 @@ import { daysSince } from "@/lib/storage/local";
 import { useFiles } from "@/lib/files/FilesProvider";
 import { useStore } from "@/lib/store";
 import { backupLabel, useStorageUi } from "./StorageUi";
+import { U, useI18n } from "@/i18n/I18n";
 import "./storage.css";
 
-function skippedReasonZh(reason: string): string {
-  if (reason === "earlier") return "更早的一次加载就没对上";
-  if (reason === "other_world") return "是别的工会的记录";
-  return `现在的规则不认（${reason}）`;
+function SkippedReason({ reason }: { reason: string }) {
+  const { L, f } = useI18n();
+  if (reason === "earlier") return <>{L.storage.reasonEarlier}</>;
+  if (reason === "other_world") return <>{L.storage.reasonOtherWorld}</>;
+  return <>{f(L.storage.reasonRules, { reason })}</>;
 }
 
 /** The strip at the top when a save did not go through. Stays until a save succeeds. */
 function SaveFailedBanner() {
   const { storage, exportWorld } = useStore();
+  const { L, r, ph } = useI18n();
   const ui = useStorageUi();
   if (!storage.saveFailed) return null;
   return (
@@ -24,7 +27,7 @@ function SaveFailedBanner() {
       <span className="storage-banner-mark" aria-hidden="true">
         !
       </span>
-      <span>刚才这一步没有存上（{storage.saveFailed.message}）。先导出备份。</span>
+      <span>{r(L.storage.saveFailed, { why: ph(storage.saveFailed.message) })}</span>
       <button
         type="button"
         className="storage-banner-action"
@@ -34,7 +37,7 @@ function SaveFailedBanner() {
           });
         }}
       >
-        导出备份
+        {L.storage.exportBackup}
       </button>
     </div>
   );
@@ -43,6 +46,7 @@ function SaveFailedBanner() {
 /** One-line reminders at the bottom: usage · backup age · entries that did not replay. */
 function Reminders() {
   const { storage, exportWorld, dismissReminder, dismissSkipped } = useStore();
+  const { L, f, ph } = useI18n();
   const ui = useStorageUi();
   const skippedCount = storage.skipped.length;
   const showSkipped = storage.skippedNew > 0;
@@ -52,8 +56,8 @@ function Reminders() {
     <div className="storage-toast-host">
       {storage.reminder ? (
         <Toast
-          Message={storage.reminder.message}
-          Action="导出备份"
+          Message={ph(storage.reminder.message)}
+          Action={L.storage.exportBackup}
           {...{ "Show action": true }}
           onAction={() => {
             dismissReminder();
@@ -66,8 +70,8 @@ function Reminders() {
       ) : null}
       {showSkipped ? (
         <Toast
-          Message={`有 ${skippedCount} 步没能恢复，没有丢。`}
-          Action="看一下"
+          Message={f(L.storage.skippedToast, { n: skippedCount })}
+          Action={L.storage.look}
           {...{ "Show action": true }}
           onAction={() => {
             dismissSkipped();
@@ -82,21 +86,22 @@ function Reminders() {
 
 function StorageDialog() {
   const { storage, exportWorld } = useStore();
+  const { L, f, ph } = useI18n();
   const ui = useStorageUi();
   const now = new Date().toISOString();
   const pct = Math.round(storage.ratio * 100);
-  const persisted = storage.persisted === true ? "浏览器答应不随便清掉" : storage.persisted === false ? "浏览器没答应持久保存" : "还没问浏览器";
+  const persisted = storage.persisted === true ? L.storage.persistYes : storage.persisted === false ? L.storage.persistNo : L.storage.persistUnknown;
   return (
     <Drawer
       Type="Dialog"
-      Title="存储"
+      Title={L.storage.storageTitle}
       open
       onClose={ui.close}
       actions={
         <>
-          <Button Label="关闭" Style="Secondary" onClick={ui.close} />
+          <Button Label={L.storage.close} Style="Secondary" onClick={ui.close} />
           <Button
-            Label="导出备份"
+            Label={L.storage.exportBackup}
             onClick={() => {
               void exportWorld().then((r) => {
                 if (!r.ok) ui.open({ kind: "error", message: r.message });
@@ -109,32 +114,30 @@ function StorageDialog() {
     >
       <dl className="storage-facts t-body-14" data-testid="storage-facts">
         <div>
-          <dt>这台设备</dt>
+          <dt>{L.storage.thisDevice}</dt>
           <dd>
-            {storage.available ? `已用 ${pct}%` : "这个浏览器不让存，关掉就没了"}
-            <span className="storage-facts-meta">
-              {storage.usedChars.toLocaleString("en-US")} / {storage.quotaChars.toLocaleString("en-US")} 字
-            </span>
+            {storage.available ? f(L.storage.used, { pct }) : L.storage.cantStore}
+            <span className="storage-facts-meta">{f(L.storage.chars, { used: storage.usedChars.toLocaleString("en-US"), quota: storage.quotaChars.toLocaleString("en-US") })}</span>
           </dd>
         </div>
         <div>
-          <dt>这个工会</dt>
+          <dt>{L.storage.thisGuild}</dt>
           <dd>
-            在这台设备上做了 {storage.steps} 步
-            {storage.skipped.length ? `，${storage.skipped.length} 步没能恢复` : ""}
+            {f(L.storage.steps, { n: storage.steps })}
+            {storage.skipped.length ? f(L.storage.stepsSkipped, { n: storage.skipped.length }) : ""}
           </dd>
         </div>
         <div>
-          <dt>备份</dt>
-          <dd>{backupLabel(daysSince(storage.lastBackupAt, now))}</dd>
+          <dt>{L.storage.backup}</dt>
+          <dd>{ph(backupLabel(daysSince(storage.lastBackupAt, now)))}</dd>
         </div>
         <div>
-          <dt>持久保存</dt>
+          <dt>{L.storage.persisted}</dt>
           <dd>{persisted}</dd>
         </div>
       </dl>
       {storage.skipped.length ? (
-        <Button Label="看一下没能恢复的" Style="Ghost" Size="Small" onClick={() => ui.open({ kind: "skipped" })} />
+        <Button Label={L.storage.seeSkipped} Style="Ghost" Size="Small" onClick={() => ui.open({ kind: "skipped" })} />
       ) : null}
     </Drawer>
   );
@@ -142,22 +145,25 @@ function StorageDialog() {
 
 function SkippedDialog() {
   const { storage } = useStore();
+  const { L, f } = useI18n();
   const ui = useStorageUi();
   return (
     <Drawer
       Type="Dialog"
-      Title={`${storage.skipped.length} 步没能恢复`}
-      Body="这些记录还留在这台电脑上，只是现在的规则对不上，没有算进世界里。"
+      Title={f(L.storage.skippedTitle, { n: storage.skipped.length })}
+      Body={L.storage.skippedBody}
       open
       onClose={ui.close}
-      actions={<Button Label="好" onClick={ui.close} />}
+      actions={<Button Label={L.storage.ok} onClick={ui.close} />}
     >
       <ul className="storage-skipped t-caption-12" data-testid="storage-skipped">
         {storage.skipped.map(({ entry, reason }) => (
           <li key={`${entry.id}-${entry.seq}`}>
             <span>{entry.command}</span>
             <span>{entry.createdAt.slice(0, 16).replace("T", " ")}</span>
-            <span>{skippedReasonZh(reason)}</span>
+            <span>
+              <SkippedReason reason={reason} />
+            </span>
           </li>
         ))}
       </ul>
@@ -167,17 +173,18 @@ function SkippedDialog() {
 
 function ConfirmDialog({ title, onConfirm }: { title: string; onConfirm: () => void }) {
   const ui = useStorageUi();
+  const { L, f } = useI18n();
   return (
     <Drawer
       Type="Dialog"
-      Title={`这台设备上已经有「${title}」`}
-      Body="替换以后，这台设备上现在这一份会换成备份里的。替换之前会先自动留一份。"
+      Title={f(L.storage.confirmTitle, { title })}
+      Body={L.storage.confirmBody}
       open
       onClose={ui.close}
       actions={
         <>
-          <Button Label="取消" Style="Secondary" onClick={ui.close} />
-          <Button Label="替换" onClick={onConfirm} data-testid="storage-import-confirm" />
+          <Button Label={L.storage.cancel} Style="Secondary" onClick={ui.close} />
+          <Button Label={L.storage.replace} onClick={onConfirm} data-testid="storage-import-confirm" />
         </>
       }
     />
@@ -187,6 +194,7 @@ function ConfirmDialog({ title, onConfirm }: { title: string; onConfirm: () => v
 /** Overlays for the storage flows. Mount once inside StoreProvider + StorageUiProvider. */
 export function StorageNotices() {
   const ui = useStorageUi();
+  const { L, f, ph } = useI18n();
   const panel = ui.panel;
   return (
     <>
@@ -194,24 +202,23 @@ export function StorageNotices() {
       <Reminders />
       {panel?.kind === "storage" ? <StorageDialog /> : null}
       {panel?.kind === "skipped" ? <SkippedDialog /> : null}
-      {panel?.kind === "confirm" ? <ConfirmDialog title={panel.title || panel.file.title || "这个工会"} onConfirm={() => ui.confirmImport(panel.file)} /> : null}
+      {panel?.kind === "confirm" ? <ConfirmDialog title={panel.title || panel.file.title || L.storage.thisGuildFallback} onConfirm={() => ui.confirmImport(panel.file)} /> : null}
       {panel?.kind === "report" ? (
         <Drawer
           Type="Dialog"
-          Title="导入好了"
+          Title={L.storage.importedTitle}
           Body={
-              (panel.report.skipped === 0
-                ? `「${panel.report.title}」恢复了 ${panel.report.applied.toLocaleString("en-US")} 步，0 步没能恢复，和导出的时候一样。`
-                : `恢复了 ${panel.report.applied.toLocaleString("en-US")} 步，${panel.report.skipped} 步没能恢复（留着，没有丢）。`) +
-              (panel.report.files ? ` 带的 ${panel.report.files} 个文件也放回这台设备了。` : "")
+            (panel.report.skipped === 0
+              ? f(L.storage.importedSame, { title: panel.report.title, n: panel.report.applied })
+              : f(L.storage.importedSkipped, { n: panel.report.applied, skipped: panel.report.skipped })) + (panel.report.files ? f(L.storage.importedFiles, { n: panel.report.files }) : "")
           }
           open
           onClose={ui.close}
-          actions={<Button Label="好" onClick={ui.close} data-testid="storage-import-done" />}
+          actions={<Button Label={L.storage.ok} onClick={ui.close} data-testid="storage-import-done" />}
         />
       ) : null}
       {panel?.kind === "error" ? (
-        <Drawer Type="Dialog" Title="没能导入" Body={panel.message} open onClose={ui.close} actions={<Button Label="好" onClick={ui.close} />} />
+        <Drawer Type="Dialog" Title={L.storage.importFailed} Body={ph(panel.message)} open onClose={ui.close} actions={<Button Label={L.storage.ok} onClick={ui.close} />} />
       ) : null}
     </>
   );
@@ -221,13 +228,14 @@ export function StorageNotices() {
 export function FilesNotice() {
   const files = useFiles();
   const { world } = useStore();
+  const { L } = useI18n();
   if (!files.ready || files.persistent || !world) return null;
   return (
     <div className="storage-banner" role="status" data-testid="files-memory-banner">
       <span className="storage-banner-mark" aria-hidden="true">
         !
       </span>
-      <span>这里存不了资料库的文件（浏览器不让用 IndexedDB），放进来的图只在这次打开时有。要留着就「导出备份 · 连文件一起」。</span>
+      <span>{L.storage.filesMemory}</span>
     </div>
   );
 }

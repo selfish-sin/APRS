@@ -1,5 +1,6 @@
 /** 页面里常用的小件：头像、表单字段、经验条、空状态、标签、状态胶囊。 */
 import { useId, type ReactNode, type SelectHTMLAttributes, type InputHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { U, useI18n } from "@/i18n/I18n";
 import { Avatar, type AvatarSize } from "@/components/ui/Avatar";
 import type { AvatarTone } from "@/components/ui/avatarTone";
 import type { MemberRow } from "@/domain/model";
@@ -13,17 +14,22 @@ export function toneOf(member: Pick<MemberRow, "tone"> | null | undefined): Avat
 }
 
 export function MemberAvatar({ member, size = "28", fallback }: { member: MemberRow | null | undefined; size?: AvatarSize; fallback?: string }) {
-  const name = member?.nickname ?? fallback ?? "？";
-  return <Avatar Initials={name} Tone={toneOf(member)} Size={size} title={member ? member.nickname : fallback} aria-label={name} />;
+  const name = member?.nickname ?? fallback ?? "?";
+  return <Avatar Initials={name} Tone={toneOf(member)} Size={size} title={member ? member.nickname : fallback} aria-label={name} data-uc="" />;
 }
 
 /** 成员的名字（点进成员页）。 */
-export function MemberLink({ member, fallback = "没人" }: { member: MemberRow | null | undefined; fallback?: string }) {
-  if (!member) return <span className="muted">{fallback}</span>;
-  return <Link to={`/member/${member.id}`}>{member.nickname}</Link>;
+export function MemberLink({ member, fallback }: { member: MemberRow | null | undefined; fallback?: string }) {
+  const { L } = useI18n();
+  if (!member) return <span className="muted">{fallback ?? L.common.nobody}</span>;
+  return (
+    <Link to={`/member/${member.id}`}>
+      <U>{member.nickname}</U>
+    </Link>
+  );
 }
 
-type FieldShell = { label: string; hint?: ReactNode; error?: string | null; className?: string };
+type FieldShell = { label: ReactNode; hint?: ReactNode; error?: ReactNode; className?: string };
 
 export function TextField({ label, hint, error, className, ...props }: FieldShell & InputHTMLAttributes<HTMLInputElement>) {
   const id = useId();
@@ -67,15 +73,16 @@ export function SelectField({ label, hint, error, className, children, ...props 
 }
 
 export function XpBar({ points, level, compact = false }: { points: number; level: LevelInfo; compact?: boolean }) {
+  const { L, f } = useI18n();
   return (
-    <div className="xp" aria-label={`经验 ${formatPoints(points)}，Lv ${level.level}`}>
+    <div className="xp" aria-label={f(L.common.xpAria, { points: formatPoints(points), level: level.level })}>
       <div className="xp-bar">
         <div className="xp-fill" style={{ width: `${Math.round(level.progress * 100)}%` }} />
       </div>
       {compact ? null : (
         <div className="xp-meta">
-          <span className="num">{formatPoints(points)} 活力点</span>
-          <span className="num">{level.next === null ? "满级" : `下一级 ${level.next}`}</span>
+          <span className="num">{f(L.common.points, { points: formatPoints(points) })}</span>
+          <span className="num">{level.next === null ? L.common.maxLevel : f(L.common.nextLevel, { next: level.next })}</span>
         </div>
       )}
     </div>

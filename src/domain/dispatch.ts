@@ -5,6 +5,7 @@
  * 加上存下来的日志重建世界——浏览器里只存日志，加载时重放；同步也是靠它追上。
  */
 import { applyChanges, type ApplyError } from "./apply";
+import { ERRORS } from "./errors";
 import { worldNow } from "./clock";
 import { COMMANDS, type CommandInput, type CommandName } from "./commands";
 import type { Ctx, DomainError } from "./commands/core";
@@ -36,9 +37,9 @@ export interface DispatchOptions {
 
 function conflictError(e: ApplyError): DomainError {
   if (e.code === "conflict") {
-    return { code: "conflict", message: "别人刚改过这里，请刷新后再试", detail: { ...e } };
+    return { code: "conflict", key: "conflict", message: ERRORS.conflict.zh, detail: { ...e } };
   }
-  return { code: "state", message: "数据不一致，请刷新后再试", detail: { ...e } };
+  return { code: "state", key: "out_of_sync", message: ERRORS.out_of_sync.zh, detail: { ...e } };
 }
 
 export function lastSeq(state: WorldState): number {
@@ -59,7 +60,7 @@ export function dispatch<N extends CommandName>(
   const world = state.worlds[actor.worldId];
   const ctx: Ctx = { ...actor, now, worldNow: opts.worldNow ?? worldNow(world, now), newId: makeId };
   const command = COMMANDS[name] as unknown as (rm: ReturnType<typeof memoryReadModel>, i: unknown, c: Ctx) => ReturnType<(typeof COMMANDS)[N]>;
-  if (!command) return { ok: false, error: { code: "invalid", message: `没有这个操作（${String(name)}）` } };
+  if (!command) return { ok: false, error: { code: "invalid", key: "unknown_command", params: { name: String(name) }, message: `没有这个操作（${String(name)}）` } };
   const result = command(memoryReadModel(state), input, ctx);
   if (!result.ok) return result;
   if (result.changes.length === 0) return { ok: true, state, entry: null, created: result.created };

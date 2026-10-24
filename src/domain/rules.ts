@@ -47,6 +47,26 @@ export const RETURN_TAGS = [
   "设定没补",
 ] as const;
 
+export type ReturnTag = (typeof RETURN_TAGS)[number];
+
+/** 退回原因的英文（标签存的是中文，显示时查这里）。 */
+export const RETURN_TAG_EN: Record<ReturnTag, string> = {
+  漏色: "Missed fill",
+  色线缺失或不闭合: "Color line missing or not closed",
+  背涂填错图层: "Underpaint on the wrong layer",
+  背涂涂到主线: "Underpaint over the line art",
+  主线不透: "Line art not showing through",
+  分层错误: "Wrong layer split",
+  涂反: "Colors swapped",
+  漏轨目: "Missing timing marks",
+  设定没补: "Settings fix not applied",
+};
+
+export function tagText(tag: string | null | undefined, lang: "zh" | "en"): string {
+  if (!tag) return "";
+  return lang === "en" ? RETURN_TAG_EN[tag as ReturnTag] ?? tag : tag;
+}
+
 /**
  * 等级表：Lv n 需要累计 5 × n × (n − 1) 活力点 —— 0 · 10 · 30 · 60 · 100 · 150 · 210 …
  * （SPEC §4 规则 8 的 10 · 30 · 60 · 100 · 150 …）。写成表，一共 60 级。

@@ -1,3 +1,4 @@
+import { t2, type Say } from "@/domain/text";
 /**
  * 保存到这台设备（SPEC §11.6）。只在用户点按钮时调用。
  *   1. 先试 claude.ai 预览页面给的 downloads（`window.claude.use("downloads")`；拿到 null 或 10 秒没回 = 没有）
@@ -6,7 +7,7 @@
  */
 export const PREVIEW_SAVE_TYPES = ["json", "png", "jpg", "jpeg", "webp", "gif", "pdf", "zip", "txt", "md", "csv", "svg", "mp4", "webm", "xlsx"] as const;
 
-export type SaveResult = { ok: true; via: "downloads" | "link" } | { ok: false; reason: "declined" | "unsupported_type" | "failed"; message: string };
+export type SaveResult = { ok: true; via: "downloads" | "link" } | { ok: false; reason: "declined" | "unsupported_type" | "failed"; message: Say };
 
 interface Downloads {
   save: (input: { filename: string; data: Blob | string }) => Promise<unknown>;
@@ -49,7 +50,7 @@ export async function getDownloads(host: HostWindow, timeoutMs = 10_000): Promis
 function linkDownload(host: HostWindow, filename: string, data: Blob): SaveResult {
   const doc = host.document;
   const u = host.URL;
-  if (!doc || !u) return { ok: false, reason: "failed", message: "只能在浏览器里保存" };
+  if (!doc || !u) return { ok: false, reason: "failed", message: t2("只能在浏览器里保存", "Saving only works in a browser") };
   try {
     const url = u.createObjectURL(data);
     const a = doc.createElement("a");
@@ -62,7 +63,7 @@ function linkDownload(host: HostWindow, filename: string, data: Blob): SaveResul
     host.setTimeout(() => u.revokeObjectURL(url), 2000);
     return { ok: true, via: "link" };
   } catch (e) {
-    return { ok: false, reason: "failed", message: e instanceof Error ? e.message : "没能保存" };
+    return { ok: false, reason: "failed", message: e instanceof Error ? e.message : t2("没能保存", "Couldn't save") };
   }
 }
 
@@ -70,15 +71,15 @@ export async function saveToDevice(filename: string, data: Blob, host: HostWindo
   const dl = await getDownloads(host);
   if (dl) {
     if (!(PREVIEW_SAVE_TYPES as readonly string[]).includes(extOf(filename))) {
-      return { ok: false, reason: "unsupported_type", message: "在这里存不了这种文件，请在装好的版本里下载" };
+      return { ok: false, reason: "unsupported_type", message: t2("在这里存不了这种文件，请在装好的版本里下载", "This kind of file can't be saved here. Download it from the installed app") };
     }
     try {
       const r = await dl.save({ filename, data });
-      if (isDeclined(r)) return { ok: false, reason: "declined", message: "没有保存（你选了不保存）" };
+      if (isDeclined(r)) return { ok: false, reason: "declined", message: t2("没有保存（你选了不保存）", "Not saved (you chose not to save)") };
       return { ok: true, via: "downloads" };
     } catch (e) {
-      if (isDeclined(e)) return { ok: false, reason: "declined", message: "没有保存（你选了不保存）" };
-      return { ok: false, reason: "failed", message: "没能保存，换个地方再试" };
+      if (isDeclined(e)) return { ok: false, reason: "declined", message: t2("没有保存（你选了不保存）", "Not saved (you chose not to save)") };
+      return { ok: false, reason: "failed", message: t2("没能保存，换个地方再试", "Couldn't save. Try somewhere else") };
     }
   }
   return linkDownload(host, filename, data);

@@ -2,7 +2,48 @@
  * 中文词典（默认语言）。键名和 en.ts 一模一样（i18n.test.ts 查）。
  * 参数写 {name}；英文那边要分单复数的写 { one, other }。
  */
+import { zh as nav } from "./ns/nav";
+import { zh as doc } from "./ns/doc";
+import { zh as viewer } from "./ns/viewer";
+import { zh as library } from "./ns/library";
+import { zh as enroll } from "./ns/enroll";
+import { zh as review } from "./ns/review";
+import { zh as cut } from "./ns/cut";
+import { zh as project } from "./ns/project";
+import { zh as report } from "./ns/report";
+import { zh as flex } from "./ns/flex";
+import { zh as board } from "./ns/board";
+import { zh as thread } from "./ns/thread";
+import { zh as task } from "./ns/task";
+import { zh as quest } from "./ns/quest";
+import { zh as hall } from "./ns/hall";
+import { zh as member } from "./ns/member";
+import { zh as backup } from "./ns/backup";
+import { zh as admin } from "./ns/admin";
+import { zh as storage } from "./ns/storage";
+import { zh as entry } from "./ns/entry";
+
 export const zh = {
+  nav,
+  doc,
+  viewer,
+  library,
+  enroll,
+  review,
+  cut,
+  project,
+  report,
+  flex,
+  board,
+  thread,
+  task,
+  quest,
+  hall,
+  member,
+  backup,
+  admin,
+  storage,
+  entry,
   common: {
     language: "界面语言",
     save: "保存",
@@ -25,6 +66,21 @@ export const zh = {
     down: "↓ 下移",
     yes: "是",
     no: "否",
+    listSep: "、",
+    period: "。",
+    notFound: "找不到",
+    notFoundWhat: { page: "这一页找不到了", project: "这个项目找不到了", cut: "这一卡找不到了", member: "这个成员找不到了", doc: "这一页找不到了" },
+    notFoundLead: "可能是链接不对，或者已经删掉了。",
+    backToHall: "回大厅",
+    colon: "：",
+    quoteOpen: "「",
+    quoteClose: "」",
+    clauseSep: "，",
+    nobody: "没人",
+    xpAria: "经验 {points}，Lv {level}",
+    points: "{points} 活力点",
+    maxLevel: "满级",
+    nextLevel: "下一级 {next}",
     projects: "项目",
     library: "资料库",
   },
@@ -183,6 +239,12 @@ export const zh = {
     grain: { project: "项目一份", cut: "每卡一份", layer: "每卡每层一份" },
     unit: { sheet: "张", second: "秒", cut: "卡", item: "项" },
     unitVideoCut: "期",
+    unitPlural: { sheet: "张", second: "秒", cut: "卡", item: "项" },
+    unitVideoCutPlural: "期",
+    cutLabel: { animation: "卡", video: "期" },
+    cutLabelPlural: { animation: "卡", video: "期" },
+    adminSet: "（管理员定）",
+    perUnits: "{per} {unit}",
     taskStatus: { locked: "锁住", open: "可接", claimed: "已接", submitted: "待审", returned: "退回", passed: "通过", reclaimed: "收回" },
     verdict: { pass: "通过", return: "退回", fix_pass: "自修后通过" },
     threadKind: { comment: "意见", ask: "提问上游", setting: "设定问题", todo: "要补" },
@@ -193,6 +255,7 @@ export const zh = {
     linkKind: { file: "文件", folder: "文件夹", sheet: "表格", doc: "文档" },
     fileKind: { image: "图片", sheet: "表格", pdf: "PDF", video: "视频", archive: "压缩包", clip: "CLIP 文件", other: "文件" },
     layer: "{layer} 层",
+    layerShort: "{layer} 层",
     rate: "{tn} 小时 / {per}",
   },
 };

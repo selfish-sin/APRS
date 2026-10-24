@@ -3,7 +3,8 @@
  * 账号只存 salt + 哈希；改口令、重置口令都由页面先算好哈希再交给命令。
  */
 import { AVATAR_TONE, ROLE, type AvatarToneName, type Id, type Role } from "../model";
-import { guarded, insert, isAdmin, mustAdmin, mustBeOneOf, mustGet, mustMember, mustText, ok, reject, update } from "./core";
+import { guarded, insert, isAdmin, mustAdmin, mustBeOneOf, mustGet, mustMember, mustText, ok, rejectT, update } from "./core";
+import { uc } from "../text";
 import { loginTaken, mustHash, mustLogin, mustNickname, mustSalt, nicknameTaken } from "./validate";
 
 function toneFor(rm: { where: (t: "members") => { tone: AvatarToneName }[] }): AvatarToneName {
@@ -21,7 +22,7 @@ export interface JoinMemberInput {
 export const joinMember = guarded<JoinMemberInput>((rm, input, ctx) => {
   mustAdmin(rm, ctx, "加成员");
   const nickname = mustNickname(input.nickname);
-  if (nicknameTaken(rm, ctx, nickname)) reject("invalid", `已经有人叫「${nickname}」了，换一个昵称`);
+  if (nicknameTaken(rm, ctx, nickname)) rejectT("invalid", "nickname_taken", { name: uc(nickname) });
   const role = input.role ? mustBeOneOf(input.role, ROLE, "角色") : "member";
   const tone = input.tone ? mustBeOneOf(input.tone, AVATAR_TONE, "头像色") : toneFor(rm);
   const m = insert(ctx, "members", { nickname, role, joinedAt: ctx.worldNow, tone });
@@ -39,7 +40,7 @@ export const setRole = guarded<SetRoleInput>((rm, input, ctx) => {
   const role = mustBeOneOf(input.role, ROLE, "角色");
   if (target.role === "admin" && role !== "admin") {
     const admins = rm.where("members", { role: "admin" }).filter((m) => m.worldId === ctx.worldId);
-    if (admins.length <= 1) reject("state", "工会里至少要留一个管理员");
+    if (admins.length <= 1) rejectT("state", "last_admin");
   }
   const ch = update("members", target, { role });
   return ok(ch ? [ch] : []);
@@ -55,11 +56,11 @@ export interface UpdateMemberInput {
 export const updateMember = guarded<UpdateMemberInput>((rm, input, ctx) => {
   const me = mustMember(rm, ctx);
   const target = mustGet(rm, ctx, "members", input.memberId, "成员");
-  if (target.id !== me.id && !isAdmin(me)) reject("forbidden", "只能改自己的资料");
+  if (target.id !== me.id && !isAdmin(me)) rejectT("forbidden", "profile_own_only");
   const patch: { nickname?: string; tone?: AvatarToneName } = {};
   if (input.nickname !== undefined) {
     const nickname = mustNickname(input.nickname);
-    if (nicknameTaken(rm, ctx, nickname, target.id)) reject("invalid", `已经有人叫「${nickname}」了，换一个昵称`);
+    if (nicknameTaken(rm, ctx, nickname, target.id)) rejectT("invalid", "nickname_taken", { name: uc(nickname) });
     patch.nickname = nickname;
   }
   if (input.tone !== undefined) patch.tone = mustBeOneOf(input.tone, AVATAR_TONE, "头像色");
@@ -87,9 +88,9 @@ export interface CreateAccountInput {
 export const createAccount = guarded<CreateAccountInput>((rm, input, ctx) => {
   mustAdmin(rm, ctx, "建账号");
   const member = mustGet(rm, ctx, "members", input.memberId, "成员");
-  if (rm.where("accounts", { memberId: member.id }).length) reject("state", `「${member.nickname}」已经有账号了，可以重置口令`);
+  if (rm.where("accounts", { memberId: member.id }).length) rejectT("state", "account_exists", { name: uc(member.nickname) });
   const login = mustLogin(input.login);
-  if (loginTaken(rm, login)) reject("invalid", `登录名「${login}」已经有人用了`);
+  if (loginTaken(rm, login)) rejectT("invalid", "login_taken", { login });
   const displayName = input.displayName ? mustText(input.displayName, "账号名字", 16) : member.nickname;
   const a = insert(ctx, "accounts", { login, displayName, memberId: member.id, salt: mustSalt(input.salt), hash: mustHash(input.hash) });
   return ok([a.change], { accountId: a.row.id });
@@ -105,7 +106,7 @@ export interface SetPasscodeInput {
 export const setPasscode = guarded<SetPasscodeInput>((rm, input, ctx) => {
   const me = mustMember(rm, ctx);
   const account = mustGet(rm, ctx, "accounts", input.accountId, "账号");
-  if (account.memberId !== me.id && !isAdmin(me)) reject("forbidden", "只有管理员可以重置别人的口令");
+  if (account.memberId !== me.id && !isAdmin(me)) rejectT("forbidden", "reset_forbidden");
   const ch = update("accounts", account, { salt: mustSalt(input.salt), hash: mustHash(input.hash) });
   return ok(ch ? [ch] : []);
 });
@@ -117,7 +118,7 @@ export interface SetLangInput {
 /** 记下这个账号用哪种界面语言（SPEC §16）。 */
 export const setAccountLang = guarded<SetLangInput>((rm, input, ctx) => {
   mustMember(rm, ctx);
-  if (!ctx.accountId) reject("forbidden", "请先登录");
+  if (!ctx.accountId) rejectT("forbidden", "login_first");
   const a = mustGet(rm, ctx, "accounts", ctx.accountId, "账号");
   const lang = mustBeOneOf(input.lang, ["zh", "en"] as const, "语言");
   const c = update("accounts", a, { lang });

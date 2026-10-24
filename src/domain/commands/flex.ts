@@ -10,7 +10,8 @@ import type { ReadModel } from "../readmodel";
 import { DEFAULT_MAX_ACTIVE, deadlineHours } from "../rules";
 import { stageTemplate } from "../templates";
 import { addHours } from "../clock";
-import { guarded, insert, isAdmin, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustMember, mustText, ok, optInteger, optNumber, optText, reject, update, type Ctx } from "./core";
+import { guarded, insert, isAdmin, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustMember, mustText, ok, optInteger, optNumber, optText, rejectT, update, type Ctx } from "./core";
+import { uc } from "../text";
 
 // ---------------------------------------------------------------------------
 // 指派职位
@@ -26,7 +27,7 @@ export interface RoleAssignInput {
 
 function mustStageKey(group: Group, key: unknown): string {
   const t = typeof key === "string" ? stageTemplate(group, key) : undefined;
-  if (!t) reject("not_found", "这个组里没有这个环节");
+  if (!t) rejectT("not_found", "group_stage_missing");
   return t.key;
 }
 
@@ -36,10 +37,10 @@ export const assignRole = guarded<RoleAssignInput>((rm, input, ctx) => {
   const member = mustGet(rm, ctx, "members", input.memberId, "成员");
   const group = mustBeOneOf(input.group, GROUP, "组");
   const stageKey = mustStageKey(group, input.stageKey);
-  if (input.skill !== undefined && !SKILL.includes(input.skill)) reject("invalid", "熟练度选一个：+0.5 / +0.2 / 0 / −0.2");
+  if (input.skill !== undefined && !SKILL.includes(input.skill)) rejectT("invalid", "skill_pick");
   const existing = rm.where("enrollments", { memberId: member.id, group, stageKey })[0];
   if (existing) {
-    if (existing.assigned) reject("state", `${member.nickname}已经是这个职位了`);
+    if (existing.assigned) rejectT("state", "role_already", { name: uc(member.nickname) });
     const c = update("enrollments", existing, { assigned: true, ...(input.skill !== undefined ? { skill: input.skill } : {}) });
     return ok(c ? [c] : [], { enrollmentId: existing.id });
   }
@@ -60,7 +61,7 @@ export const unassignRole = guarded<RoleUnassignInput>((rm, input, ctx) => {
   const group = mustBeOneOf(input.group, GROUP, "组");
   const stageKey = mustStageKey(group, input.stageKey);
   const e = rm.where("enrollments", { memberId: member.id, group, stageKey })[0];
-  if (!e?.assigned) reject("state", `${member.nickname}没有被指派这个职位`);
+  if (!e?.assigned) rejectT("state", "role_not_assigned", { name: uc(member.nickname) });
   if ((e.origin ?? "self") === "assigned") return ok([{ op: "archive", table: "enrollments", id: e.id, expectVersion: e.version }], { enrollmentId: e.id });
   const c = update("enrollments", e, { assigned: false });
   return ok(c ? [c] : [], { enrollmentId: e.id });
@@ -78,7 +79,7 @@ export interface StageLockInput {
 export const setStageLock = guarded<StageLockInput>((rm, input, ctx) => {
   mustAdmin(rm, ctx, "改环节设置");
   const stage = mustGet(rm, ctx, "stages", input.stageId, "环节");
-  if (typeof input.locked !== "boolean") reject("invalid", "选锁还是不锁");
+  if (typeof input.locked !== "boolean") rejectT("invalid", "lock_pick");
   const c = update("stages", stage, { locked: input.locked });
   return ok(c ? [c] : [], { stageId: stage.id });
 });
@@ -96,7 +97,7 @@ export const setStagePeriod = guarded<StagePeriodInput>((rm, input, ctx) => {
   const stage = mustGet(rm, ctx, "stages", input.stageId, "环节");
   const startWeek = optInteger(input.startWeek, "从第几周开始", 1, 520);
   const weeks = optInteger(input.weeks, "工期（几周）", 1, 260);
-  if (startWeek === null || weeks === null) reject("invalid", "开始和工期都要填");
+  if (startWeek === null || weeks === null) rejectT("invalid", "plan_required");
   const c = update("stages", stage, { plan: { startWeek, weeks } });
   return ok(c ? [c] : [], { stageId: stage.id });
 });
@@ -116,7 +117,7 @@ export const setStageRate = guarded<StageRateInput>((rm, input, ctx) => {
   const patch: Partial<typeof stage> = {};
   if (input.tn !== undefined) {
     const tn = optNumber(input.tn, "Tn", 0, 200);
-    if (tn === null || tn <= 0) reject("invalid", "Tn 要大于 0");
+    if (tn === null || tn <= 0) rejectT("invalid", "tn_positive");
     patch.tn = tn;
   }
   if (input.per !== undefined) {
@@ -160,7 +161,7 @@ function mayPublish(rm: ReadModel, ctx: Ctx, stageReviewerId: Id | null) {
   const me = mustMember(rm, ctx);
   if (isAdmin(me)) return me;
   if (isReviewer(me) && stageReviewerId === me.id) return me;
-  return reject("forbidden", "只有管理员和这个环节的审核员能发新任务");
+  return rejectT("forbidden", "publish_forbidden");
 }
 
 export const publishTask = guarded<PublishInput>((rm, input, ctx) => {
@@ -171,24 +172,24 @@ export const publishTask = guarded<PublishInput>((rm, input, ctx) => {
   const title = mustText(input.title, "标题", 60);
   const description = optText(input.description, 2000);
   const cutIds = Array.from(new Set(Array.isArray(input.cutIds) ? input.cutIds : []));
-  if (cutIds.length > 40) reject("invalid", "一次最多挂 40 卡");
+  if (cutIds.length > 40) rejectT("invalid", "publish_cuts_max");
   for (const id of cutIds) {
     const c = mustGet(rm, ctx, "cuts", id, "卡");
-    if (c.projectId !== project.id) reject("invalid", "只能挂这个项目里的卡");
+    if (c.projectId !== project.id) rejectT("invalid", "publish_cut_other");
   }
-  if (kind === "fix" && cutIds.length === 0) reject("invalid", "修正要挂在一卡上");
+  if (kind === "fix" && cutIds.length === 0) rejectT("invalid", "fix_needs_cut");
   const blocking = !!input.blocking;
-  if (blocking && cutIds.length === 0) reject("invalid", "勾了「这一卡要等它做完」要选挂哪一卡");
+  if (blocking && cutIds.length === 0) rejectT("invalid", "blocking_needs_cut");
   const fixedPoints = optNumber(input.fixedPoints, "固定活力点", 0, 500);
   const workload = optNumber(input.workload, "工作量", 0, 100_000);
-  if (fixedPoints !== null && fixedPoints <= 0) reject("invalid", "固定活力点要大于 0");
-  if (fixedPoints === null && (workload === null || workload <= 0)) reject("invalid", "工作量要大于 0");
+  if (fixedPoints !== null && fixedPoints <= 0) rejectT("invalid", "points_positive");
+  if (fixedPoints === null && (workload === null || workload <= 0)) rejectT("invalid", "workload_positive");
   const reviewerId = input.reviewerId ? mustGet(rm, ctx, "members", input.reviewerId, "审核的人").id : stage.reviewerId;
   const fileIds = Array.from(new Set(Array.isArray(input.fileIds) ? input.fileIds : []));
-  if (fileIds.length > 12) reject("invalid", "最多附 12 个文件");
+  if (fileIds.length > 12) rejectT("invalid", "attach_max");
   for (const id of fileIds) {
     const f = mustGet(rm, ctx, "files", id, "附的文件");
-    if (f.projectId !== project.id) reject("invalid", "只能附这个项目资料库里的文件");
+    if (f.projectId !== project.id) rejectT("invalid", "attach_other_project");
   }
   const assignee = input.assigneeId ? mustGet(rm, ctx, "members", input.assigneeId, "派给的人") : null;
   const base = { workload: workload ?? 0 };

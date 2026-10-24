@@ -226,7 +226,7 @@ export function CoverCard({ project, editable }: { project: ProjectRow; editable
             <SelectField label={L.zero.cover} hint={L.zero.coverHint} value={cover} onChange={(e) => setCover(e.target.value)} data-testid="zero-cover">
               <option value="">{L.zero.coverNone}</option>
               {images.map((v) => (
-                <option key={v.file.id} value={v.file.id}>
+                <option key={v.file.id} value={v.file.id} data-uc="">
                   {v.file.name}
                 </option>
               ))}
@@ -327,7 +327,7 @@ export function DatesCard({ project, editable }: { project: ProjectRow; editable
 
 function ZeroStructureCard({ project, editable }: { project: ProjectRow; editable: boolean }) {
   const { dispatch, notify } = useGuild();
-  const { L, f, err } = useI18n();
+  const { L, f, err, cut: cutOf } = useI18n();
   const s = project.structure ?? { episodes: 1, scenesPerEpisode: 1, cutsPerScene: 3, layers: ["A", "B"], sheetsPerLayer: 12, secondsPerCut: 4 };
   const hasLayers = groupTemplate(project.group).hasLayers;
   const [form, setForm] = useState({ episodes: String(s.episodes), scenes: String(s.scenesPerEpisode), cuts: String(s.cutsPerScene), layers: s.layers.join(", "), sheets: String(s.sheetsPerLayer), seconds: String(s.secondsPerCut) });
@@ -403,20 +403,20 @@ function ZeroStructureCard({ project, editable }: { project: ProjectRow; editabl
               <tbody>
                 {rows.map((c, i) => (
                   <tr key={c.number}>
-                    <td className="num">{cutCode(c, project.group)}</td>
+                    <td className="num">{cutOf(c, project.group)}</td>
                     <td className="num">{c.scene}</td>
                     {layerNames.map((l) => {
                       const layer = c.layers.find((x) => x.name === l);
                       return (
                         <td key={l}>
                           {layer ? (
-                            <input className="field-control" type="number" min={1} disabled={!editable} aria-label={`${cutCode(c, project.group)} ${l}`} value={layer.sheets} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, layers: x.layers.map((y) => (y.name === l ? { ...y, sheets: Number(e.target.value) } : y)) } : x)))} />
+                            <input className="field-control" type="number" min={1} disabled={!editable} aria-label={`${cutOf(c, project.group)} ${l}`} value={layer.sheets} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, layers: x.layers.map((y) => (y.name === l ? { ...y, sheets: Number(e.target.value) } : y)) } : x)))} />
                           ) : null}
                         </td>
                       );
                     })}
                     <td>
-                      <input className="field-control" type="number" min={0} disabled={!editable} aria-label={`${cutCode(c, project.group)} ${L.zero.secondsCol}`} value={c.seconds} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, seconds: Number(e.target.value) } : x)))} />
+                      <input className="field-control" type="number" min={0} disabled={!editable} aria-label={`${cutOf(c, project.group)} ${L.zero.secondsCol}`} value={c.seconds} onChange={(e) => setRows(rows.map((x, j) => (j === i ? { ...x, seconds: Number(e.target.value) } : x)))} />
                     </td>
                   </tr>
                 ))}
@@ -544,7 +544,7 @@ function StaffRowView({ project, positionKey, editable }: { project: ProjectRow;
             {members(world)
               .filter((m) => !taken.has(m.id))
               .map((m) => (
-                <option key={m.id} value={m.id}>
+                <option key={m.id} value={m.id} data-uc="">
                   {m.nickname}
                 </option>
               ))}
@@ -610,7 +610,7 @@ function StagesPreview({ project }: { project: ProjectRow }) {
         if (!list.length) return null;
         return (
           <div key={ph} className="row">
-            <span className="label">{L.labels.phase[ph]}：</span>
+            <span className="label">{L.labels.phase[ph]}{L.common.colon}</span>
             {list.map((s) => (
               <Tag key={s.key}>{stageText(project.group, { templateKey: s.key, name: s.name }, lang).name}</Tag>
             ))}
@@ -709,7 +709,7 @@ function ProjectExtendCard({ project }: { project: ProjectRow }) {
 
 function CutsCard({ project, editable }: { project: ProjectRow; editable: boolean }) {
   const { world } = useGuild();
-  const { L, f } = useI18n();
+  const { L, f, cut: cutOf } = useI18n();
   const cuts = cutsOf(world, project.id);
   const [editing, setEditing] = useState<Id | null>(null);
   return (
@@ -725,7 +725,7 @@ function CutsCard({ project, editable }: { project: ProjectRow; editable: boolea
               <div className="row" data-justify="between">
                 <div className="list-main">
                   <Link to={`/cut/${c.id}`} className="t-body-14m num">
-                    {cutCode(c, project.group)}
+                    {cutOf(c, project.group)}
                   </Link>
                   <span className="label">
                     {c.scene} · {c.layers.map((l) => `${l.name} ${l.sheets}`).join(" / ")} · {c.seconds}s
@@ -744,7 +744,7 @@ function CutsCard({ project, editable }: { project: ProjectRow; editable: boolea
 
 export function AddCutsForm({ projectId, onDone }: { projectId: Id; onDone?: () => void }) {
   const { world, dispatch, notify } = useGuild();
-  const { L, f, err } = useI18n();
+  const { L, f, err, cut: cutOf } = useI18n();
   const project = world.projects[projectId];
   const cuts = cutsOf(world, projectId);
   const [count, setCount] = useState("1");
@@ -774,7 +774,7 @@ export function AddCutsForm({ projectId, onDone }: { projectId: Id; onDone?: () 
           <option value="">{L.edit.addAtEnd}</option>
           {cuts.map((c) => (
             <option key={c.id} value={c.id}>
-              {f(L.edit.addAfterCut, { cut: cutCode(c, project.group) })}
+              {f(L.edit.addAfterCut, { cut: cutOf(c, project.group) })}
             </option>
           ))}
         </SelectField>
@@ -794,14 +794,14 @@ export function AddCutsForm({ projectId, onDone }: { projectId: Id; onDone?: () 
 
 function CutEditForm({ cut, onDone }: { cut: CutRow; onDone: () => void }) {
   const { world, dispatch, notify } = useGuild();
-  const { L, f, err } = useI18n();
+  const { L, f, err, cut: cutOf } = useI18n();
   const group = world.projects[cut.projectId].group;
   const [layers, setLayers] = useState(cut.layers.map((l) => `${l.name}:${l.sheets}`).join(", "));
   const [seconds, setSeconds] = useState(String(cut.seconds));
   const [reason, setReason] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const code = cutCode(cut, group);
+  const code = cutOf(cut, group);
   return (
     <div className="stack flex-box" data-gap="small">
       <div className="form-grid">
@@ -843,8 +843,8 @@ function CutEditForm({ cut, onDone }: { cut: CutRow; onDone: () => void }) {
 
 export function ArchiveCutDialog({ cut, onClose }: { cut: CutRow; onClose: () => void }) {
   const { world, dispatch, notify } = useGuild();
-  const { L, f, err } = useI18n();
-  const code = cutCode(cut, world.projects[cut.projectId].group);
+  const { L, f, err, cut: cutOf } = useI18n();
+  const code = cutOf(cut, world.projects[cut.projectId].group);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   return (
@@ -919,8 +919,10 @@ function StagesCard({ project, editable }: { project: ProjectRow; editable: bool
 }
 
 function StageRowActions({ stage, first, last, onEdit }: { stage: StageRow; first: boolean; last: boolean; onEdit: () => void }) {
+  const { world } = useGuild();
+  const groupOf = (st: StageRow) => world.projects[st.projectId]?.group ?? "animation";
   const { dispatch, notify } = useGuild();
-  const { L, f, err } = useI18n();
+  const { L, f, err, stageName } = useI18n();
   const run = (name: "stage.move" | "stage.disable" | "stage.remove", input: Record<string, unknown>, ok: string) => {
     const r = dispatch(name, input as never, { quiet: true });
     if (!r.ok) notify(err(r.error), "Error");
@@ -937,10 +939,10 @@ function StageRowActions({ stage, first, last, onEdit }: { stage: StageRow; firs
       <button type="button" className="inline-link label" onClick={onEdit}>
         {L.common.edit}
       </button>
-      <button type="button" className="inline-link label" onClick={() => run("stage.disable", { stageId: stage.id, disabled: !stage.disabled }, f(stage.disabled ? L.edit.stageEnabled : L.edit.stageDisabled, { name: stage.name }))} data-testid="stage-disable">
+      <button type="button" className="inline-link label" onClick={() => run("stage.disable", { stageId: stage.id, disabled: !stage.disabled }, f(stage.disabled ? L.edit.stageEnabled : L.edit.stageDisabled, { name: stageName(groupOf(stage), stage) }))} data-testid="stage-disable">
         {stage.disabled ? L.edit.stageEnable : L.edit.stageDisable}
       </button>
-      <button type="button" className="inline-link label" onClick={() => run("stage.remove", { stageId: stage.id }, f(L.edit.stageRemoved, { name: stage.name }))} data-testid="stage-remove">
+      <button type="button" className="inline-link label" onClick={() => run("stage.remove", { stageId: stage.id }, f(L.edit.stageRemoved, { name: stageName(groupOf(stage), stage) }))} data-testid="stage-remove">
         {L.edit.stageRemove}
       </button>
     </>
@@ -1141,7 +1143,7 @@ export function AcceptDialog({ stage, onClose }: { stage: StageRow; onClose: () 
 
 function AcceptRow({ task }: { task: TaskRow }) {
   const { world, dispatch, notify } = useGuild();
-  const { L, f, err } = useI18n();
+  const { L, f, err, r: rich, ph, pt } = useI18n();
   const v = taskView(world, task);
   const subs = submissionsOf(world, task.id);
   const last = subs[subs.length - 1];
@@ -1154,12 +1156,14 @@ function AcceptRow({ task }: { task: TaskRow }) {
   return (
     <li style={{ flexDirection: "column", alignItems: "stretch" }} data-testid="accept-row">
       <div className="row" data-justify="between">
-        <span className="t-body-14m">{v.label}</span>
+        <span className="t-body-14m">{ph(v.labelP)}</span>
         <StatusPill Status={task.status} />
       </div>
       {last ? (
         <>
-          <span className="label num break">{last.fileName}</span>
+          <span className="label num break">
+            <U>{last.fileName}</U>
+          </span>
           <LinkList submission={last} compact />
           {images.length ? (
             <div className="row">
@@ -1169,9 +1173,9 @@ function AcceptRow({ task }: { task: TaskRow }) {
             </div>
           ) : null}
           <span className="label">
-            {f(L.edit.finalBy, {
-              who: memberById(world, last.byMemberId)?.nickname ?? task.outsourceName ?? "—",
-              reviewer: review ? memberById(world, review.byMemberId)?.nickname ?? "—" : "—",
+            {rich(L.edit.finalBy, {
+              who: <U>{memberById(world, last.byMemberId)?.nickname ?? task.outsourceName ?? "—"}</U>,
+              reviewer: <U>{review ? memberById(world, review.byMemberId)?.nickname ?? "—" : "—"}</U>,
               q: review?.quality ?? "—",
             })}
           </span>
@@ -1188,7 +1192,7 @@ function AcceptRow({ task }: { task: TaskRow }) {
               const r = dispatch("task.reopen", { taskId: task.id, comments: [{ text }] }, { quiet: true });
               if (!r.ok) setError(err(r.error));
               else {
-                notify(f(L.edit.redone, { label: v.label }), "Neutral");
+                notify(f(L.edit.redone, { label: pt(v.labelP) }), "Neutral");
                 setOpen(false);
               }
             }}
@@ -1210,7 +1214,7 @@ function AcceptRow({ task }: { task: TaskRow }) {
 /** 延期：一张任务（选一张在做的）或者一个环节所有在做的。 */
 export function ExtendDialog({ target, tasks, onClose }: { target: { kind: "stage"; stage: StageRow } | { kind: "task" }; tasks?: TaskRow[]; onClose: () => void }) {
   const { world, dispatch, notify } = useGuild();
-  const { L, f, err, lang } = useI18n();
+  const { L, f, err, lang, pt } = useI18n();
   const running = (tasks ?? []).filter((t) => (t.status === "claimed" || t.status === "returned") && t.dueAt);
   const [taskId, setTaskId] = useState(running[0]?.id ?? "");
   const [hours, setHours] = useState("");
@@ -1246,7 +1250,7 @@ export function ExtendDialog({ target, tasks, onClose }: { target: { kind: "stag
           <SelectField label={L.edit.extendTask} value={taskId} onChange={(e) => setTaskId(e.target.value)} data-testid="extend-task">
             {running.map((t) => (
               <option key={t.id} value={t.id}>
-                {taskView(world, t)?.label}
+                {pt(taskView(world, t)?.labelP)}
               </option>
             ))}
           </SelectField>
@@ -1273,7 +1277,7 @@ export function ExtendDialog({ target, tasks, onClose }: { target: { kind: "stag
 
 export function ProjectTimelineCard({ projectId }: { projectId: Id }) {
   const { world } = useGuild();
-  const { L, f, dateTime } = useI18n();
+  const { L, f, dateTime, ph } = useI18n();
   const items = projectTimeline(world, projectId);
   return (
     <section className="card" aria-labelledby="ptl-title" data-testid="project-timeline">
@@ -1292,7 +1296,7 @@ export function ProjectTimelineCard({ projectId }: { projectId: Id }) {
               </span>
               <div className="timeline-body">
                 <div className="timeline-head">
-                  <span className="break">{i.text}</span>
+                  <span className="break">{ph(i.phrase)}</span>
                   <span className="label">{dateTime(i.at)}</span>
                 </div>
                 {i.reason ? (
@@ -1316,7 +1320,7 @@ export function ProjectTimelineCard({ projectId }: { projectId: Id }) {
 
 export function CutAdminCard({ cut }: { cut: CutRow }) {
   const { world, dispatch, notify } = useGuild();
-  const { L, f, err } = useI18n();
+  const { L, f, err, pt } = useI18n();
   const tasks = Object.values(world.tasks).filter((t) => t.cutId === cut.id && !t.archivedAt && !t.extra);
   const passed = tasks.filter((t) => t.status === "passed");
   const running = tasks.filter((t) => (t.status === "claimed" || t.status === "returned") && t.dueAt);
@@ -1353,14 +1357,14 @@ export function CutAdminCard({ cut }: { cut: CutRow }) {
               setError(null);
               setText("");
               setSub(null);
-              notify(f(L.edit.redone, { label: taskView(world, world.tasks[taskId])?.label ?? "" }), "Neutral");
+              notify(f(L.edit.redone, { label: pt(taskView(world, world.tasks[taskId])?.labelP) }), "Neutral");
             }
           }}
         >
           <SelectField label={L.edit.extendTask} value={taskId} onChange={(e) => setTaskId(e.target.value)}>
             {passed.map((t) => (
               <option key={t.id} value={t.id}>
-                {taskView(world, t)?.label}
+                {pt(taskView(world, t)?.labelP)}
               </option>
             ))}
           </SelectField>

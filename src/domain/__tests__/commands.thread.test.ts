@@ -73,7 +73,7 @@ describe("ruling.make", () => {
     expect(g.state.threads[s]).toMatchObject({ status: "ruled", rulingId });
     const todos = Object.values(g.state.threads).filter((t) => t.kind === "todo");
     expect(todos.map((t) => t.cutId).sort()).toEqual([cut(1).id, cut(3).id].sort());
-    expect(todos[0].text).toBe("要补：照设定补耳饰");
+    expect(todos[0].text).toBe("照设定补耳饰");
     expect(g.reject(g.admin, "ruling.make", { threadId: s, decision: "再拍一次" })).toBe("这条设定问题已经拍过板了");
   });
 

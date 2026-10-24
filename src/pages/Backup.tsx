@@ -9,10 +9,12 @@ import { useFiles } from "@/lib/files/FilesProvider";
 import { daysSince } from "@/lib/storage/local";
 import { navigate } from "@/lib/router";
 import { useGuild } from "@/lib/store";
+import { U, useI18n } from "@/i18n/I18n";
 
 export function BackupPage() {
   const { world, me, base, storage, exportWorld, exportText, resetDemo, leaveGuild, notify } = useGuild();
   const ui = useStorageUi();
+  const { L, f, r: rich, ph } = useI18n();
   const [confirmReset, setConfirmReset] = useState(false);
   const [copyText, setCopyText] = useState<string | null>(null);
   const [pasteText, setPasteText] = useState("");
@@ -34,53 +36,58 @@ export function BackupPage() {
       const packed = withFiles ? await files.embed() : null;
       const r = await exportWorld(packed ? { files: packed.files } : {});
       if (!r.ok) ui.open({ kind: "error", message: r.message });
-      else notify(packed ? `导出好了：${r.fileName}（带了 ${Object.keys(packed.files).length} 个文件${packed.missing ? `，${packed.missing} 个不在这台设备上没带` : ""}）` : `导出好了：${r.fileName}`);
+      else
+        notify(
+          packed
+            ? packed.missing
+              ? f(L.backup.exportedFilesMissing, { file: r.fileName, n: Object.keys(packed.files).length, missing: packed.missing })
+              : f(L.backup.exportedFiles, { file: r.fileName, n: Object.keys(packed.files).length })
+            : f(L.backup.exported, { file: r.fileName })
+        );
     } finally {
       setBusy(false);
     }
   };
   const est = files.usage.estimate;
-  const title = theWorld(world)?.title ?? "工会";
+  const title = theWorld(world)?.title ?? L.nav.guild;
   const days = daysSince(storage.lastBackupAt, new Date().toISOString());
   return (
     <>
       <div className="page-head">
         <div className="page-head-text">
-          <span className="label">备份</span>
-          <h1 className="t-title-32">备份</h1>
-          <p className="muted">「{title}」存在这台设备的浏览器里。换设备、清浏览器之前，先导出一份。</p>
+          <span className="label">{L.backup.title}</span>
+          <h1 className="t-title-32">{L.backup.title}</h1>
+          <p className="muted">{rich(L.backup.lead, { title: <U>{title}</U> })}</p>
         </div>
       </div>
       <div className="cards">
-        <section className="card" aria-label="导出">
-          <h2 className="t-heading-18">导出备份</h2>
-          <p className="muted">下载一个文件，里面是这个工会在这台设备上做过的每一步。</p>
-          <p className="label">{backupLabel(days)}</p>
+        <section className="card" aria-label={L.backup.exportTitle}>
+          <h2 className="t-heading-18">{L.backup.exportTitle}</h2>
+          <p className="muted">{L.backup.exportLead}</p>
+          <p className="label">{ph(backupLabel(days))}</p>
           <label className="check-row">
             <input type="checkbox" checked={withFiles} onChange={(e) => setWithFiles(e.target.checked)} data-testid="export-with-files" />
-            <span>
-              连文件一起（资料库的图和文件放进同一个备份，{lib.files} 个 · {sizeLabel(lib.bytes)}）
-            </span>
+            <span>{f(L.backup.withFiles, { n: lib.files, size: sizeLabel(lib.bytes) })}</span>
           </label>
-          <p className="label">不勾就只导记录：在别的设备上导入后，缺的文件显示「这个文件不在这台设备上」，再把文件拖进来就能对上。</p>
+          <p className="label">{L.backup.withoutFilesNote}</p>
           <div className="form-actions">
-            <Button Label={busy ? "正在导出…" : "导出备份"} Style="Accent" data-testid="export" disabled={busy} onClick={() => void doExport()} />
+            <Button Label={busy ? L.backup.exporting : L.backup.exportGo} Style="Accent" data-testid="export" disabled={busy} onClick={() => void doExport()} />
           </div>
         </section>
-        <section className="card" aria-label="导入">
-          <h2 className="t-heading-18">从备份导入</h2>
-          <p className="muted">选之前导出的文件。同一个工会会先问你要不要替换，替换前自动留一份。</p>
+        <section className="card" aria-label={L.backup.importTitle}>
+          <h2 className="t-heading-18">{L.backup.importTitle}</h2>
+          <p className="muted">{L.backup.importLead}</p>
           <div className="form-actions">
-            <Button Label="选备份文件" Style="Secondary" onClick={ui.pickImport} data-testid="import" />
+            <Button Label={L.backup.pickFile} Style="Secondary" onClick={ui.pickImport} data-testid="import" />
           </div>
         </section>
-        <section className="card" aria-label="复制和粘贴备份">
-          <h2 className="t-heading-18">复制 / 粘贴备份</h2>
-          <p className="muted">点了「导出备份」没下载下来（有的预览页面不让下载）时用这个：把备份复制下来存好，要恢复时粘贴回来。</p>
-          <p className="label">复制 / 粘贴只带记录，不带资料库的文件。</p>
+        <section className="card" aria-label={L.backup.copyTitle}>
+          <h2 className="t-heading-18">{L.backup.copyTitle}</h2>
+          <p className="muted">{L.backup.copyLead}</p>
+          <p className="label">{L.backup.copyNote}</p>
           <div className="form-actions">
             <Button
-              Label="复制备份"
+              Label={L.backup.copyGo}
               Style="Secondary"
               data-testid="export-copy"
               onClick={() => {
@@ -90,8 +97,8 @@ export function BackupPage() {
                   return;
                 }
                 setCopyText(r.text);
-                const done = () => notify("备份复制好了，粘到一个文本文件里存起来");
-                const fallback = () => notify("没能自动复制。下面的框里就是备份，全选后复制", "Neutral");
+                const done = () => notify(L.backup.copied);
+                const fallback = () => notify(L.backup.copyFallback, "Neutral");
                 try {
                   navigator.clipboard.writeText(r.text).then(done, fallback);
                 } catch {
@@ -104,7 +111,7 @@ export function BackupPage() {
             <textarea
               id="backup-copy-text"
               className="field-control"
-              aria-label="备份内容"
+              aria-label={L.backup.copyText}
               readOnly
               rows={4}
               value={copyText}
@@ -114,8 +121,8 @@ export function BackupPage() {
           <textarea
             id="backup-paste-text"
             className="field-control"
-            aria-label="粘贴备份"
-            placeholder="把之前复制的备份粘贴到这里"
+            aria-label={L.backup.pasteLabel}
+            placeholder={L.backup.pastePlaceholder}
             rows={4}
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
@@ -123,7 +130,7 @@ export function BackupPage() {
           />
           <div className="form-actions">
             <Button
-              Label="从粘贴的内容导入"
+              Label={L.backup.pasteGo}
               Style="Secondary"
               disabled={pasteText.trim() === ""}
               data-testid="import-paste-go"
@@ -134,33 +141,37 @@ export function BackupPage() {
             />
           </div>
         </section>
-        <section className="card" aria-label="存储">
-          <h2 className="t-heading-18">存储</h2>
+        <section className="card" aria-label={L.backup.storageTitle}>
+          <h2 className="t-heading-18">{L.backup.storageTitle}</h2>
           <p className="muted" data-testid="usage-records">
-            记录（浏览器的本机存储）：{storage.available ? usageLabel(storage.ratio) : "这个浏览器不让存，关掉就没了。先导出备份。"}
+            {L.backup.records}
+            {storage.available ? ph(usageLabel(storage.ratio)) : L.backup.recordsBlocked}
           </p>
           <p className="muted" data-testid="usage-files">
-            文件（IndexedDB）：{files.persistent ? `${files.usage.storedFiles} 个 · ${sizeLabel(files.usage.storedBytes)}` : "只在内存里，关掉就没了"}
-            {est ? ` · 浏览器给这个站 ${sizeLabel(est.quota)}，已用 ${Math.max(1, Math.round((est.usage / Math.max(1, est.quota)) * 100))}%` : ""}
+            {L.backup.filesLabel}
+            {files.persistent ? f(L.backup.filesStored, { n: files.usage.storedFiles, size: sizeLabel(files.usage.storedBytes) }) : L.backup.filesMemory}
+            {est ? f(L.backup.filesQuota, { quota: sizeLabel(est.quota), pct: Math.max(1, Math.round((est.usage / Math.max(1, est.quota)) * 100)) }) : ""}
           </p>
           {est && est.usage / Math.max(1, est.quota) >= 0.8 ? (
             <p className="error-text" role="alert">
-              文件快把浏览器给的空间用满了：先「导出备份 · 连文件一起」，再把不要的文件从资料库里拿掉。
+              {L.backup.filesFull}
             </p>
           ) : null}
           <p className="label">
-            在这台设备上做了 {storage.steps} 步{storage.skipped.length ? `，${storage.skipped.length} 步没能恢复（留着，没有丢）` : ""}。
+            {f(L.backup.steps, { n: storage.steps })}
+            {storage.skipped.length ? f(L.backup.stepsSkipped, { n: storage.skipped.length }) : ""}
+            {L.common.period}
           </p>
           <div className="form-actions">
-            <Button Label="看详细" Style="Secondary" onClick={() => ui.open({ kind: "storage" })} />
+            <Button Label={L.backup.details} Style="Secondary" onClick={() => ui.open({ kind: "storage" })} />
           </div>
         </section>
-        <section className="card" aria-label="换工会">
-          <h2 className="t-heading-18">换一个工会</h2>
-          <p className="muted">回到进门：进示范工会、建自己的工会、或者打开这台设备上的别的工会。</p>
+        <section className="card" aria-label={L.backup.switchTitle}>
+          <h2 className="t-heading-18">{L.backup.switchTitle}</h2>
+          <p className="muted">{L.backup.switchLead}</p>
           <div className="form-actions">
             <Button
-              Label="回到进门"
+              Label={L.backup.backToDoor}
               Style="Secondary"
               onClick={() => {
                 leaveGuild();
@@ -170,11 +181,11 @@ export function BackupPage() {
           </div>
         </section>
         {base === "demo" && isAdmin(me) ? (
-          <section className="card" aria-label="恢复示范工会">
-            <h2 className="t-heading-18">把示范工会恢复原样</h2>
-            <p className="muted">在这台设备上做过的都撤掉，回到示范的样子。恢复之前自动留一份。</p>
+          <section className="card" aria-label={L.backup.resetTitle}>
+            <h2 className="t-heading-18">{L.backup.resetTitle}</h2>
+            <p className="muted">{L.backup.resetLead}</p>
             <div className="form-actions">
-              <Button Label="恢复原样" Style="Secondary" onClick={() => setConfirmReset(true)} />
+              <Button Label={L.backup.resetGo} Style="Secondary" onClick={() => setConfirmReset(true)} />
             </div>
           </section>
         ) : null}
@@ -182,14 +193,14 @@ export function BackupPage() {
       {bigConfirm !== null ? (
         <Drawer
           Type="Dialog"
-          Title="文件有点多"
-          Body={`连文件一起导出大概有 ${sizeLabel(Math.round(bigConfirm * 1.34))}（文件转成文字会大三分之一），要一会儿，存的时候也要这么大的地方。`}
+          Title={L.backup.bigTitle}
+          Body={f(L.backup.bigBody, { size: sizeLabel(Math.round(bigConfirm * 1.34)) })}
           open
           onClose={() => setBigConfirm(null)}
           actions={
             <>
-              <Button Label="只导记录" Style="Secondary" onClick={() => { setBigConfirm(null); setWithFiles(false); }} />
-              <Button Label="照样导出" onClick={() => { setBigConfirm(null); void doExport(true); }} />
+              <Button Label={L.backup.recordsOnly} Style="Secondary" onClick={() => { setBigConfirm(null); setWithFiles(false); }} />
+              <Button Label={L.backup.exportAnyway} onClick={() => { setBigConfirm(null); void doExport(true); }} />
             </>
           }
         />
@@ -197,19 +208,19 @@ export function BackupPage() {
       {confirmReset ? (
         <Drawer
           Type="Dialog"
-          Title="把示范工会恢复原样？"
-          Body={`这台设备上做过的 ${storage.steps} 步会撤掉。之前会自动留一份。`}
+          Title={L.backup.resetConfirmTitle}
+          Body={f(L.backup.resetConfirmBody, { n: storage.steps })}
           open
           onClose={() => setConfirmReset(false)}
           actions={
             <>
-              <Button Label="取消" Style="Secondary" onClick={() => setConfirmReset(false)} />
+              <Button Label={L.backup.cancel} Style="Secondary" onClick={() => setConfirmReset(false)} />
               <Button
-                Label="恢复"
+                Label={L.backup.reset}
                 onClick={() => {
                   resetDemo();
                   setConfirmReset(false);
-                  notify("示范工会恢复原样了", "Neutral");
+                  notify(L.backup.resetDone, "Neutral");
                 }}
               />
             </>

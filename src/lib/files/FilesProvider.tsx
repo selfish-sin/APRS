@@ -11,6 +11,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { demoImages } from "@/data/demoImages";
 import type { FileSubject, Id } from "@/domain/model";
 import { usedShas } from "@/domain/queries";
+import { errorSay } from "@/domain/errors";
+import { phrase, t2, uc, type Say } from "@/domain/text";
 import type { EmbeddedFile } from "@/lib/migrations";
 import { useStore } from "@/lib/store";
 import { base64ToBytes, bytesToBase64, sha256OfBytes } from "./sha";
@@ -32,7 +34,7 @@ export interface AddReport {
   duplicates: number;
   /** 本来就有的那条记录（对上了的、重复的）。 */
   existing: Id[];
-  errors: string[];
+  errors: Say[];
 }
 
 export interface FilesApi {
@@ -56,11 +58,15 @@ export interface FilesApi {
 
 const FilesContext = createContext<FilesApi | null>(null);
 
-/** 粘贴的截图没有像样的名字：「截图-20261023-0950.png」。 */
-export function pastedName(mime: string, at = new Date()): string {
+function pageLang(): "zh" | "en" {
+  return typeof document !== "undefined" && document.documentElement.lang && !document.documentElement.lang.startsWith("zh") ? "en" : "zh";
+}
+
+/** 粘贴的截图没有像样的名字：「截图-20261023-0950.png」（English 界面下是 Screenshot-…）。 */
+export function pastedName(mime: string, at = new Date(), lang: "zh" | "en" = pageLang()): string {
   const ext = mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : mime === "image/gif" ? "gif" : "png";
   const p = (n: number) => String(n).padStart(2, "0");
-  return `截图-${at.getFullYear()}${p(at.getMonth() + 1)}${p(at.getDate())}-${p(at.getHours())}${p(at.getMinutes())}${p(at.getSeconds())}.${ext}`;
+  return `${lang === "en" ? "Screenshot" : "截图"}-${at.getFullYear()}${p(at.getMonth() + 1)}${p(at.getDate())}-${p(at.getHours())}${p(at.getMinutes())}${p(at.getSeconds())}.${ext}`;
 }
 
 function guessMime(name: string, given: string): string {
@@ -181,7 +187,7 @@ export function FilesProvider({ children }: { children: ReactNode }) {
     async (files, target) => {
       const report: AddReport = { fileIds: [], matched: 0, duplicates: 0, existing: [], errors: [] };
       if (!store) {
-        report.errors.push("文件仓还没准备好，等一下再放");
+        report.errors.push(t2("文件仓还没准备好，等一下再放", "The file store isn't ready yet. Try again in a moment"));
         return report;
       }
       const added = new Set<string>();
@@ -226,9 +232,14 @@ export function FilesProvider({ children }: { children: ReactNode }) {
             { quiet: true }
           );
           if (r.ok) report.fileIds.push(r.created.fileId);
-          else report.errors.push(`${name}：${r.error.message}`);
+          else report.errors.push(phrase("{name}：{why}", "{name}: {why}", { name: uc(name), why: errorSay(r.error) }));
         } catch (e) {
-          report.errors.push(`${file.name || "文件"}：没能放进来（${e instanceof Error ? e.message : "读不了"}）`);
+          report.errors.push(
+            phrase("{name}：没能放进来（{why}）", "{name}: couldn't add it ({why})", {
+              name: file.name ? uc(file.name) : t2("文件", "File"),
+              why: e instanceof Error ? e.message : t2("读不了", "unreadable"),
+            })
+          );
         }
       }
       if (added.size) setPresent((prev) => new Set([...Array.from(prev), ...Array.from(added)]));

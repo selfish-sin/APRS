@@ -1,3 +1,4 @@
+import { t2, type Text2 } from "@/domain/text";
 /**
  * 口令（SPEC §10）：只存 salt 和 sha256(salt + ":" + 口令)，校验也这样算。
  * 用 WebCrypto 的 crypto.subtle.digest；有的地方（直接打开的文件、很旧的浏览器）没有它，
@@ -114,11 +115,11 @@ export async function verifyPasscode(account: { salt: string; hash: string }, pa
   return sameHex(await hashPasscode(account.salt, passcode), account.hash);
 }
 
-/** 口令的规矩：至少 6 位，最多 64 位。返回中文的问题，或 null。 */
-export function passcodeProblem(passcode: string, again?: string): string | null {
-  if (passcode.length < 6) return "口令至少 6 位";
-  if (passcode.length > 64) return "口令最多 64 位";
-  if (again !== undefined && again !== passcode) return "两次输的口令不一样";
+/** 口令的规矩：至少 6 位，最多 64 位。返回问题（中英两种），或 null。 */
+export function passcodeProblem(passcode: string, again?: string): Text2 | null {
+  if (passcode.length < 6) return t2("口令至少 6 位", "The passcode needs at least 6 characters");
+  if (passcode.length > 64) return t2("口令最多 64 位", "The passcode can be at most 64 characters");
+  if (again !== undefined && again !== passcode) return t2("两次输的口令不一样", "The two passcodes don't match");
   return null;
 }
 

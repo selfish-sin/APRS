@@ -90,7 +90,7 @@ describe("questFor · indicatorOf", () => {
     g.run(worker, "enroll.add", { group: "animation", stageKey: "inbetween", skill: 0 });
     const cut1 = Object.values(g.state.cuts).find((c) => c.projectId === p && c.number === 1)!;
     g.run(g.admin, "ruling.make", { projectId: p, question: "耳饰？", decision: "补耳饰", cutIds: [cut1.id], stageKey: "inbetween" });
-    expect(q.questFor(g.state, worker)[0].indicator.todos.map((t) => t.text)).toEqual(["要补：补耳饰"]);
+    expect(q.questFor(g.state, worker)[0].indicator.todos.map((t) => t.text)).toEqual(["补耳饰"]);
   });
 });
 
@@ -157,7 +157,7 @@ describe("timelineOfCut", () => {
     g.run(g.admin, "ruling.make", { projectId: p, question: "耳饰？", decision: "补耳饰", cutIds: [cut1.id] });
     const items = q.timelineOfCut(g.state, cut1.id);
     expect(items.map((i) => i.kind)).toEqual(["thread", "thread", "review", "submit", "claim", "dispatch", "dispatch"]);
-    expect(items[0].text).toBe("要补：补耳饰");
+    expect(items[0].text).toBe("补耳饰");
     expect(items[2].review?.comments[0]).toMatchObject({ sheets: "5", tag: "漏轨目" });
     expect(items[4].text).toBe("小甲 接了 中割 A 层");
     expect(q.timelineOfCut(g.state, "cut_nope")).toEqual([]);

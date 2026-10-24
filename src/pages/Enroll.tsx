@@ -5,7 +5,9 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Empty, Tag } from "@/components/app/bits";
 import { QuestCard } from "@/components/app/quest";
 import { StageShape } from "@/components/app/stage";
-import { PHASE_LABEL, PHASE_LEVEL, STAGE_KIND_LABEL, rateLabel, skillLabel } from "@/domain/labels";
+import { skillLabel } from "@/domain/labels";
+import { stageText } from "@/domain/templates";
+import { U, useI18n } from "@/i18n/I18n";
 import { GROUP, PHASE, type Group, type Skill } from "@/domain/model";
 import { enrollOptions, enrollmentsOf, questOf, taskById } from "@/domain/queries";
 import { DEFAULT_MAX_ACTIVE, SKILL_OPTIONS } from "@/domain/rules";
@@ -15,6 +17,7 @@ import { useGuild } from "@/lib/store";
 
 export function EnrollPage() {
   const { world, me, dispatch, notify } = useGuild();
+  const { L, f, lang, stageName, stage: stageEl, rate } = useI18n();
   const route = useRoute();
   const qGroup = route.query.get("group");
   const [group, setGroup] = useState<Group>(GROUP.includes(qGroup as Group) ? (qGroup as Group) : "animation");
@@ -38,7 +41,7 @@ export function EnrollPage() {
     const r = dispatch("enroll.add", { group, stageKey: picked.template.key, skill, maxActive });
     if (!r.ok) return;
     if (r.created.taskId) setGotTaskId(r.created.taskId);
-    else notify(picked.open ? `报到好了。你手上的「${picked.template.name}」已经到上限，交掉一张再接。` : `报到好了。「${picked.template.name}」现在没有可接的，放出来以后点「接任务」。`, "Neutral");
+    else notify(f(picked.open ? L.enroll.enrolledFull : L.enroll.enrolledNone, { stage: stageName(group, { templateKey: picked.template.key, name: picked.template.name }) }), "Neutral");
   };
 
   const gotTask = gotTaskId ? taskById(world, gotTaskId) : undefined;
@@ -48,14 +51,14 @@ export function EnrollPage() {
     <>
       <div className="page-head">
         <div className="page-head-text">
-          <span className="label">报到</span>
-          <h1 className="t-title-32">选一个你要做的环节</h1>
-          <p className="muted">报到完马上按卡号顺序给你配一张任务单；一次最多拿几张自己定。</p>
+          <span className="label">{L.enroll.title}</span>
+          <h1 className="t-title-32">{L.enroll.heading}</h1>
+          <p className="muted">{L.enroll.lead}</p>
         </div>
       </div>
 
-      <section className="stack" data-gap="small" aria-label="第一步：选组">
-        <h2 className="t-heading-18">1 · 选组</h2>
+      <section className="stack" data-gap="small" aria-label={L.enroll.step1}>
+        <h2 className="t-heading-18">{L.enroll.step1Title}</h2>
         <div className="group-tiles">
           {GROUP.map((g) => (
             <button
@@ -69,87 +72,90 @@ export function EnrollPage() {
               }}
             >
               <span className="role-card-top">
-                <span className="role-card-name">{GROUPS[g].name}</span>
-                {GROUPS[g].draft ? <Tag tone="lilac">草案</Tag> : null}
+                <span className="role-card-name">{L.labels.group[g]}</span>
+                {GROUPS[g].draft ? <Tag tone="lilac">{L.enroll.draft}</Tag> : null}
               </span>
-              <span className="muted label">
-                {GROUPS[g].stages.length} 个环节 · {GROUPS[g].hasLayers ? "按卡、分 A / B 层" : `按${GROUPS[g].cutLabel}`}
-              </span>
+              <span className="muted label">{f(L.enroll.groupStats, { n: GROUPS[g].stages.length, how: GROUPS[g].hasLayers ? L.enroll.byLayers : f(L.enroll.byUnit, { unit: L.labels.cutLabel[g] }) })}</span>
             </button>
           ))}
         </div>
       </section>
 
-      <section className="stack" data-gap="small" aria-label="第二步：选环节">
-        <h2 className="t-heading-18">2 · 选环节</h2>
+      <section className="stack" data-gap="small" aria-label={L.enroll.step2}>
+        <h2 className="t-heading-18">{L.enroll.step2Title}</h2>
         {PHASE.map((phase) => {
           const list = options.filter((o) => o.template.phase === phase);
           if (!list.length) return null;
           return (
             <div key={phase} className="stack" data-gap="small">
               <span className="label">
-                {PHASE_LEVEL[phase]} · {PHASE_LABEL[phase]}
+                {L.labels.phaseLevel[phase]} · {L.labels.phase[phase]}
               </span>
               <div className="roles">
-                {list.map((o) => (
-                  <button key={o.template.key} type="button" className="role-card" aria-pressed={stageKey === o.template.key} onClick={() => pick(o.template.key)} data-testid={`role-${o.template.key}`}>
-                    <span className="role-card-top">
-                      <StageShape kind={o.template.kind} hub={o.template.hub} state={o.open ? "open" : "locked"} size={28} />
-                      <span className="role-card-name">{o.template.name}</span>
-                      {o.mine ? <Tag tone="inverse">{o.mine.assigned ? "指派" : (o.mine.origin ?? "self") === "claimed" ? "自己认领" : "已报到"} {skillLabel(o.mine.skill)}</Tag> : null}
-                      {o.locked ? <Tag tone="warning">只给指派的人</Tag> : null}
-                    </span>
-                    <span className="role-card-numbers">
-                      <span>
-                        <span className="num">{o.open}</span> <span className="label">张可接</span>
+                {list.map((o) => {
+                  const st = stageText(group, { templateKey: o.template.key, name: o.template.name, indicator: { receive: o.template.receive, deliver: o.template.deliver, handTo: o.template.handTo }, note: o.template.note ?? null }, lang);
+                  return (
+                    <button key={o.template.key} type="button" className="role-card" aria-pressed={stageKey === o.template.key} onClick={() => pick(o.template.key)} data-testid={`role-${o.template.key}`}>
+                      <span className="role-card-top">
+                        <StageShape kind={o.template.kind} hub={o.template.hub} state={o.open ? "open" : "locked"} size={28} />
+                        <span className="role-card-name">{st.name}</span>
+                        {o.mine ? (
+                          <Tag tone="inverse">
+                            {o.mine.assigned ? L.enroll.assigned : (o.mine.origin ?? "self") === "claimed" ? L.enroll.claimed : L.enroll.enrolled} {skillLabel(o.mine.skill)}
+                          </Tag>
+                        ) : null}
+                        {o.locked ? <Tag tone="warning">{L.enroll.lockedTag}</Tag> : null}
                       </span>
-                      <span>
-                        <span className="num">{o.enrolled}</span> <span className="label">人报到</span>
+                      <span className="role-card-numbers">
+                        <span>
+                          <span className="num">{o.open}</span> <span className="label">{L.enroll.openCount}</span>
+                        </span>
+                        <span>
+                          <span className="num">{o.enrolled}</span> <span className="label">{L.enroll.peopleCount}</span>
+                        </span>
                       </span>
-                    </span>
-                    <span className="label">
-                      {STAGE_KIND_LABEL[o.template.kind]}
-                      {o.template.hub && o.template.kind !== "hub" ? " · 枢纽" : ""} · {rateLabel({ tn: o.tn, per: o.per, unit: o.template.unit, unitLabel: o.template.unitLabel })}
-                      {o.template.adminSet ? "（管理员定）" : ""}
-                    </span>
-                    <span className="muted label break">
-                      收：{o.template.receive} → 交：{o.template.deliver}
-                    </span>
-                    {o.template.note ? <span className="label">{o.template.note}</span> : null}
-                  </button>
-                ))}
+                      <span className="label">
+                        {L.labels.stageKind[o.template.kind]}
+                        {o.template.hub && o.template.kind !== "hub" ? L.enroll.hubSuffix : ""} · {rate({ tn: o.tn, per: o.per, unit: o.template.unit }, group)}
+                        {o.template.adminSet ? L.labels.adminSet : ""}
+                      </span>
+                      <span className="muted label break">{f(L.enroll.receiveDeliver, { receive: st.receive, deliver: st.deliver })}</span>
+                      {st.note ? <span className="label">{st.note}</span> : null}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           );
         })}
       </section>
 
-      <section className="card" aria-label="第三步：熟练度">
-        <h2 className="t-heading-18">3 · {picked ? `「${picked.template.name}」你做得怎么样` : "先选一个环节"}</h2>
-        <div className="skill-options" role="radiogroup" aria-label="熟练度">
+      <section className="card" aria-label={L.enroll.step3}>
+        <h2 className="t-heading-18">{f(L.enroll.step3Title, { what: picked ? f(L.enroll.howGood, { stage: stageName(group, { templateKey: picked.template.key, name: picked.template.name }) }) : L.enroll.pickFirst })}</h2>
+        <div className="skill-options" role="radiogroup" aria-label={L.enroll.skill}>
           {SKILL_OPTIONS.map((s) => (
             <button key={s.value} type="button" className="option" role="radio" aria-checked={skill === s.value} aria-pressed={skill === s.value} disabled={!picked} onClick={() => setSkill(s.value)}>
-              <span className="t-body-14m">{s.label}</span>
-              <span className="muted label">{s.hint}</span>
+              <span className="t-body-14m">{L.enroll.skillOpt[String(s.value) as "0.5" | "0.2" | "0" | "-0.2"]}</span>
+              <span className="muted label">{L.enroll.skillHint[String(s.value) as "0.5" | "0.2" | "0" | "-0.2"]}</span>
             </button>
           ))}
         </div>
         <div className="row">
-          <span className="label">同时最多拿</span>
+          <span className="label">{L.enroll.maxActive}</span>
           <div className="chips">
             {[1, 2, 3, 4].map((n) => (
               <button key={n} type="button" className="ui-chip" aria-pressed={maxActive === n} onClick={() => setMaxActive(n)} disabled={!picked}>
-                {n} 张
+                {f(L.enroll.nTasks, { n })}
               </button>
             ))}
           </div>
         </div>
-        <p className="label">熟练度会算进活力点：活力点 = 工时 ×（掌控系数 + 熟练度）× 质量。</p>
+        <p className="label">{L.enroll.skillNote}</p>
         <div className="form-actions">
-          <Button Label={picked?.mine ? "更新报到，再配一张" : "报到"} Style="Accent" disabled={!picked} onClick={enroll} data-testid="enroll-submit" />
+          <Button Label={picked?.mine ? L.enroll.update : L.enroll.enroll} Style="Accent" disabled={!picked} onClick={enroll} data-testid="enroll-submit" />
           {picked && !picked.mine && picked.open ? (
             <Button
-              Label={`直接认领一张「${picked.template.name}」`}
+              Label={f(L.enroll.claimOne, { stage: stageName(group, { templateKey: picked.template.key, name: picked.template.name }) })}
               Style="Secondary"
               data-testid="enroll-claim"
               onClick={() => {
@@ -160,35 +166,37 @@ export function EnrollPage() {
             />
           ) : null}
         </div>
-        {picked?.lockedForMe ? <p className="label">这个环节只给指派的人，找管理员。</p> : null}
+        {picked?.lockedForMe ? <p className="label">{L.enroll.lockedForMe}</p> : null}
       </section>
 
       <section className="card" aria-labelledby="mine-title">
         <h2 id="mine-title" className="t-heading-18">
-          我报到的环节 <span className="count">{mine.length}</span>
+          {L.enroll.mine} <span className="count">{mine.length}</span>
         </h2>
         {mine.length === 0 ? (
-          <Empty>还没有报到。</Empty>
+          <Empty>{L.enroll.mineEmpty}</Empty>
         ) : (
           <ul className="list">
             {mine.map((e) => {
               const t = GROUPS[e.group].stages.find((s) => s.key === e.stageKey);
+              const custom = !t ? Object.values(world.stages).find((s) => s.templateKey === e.stageKey && !s.archivedAt) : undefined;
+              const stageLike = t ? { templateKey: t.key, name: t.name } : custom ?? { templateKey: e.stageKey, name: e.stageKey };
               return (
                 <li key={e.id}>
                   <div className="list-main">
-                    <span className="t-body-14m">{t?.name ?? e.stageKey}</span>
+                    <span className="t-body-14m">{stageEl(e.group, stageLike)}</span>
                     <span className="label">
-                      {GROUPS[e.group].name} · 熟练度 {skillLabel(e.skill)} · 同时最多 {e.maxActive} 张
-                      {e.assigned ? " · 指派" : (e.origin ?? "self") === "claimed" ? " · 自己认领" : ""}
+                      {f(L.enroll.mineLine, { group: L.labels.group[e.group], skill: skillLabel(e.skill), n: e.maxActive })}
+                      {e.assigned ? L.enroll.mineAssigned : (e.origin ?? "self") === "claimed" ? L.enroll.mineClaimed : ""}
                     </span>
                   </div>
                   <Button
-                    Label="取消报到"
+                    Label={L.enroll.cancel}
                     Size="Small"
                     Style="Ghost"
                     onClick={() => {
                       const r = dispatch("enroll.remove", { enrollmentId: e.id });
-                      if (r.ok) notify(`取消了「${t?.name ?? ""}」的报到，手上的任务不动`, "Neutral");
+                      if (r.ok) notify(f(L.enroll.cancelled, { stage: stageName(e.group, stageLike) }), "Neutral");
                     }}
                   />
                 </li>
@@ -201,17 +209,17 @@ export function EnrollPage() {
       {gotQuest ? (
         <Drawer
           Type="Dialog"
-          Title="拿到一张任务单"
+          Title={L.enroll.gotTitle}
           open
           onClose={() => setGotTaskId(null)}
           actions={
             <>
-              <Button Label="留在这里" Style="Secondary" onClick={() => setGotTaskId(null)} />
-              <Button Label="去大厅交" Style="Accent" onClick={() => navigate(`/hall?task=${gotTaskId}`)} data-testid="goto-hall" />
+              <Button Label={L.enroll.stay} Style="Secondary" onClick={() => setGotTaskId(null)} />
+              <Button Label={L.enroll.goHall} Style="Accent" onClick={() => navigate(`/hall?task=${gotTaskId}`)} data-testid="goto-hall" />
             </>
           }
         >
-          <QuestCard quest={gotQuest} eyebrow="新任务单" actions={false} />
+          <QuestCard quest={gotQuest} eyebrow={L.enroll.newQuest} actions={false} />
         </Drawer>
       ) : null}
     </>

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ERRORS } from "@/domain/errors";
+import { WHAT_EN } from "@/domain/what";
 import { detectLang, fmt } from "./core";
 import { en } from "./en";
 import { zh } from "./zh";
@@ -17,7 +20,7 @@ function leaves(t: Tree, prefix = ""): Map<string, string[]> {
   return out;
 }
 
-const params = (s: string) => Array.from(new Set(Array.from(s.matchAll(/\{(\w+)\}/g)).map((m) => m[1]))).sort();
+const params = (s: string) => Array.from(new Set(Array.from(s.matchAll(/\{\^?(\w+)\}/g)).map((m) => m[1]))).sort();
 
 describe("词典（SPEC §16）", () => {
   const z = leaves(zh as unknown as Tree);
@@ -56,5 +59,46 @@ describe("词典（SPEC §16）", () => {
     expect(detectLang(["zh-TW"])).toBe("zh");
     expect(detectLang(["en-CA", "zh"])).toBe("en");
     expect(detectLang(["fr-FR"])).toBe("en");
+  });
+
+  it("命令里写的中文「什么」都有英文（被拒的原因拼英文时用）", () => {
+    const dir = join(process.cwd(), "src/domain/commands");
+    const pats = [
+      /mustText\([^,()]+,\s*"([^"]+)"/g,
+      /mustGet\(rm,\s*ctx,\s*"\w+",\s*[^,]+,\s*"([^"]+)"/g,
+      /mustBeOneOf\([^,]+,\s*[^,]+,\s*"([^"]+)"\)/g,
+      /opt(?:Date|Url|When|Number|DateTime|Integer|Link)\([^,()]+,\s*"([^"]+)"/g,
+      /mustAdmin\(rm,\s*ctx,\s*"([^"]+)"\)/g,
+      /mustNumber\([^,()]+,\s*"([^"]+)"/g,
+      /\bint\([^,()]+,\s*"([^"]+)"/g,
+      /\bratio\([^,()]+,\s*"([^"]+)"\)/g,
+      /checkKey\([^,()]+,\s*"([^"]+)"\)/g,
+    ];
+    const missing = new Set<string>();
+    for (const f of readdirSync(dir).filter((x) => x.endsWith(".ts"))) {
+      const src = readFileSync(join(dir, f), "utf8");
+      for (const re of pats) for (const m of Array.from(src.matchAll(re))) if (/[一-鿿]/.test(m[1]) && !(m[1] in WHAT_EN)) missing.add(`${f}: ${m[1]}`);
+    }
+    expect(Array.from(missing)).toEqual([]);
+    expect(Object.values(WHAT_EN).filter((v) => /[一-鿿]/.test(v))).toEqual([]);
+  });
+
+  it("被拒的原因：参数是用户写的照原样，英文句首大写", async () => {
+    const { errorText } = await import("./I18n");
+    expect(errorText({ message: "", key: "empty", params: { what: { zh: "项目名字", en: "project name" } } }, "en")).toBe("Project name can't be empty.");
+    expect(errorText({ message: "", key: "nickname_taken", params: { name: { uc: "青柠" } } }, "en")).toBe("Someone is already called “青柠”. Pick another nickname.");
+    expect(errorText({ message: "", key: "claim_full", params: { n: 1, stage: { zh: "中割", en: "In-between" } } }, "en")).toBe("You already have 1 “In-between” task. Hand one in first.");
+    expect(errorText({ message: "", key: "claim_full", params: { n: 3, stage: { zh: "中割", en: "In-between" } } }, "zh")).toBe("你手上已经有 3 张「中割」了，先交掉一张");
+  });
+});
+
+describe("日期 · 数字 · 时间按语言（SPEC §16）", () => {
+  it("10月23日 周五 / Fri, Oct 23；数字千分位；相对时间", async () => {
+    const f = await import("./format");
+    expect(f.fmtDay("2026-10-23", "zh")).toBe("10月23日 周五");
+    expect(f.fmtDay("2026-10-23", "en")).toBe("Fri, Oct 23");
+    expect(f.fmtNumber(1234.5, "en")).toBe("1,234.5");
+    expect(f.fmtRelative("2026-10-22T10:00:00+08:00", "2026-10-23T10:00:00+08:00", "zh")).toBe("昨天");
+    expect(f.fmtRelative("2026-10-22T10:00:00+08:00", "2026-10-23T10:00:00+08:00", "en")).toBe("yesterday");
   });
 });

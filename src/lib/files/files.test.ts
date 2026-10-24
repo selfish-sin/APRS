@@ -86,7 +86,7 @@ describe("保存到这台设备", () => {
   it("预览页面里存不了 .clip / .rar；被拒不重试", async () => {
     let calls = 0;
     const h = host(async () => ({ save: async () => { calls += 1; throw Object.assign(new Error("declined"), { code: "declined" }); } }));
-    expect(await saveToDevice("C001.clip", blob, h.host)).toEqual({ ok: false, reason: "unsupported_type", message: "在这里存不了这种文件，请在装好的版本里下载" });
+    expect(await saveToDevice("C001.clip", blob, h.host)).toEqual({ ok: false, reason: "unsupported_type", message: { zh: "在这里存不了这种文件，请在装好的版本里下载", en: "This kind of file can't be saved here. Download it from the installed app" } });
     expect(await saveToDevice("a.png", blob, h.host)).toMatchObject({ ok: false, reason: "declined" });
     expect(calls).toBe(1);
   });

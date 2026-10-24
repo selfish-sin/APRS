@@ -39,7 +39,8 @@ pnpm shots          # 主要页面的截图 → artifacts/shots/（不进仓库�
 | `src/lib/` | store（打开工会、登录、存、导出导入、超时收回）· 存储（`arps:` 键、信封升级）· 口令（WebCrypto + 纯 JS 备用）· hash 路由 · `sync/`（SyncAdapter：本机 + HTTP） |
 | `src/pages/` | P1 进门 · 登录 · P2 大厅 · P3 报到 · P4 项目 · P5 项目总览 · P6 卡详情 · P7 审核台 · P8 管理 · P9 成员 · P10 备份 |
 | `src/components/` | `ui/`（基础组件）、`storage/`（本机存储和备份）· `app/`（任务单黑卡、关卡地图、网格、时间线、外壳…） |
-| `tests/smoke/` | Playwright：每页打开 0 报错（三套设置）· 端到端主流程 · 断网 · 单文件 |
+| `src/i18n/` | 中文 / English 词典（`zh.ts` · `en.ts` · `ns/*`）、`useI18n()`、「中 / EN」切换（§16） |
+| `tests/smoke/` | Playwright：每页打开 0 报错（三套设置）· 端到端主流程 · 断网 · 单文件 · English 每页扫汉字 |
 
 ## 新依赖
 
@@ -58,6 +59,14 @@ pnpm shots          # 主要页面的截图 → artifacts/shots/（不进仓库�
 - 不从 CDN 加载：官方 tarball 放在 `vendor/xlsx-0.20.3.tgz`（sha256 `8dc73fc3…b99fe8`），`pnpm install` 从本地装，打进程序。
 - 普通构建里按需加载：打开表格或导出汇报时才下载 `assets/xlsx-*.js`（约 500 KB，gzip 约 163 KB）；单文件版里内联，**单文件版因此大了约 500 KB（gzip 约 163 KB）**。
 - 社区版写文件时不写单元格样式：导出汇报的颜色（计划 / 实际 / 超出）和冻结表头由 `src/lib/sheets/write.ts` 在写好的 .xlsx（zip）里补进 `styles.xml` 和各表的 xml，用的是同一个库自带的 zip（`XLSX.CFB`）。
+
+## 中文 / English（§16）
+
+- 界面文字都在词典里：`src/i18n/zh.ts` 和 `src/i18n/en.ts`，按页面分到 `src/i18n/ns/*.ts`（每个文件导出 `zh` 和 `en`，英文那份的类型是 `Shape<typeof zh>`，少一个键就编译不过）；`src/i18n/i18n.test.ts` 再查一遍两边的键和占位符一样。
+- 第一次打开按浏览器语言（`zh*` → 中文，别的 → English）；右上角 / 侧栏底部「中 / EN」切换，记在这台设备（`arps:lang`）也记在账号上（`account.set_lang`）。
+- 数据层不拼句子：命令被拒返回 `code + key + params`（`src/domain/errors.ts`），时间线和提示是 `Phrase`（`src/domain/text.ts`），界面按语言拼。流程模板的环节名和位置名有两种说法；管理员自己起的名字、成员写的内容不翻，界面里包在 `<U>` / `data-uc` 里。
+- 日期、数字、复数按语言（`10月23日 周五` / `Fri, Oct 23`，`1 task` / `2 tasks`）；导出汇报的表头和文件名跟着界面语言。
+- 冒烟 `tests/smoke/i18n.spec.ts`：English 下每一页扫可见文字，除了 `data-uc` 和「中」按钮以外不能有汉字；切换刷新保持；被拒的原因两种语言都对；375 宽不横着滚。
 
 ## 网页 + 本地
 

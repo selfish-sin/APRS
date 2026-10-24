@@ -3,6 +3,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/i18n/I18n";
 
 /** 拖进来：返回给容器用的事件和「正在拖」的状态。 */
 export function useDrop(onFiles: (files: File[]) => void) {
@@ -70,11 +71,12 @@ export function usePaste(onFiles: (files: File[]) => void, enabled = true) {
   }, [enabled]);
 }
 
-export function AddFilesButton({ onFiles, label = "添加文件", accept, testId, style = "Secondary" }: { onFiles: (files: File[]) => void; label?: string; accept?: string; testId?: string; style?: "Secondary" | "Accent" | "Ghost" | "Primary" }) {
+export function AddFilesButton({ onFiles, label, accept, testId, style = "Secondary" }: { onFiles: (files: File[]) => void; label?: string; accept?: string; testId?: string; style?: "Secondary" | "Accent" | "Ghost" | "Primary" }) {
   const input = useRef<HTMLInputElement>(null);
+  const { L } = useI18n();
   return (
     <>
-      <Button Label={label} Size="Small" Style={style} onClick={() => input.current?.click()} data-testid={testId} />
+      <Button Label={label ?? L.library.addFile} Size="Small" Style={style} onClick={() => input.current?.click()} data-testid={testId} />
       <input
         ref={input}
         type="file"
@@ -95,11 +97,12 @@ export function AddFilesButton({ onFiles, label = "添加文件", accept, testId
 /** 一块能拖进来的区域，里面放「添加文件」按钮和提示。 */
 export function DropZone({ onFiles, hint, children, testId, paste = true }: { onFiles: (files: File[]) => void; hint?: string; children?: ReactNode; testId?: string; paste?: boolean }) {
   const drop = useDrop(onFiles);
+  const { L } = useI18n();
   usePaste(onFiles, paste);
   return (
     <div className="dropzone" data-over={drop.over ? "yes" : "no"} data-testid={testId} {...drop.props}>
       <div className="dropzone-text">
-        <span className="t-body-14m">把文件拖到这里{paste ? "，或者直接粘贴截图（Ctrl / ⌘ + V）" : ""}</span>
+        <span className="t-body-14m">{paste ? L.library.dropOrPaste : L.library.dropHere}</span>
         {hint ? <span className="label">{hint}</span> : null}
       </div>
       <div className="row">

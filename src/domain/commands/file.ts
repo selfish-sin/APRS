@@ -4,7 +4,8 @@
  */
 import { FILE_SUBJECT, type FileSubject, type Id } from "../model";
 import type { ReadModel } from "../readmodel";
-import { guarded, insert, isReviewer, mustBeOneOf, mustGet, mustMember, ok, reject, update, type Ctx } from "./core";
+import { guarded, insert, isReviewer, mustBeOneOf, mustGet, mustMember, ok, rejectT, update, type Ctx } from "./core";
+import { uc } from "../text";
 import { optFileName } from "./validate";
 
 /** 缩略图最多 20KB（dataURL 里的 base64 大概 27 300 个字）。 */
@@ -56,16 +57,16 @@ function mustTags(value: unknown): string[] {
   for (const raw of list) {
     const t = typeof raw === "string" ? raw.trim() : "";
     if (!t) continue;
-    if (t.length > 12) reject("invalid", `标签「${t.slice(0, 12)}…」太长了（最多 12 个字）`);
+    if (t.length > 12) rejectT("invalid", "tag_long", { tag: uc(t.slice(0, 12)) });
     if (!out.includes(t)) out.push(t);
   }
-  if (out.length > MAX_TAGS) reject("invalid", `标签最多 ${MAX_TAGS} 个`);
+  if (out.length > MAX_TAGS) rejectT("invalid", "tags_max", { max: MAX_TAGS });
   return out;
 }
 
 function mustName(value: unknown): string {
   const name = optFileName(value);
-  if (!name) reject("invalid", "文件名不能为空");
+  if (!name) rejectT("invalid", "filename_empty");
   return name;
 }
 
@@ -87,18 +88,18 @@ export interface AddFileInput {
 export const addFile = guarded<AddFileInput>((rm, input, ctx) => {
   const me = mustMember(rm, ctx);
   const sha256 = typeof input.sha256 === "string" ? input.sha256.toLowerCase() : "";
-  if (!/^[0-9a-f]{64}$/.test(sha256)) reject("invalid", "文件没有读好，请重新放一次");
+  if (!/^[0-9a-f]{64}$/.test(sha256)) rejectT("invalid", "file_read_bad");
   const name = mustName(input.name);
   const mime = typeof input.mime === "string" && input.mime.length <= 100 ? input.mime : "";
   const size = Number(input.size);
-  if (!Number.isFinite(size) || size < 0 || size > MAX_FILE_BYTES) reject("invalid", "文件太大了（最大 2GB）");
-  const dim = (v: unknown) => (v === undefined || v === null ? null : Number.isInteger(v) && (v as number) > 0 && (v as number) <= 100_000 ? (v as number) : reject("invalid", "图片的宽高不对"));
+  if (!Number.isFinite(size) || size < 0 || size > MAX_FILE_BYTES) rejectT("invalid", "file_too_big");
+  const dim = (v: unknown) => (v === undefined || v === null ? null : Number.isInteger(v) && (v as number) > 0 && (v as number) <= 100_000 ? (v as number) : rejectT("invalid", "image_size_bad"));
   const width = dim(input.width);
   const height = dim(input.height);
   let thumb: string | null = null;
   if (input.thumb) {
-    if (typeof input.thumb !== "string" || !/^data:image\/(png|jpeg|webp|gif|svg\+xml)[;,]/.test(input.thumb)) reject("invalid", "缩略图不是图片");
-    if (input.thumb.length > THUMB_MAX_CHARS) reject("invalid", "缩略图太大了（最多 20KB）");
+    if (typeof input.thumb !== "string" || !/^data:image\/(png|jpeg|webp|gif|svg\+xml)[;,]/.test(input.thumb)) rejectT("invalid", "thumb_not_image");
+    if (input.thumb.length > THUMB_MAX_CHARS) rejectT("invalid", "thumb_too_big");
     thumb = input.thumb;
   }
   const subjectType = mustBeOneOf(input.subjectType, FILE_SUBJECT, "挂在哪");
@@ -106,7 +107,7 @@ export const addFile = guarded<AddFileInput>((rm, input, ctx) => {
   let stageKey = place.stageKey;
   if (input.stageKey) {
     const ok = rm.where("stages", { projectId: place.projectId }).some((s) => s.templateKey === input.stageKey);
-    if (!ok) reject("invalid", "这个环节不在这个项目的流程里");
+    if (!ok) rejectT("invalid", "stage_not_in_project");
     stageKey = input.stageKey;
   }
   const f = insert(ctx, "files", {
@@ -132,7 +133,7 @@ export const addFile = guarded<AddFileInput>((rm, input, ctx) => {
 function mustEditable(rm: ReadModel, ctx: Ctx, fileId: Id) {
   const me = mustMember(rm, ctx);
   const f = mustGet(rm, ctx, "files", fileId, "文件");
-  if (f.byMemberId !== me.id && !isReviewer(me)) reject("forbidden", "只有传的人、审核员或管理员可以改这个文件");
+  if (f.byMemberId !== me.id && !isReviewer(me)) rejectT("forbidden", "file_edit_forbidden");
   return f;
 }
 
@@ -169,7 +170,7 @@ export const moveFile = guarded<MoveFileInput>((rm, input, ctx) => {
   const f = mustEditable(rm, ctx, input.fileId);
   const subjectType = mustBeOneOf(input.subjectType, FILE_SUBJECT, "挂在哪");
   const place = placementOf(rm, ctx, subjectType, input.subjectId);
-  if (place.projectId !== f.projectId) reject("invalid", "文件只能在同一个项目里挪");
+  if (place.projectId !== f.projectId) rejectT("invalid", "file_move_other_project");
   const ch = update("files", f, { subjectType, subjectId: input.subjectId, cutId: place.cutId, stageKey: place.stageKey ?? f.stageKey });
   const changes = ch ? [ch] : [];
   // 钉跟着图走：卡变了，钉上记的卡也跟着改。
@@ -188,6 +189,6 @@ export interface ArchiveFileInput {
 export const archiveFile = guarded<ArchiveFileInput>((rm, input, ctx) => {
   const f = mustEditable(rm, ctx, input.fileId);
   const used = rm.where("blocks").some((b) => b.fileIds.includes(f.id));
-  if (used) reject("state", "这个文件还在资料页里用着，先把那个块删掉");
+  if (used) rejectT("state", "file_in_use");
   return ok([{ op: "archive", table: "files", id: f.id, expectVersion: f.version }], { fileId: f.id });
 });

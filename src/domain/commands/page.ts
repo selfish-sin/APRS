@@ -5,7 +5,8 @@
  */
 import { BLOCK_TYPE, type BlockRow, type BlockType, type ChecklistItem, type Id } from "../model";
 import type { ReadModel } from "../readmodel";
-import { guarded, insert, isReviewer, mustBeOneOf, mustGet, mustMember, mustText, ok, reject, update, type Ctx } from "./core";
+import { guarded, insert, isReviewer, mustBeOneOf, mustGet, mustMember, mustText, ok, rejectT, update, type Ctx } from "./core";
+import { uc } from "../text";
 
 const MAX_TEXT = 4000;
 const MAX_ITEMS = 50;
@@ -48,30 +49,30 @@ export interface ArchivePageInput {
 export const archivePage = guarded<ArchivePageInput>((rm, input, ctx) => {
   const me = mustMember(rm, ctx);
   const page = mustGet(rm, ctx, "pages", input.pageId, "资料页");
-  if (page.byMemberId !== me.id && !isReviewer(me)) reject("forbidden", "只有建这页的人、审核员或管理员可以删这页");
+  if (page.byMemberId !== me.id && !isReviewer(me)) rejectT("forbidden", "page_delete_forbidden");
   return ok([{ op: "archive", table: "pages", id: page.id, expectVersion: page.version }], { pageId: page.id });
 });
 
 function mustFiles(rm: ReadModel, ctx: Ctx, projectId: Id, value: unknown, type: BlockType): Id[] {
   const ids = Array.from(new Set(Array.isArray(value) ? (value as Id[]) : []));
-  if (ids.length > MAX_FILES) reject("invalid", `一个块最多放 ${MAX_FILES} 个文件`);
+  if (ids.length > MAX_FILES) rejectT("invalid", "block_files_max", { max: MAX_FILES });
   for (const id of ids) {
     const f = mustGet(rm, ctx, "files", id, "文件");
-    if (f.projectId !== projectId) reject("invalid", "只能放这个项目资料库里的文件");
-    if ((type === "image" || type === "gallery") && !f.width) reject("invalid", `「${f.name}」不是图片，放到文件块里`);
+    if (f.projectId !== projectId) rejectT("invalid", "block_file_other_project");
+    if ((type === "image" || type === "gallery") && !f.width) rejectT("invalid", "block_not_image", { name: uc(f.name) });
   }
-  if (type === "image" && ids.length > 1) reject("invalid", "单张图片块只放一张；多张用图片网格");
-  if ((type === "image" || type === "file") && ids.length === 0) reject("invalid", "先选一个文件");
-  if (type === "gallery" && ids.length === 0) reject("invalid", "图片网格至少放一张图");
+  if (type === "image" && ids.length > 1) rejectT("invalid", "block_image_one");
+  if ((type === "image" || type === "file") && ids.length === 0) rejectT("invalid", "block_file_pick");
+  if (type === "gallery" && ids.length === 0) rejectT("invalid", "block_gallery_empty");
   return ids;
 }
 
 function mustItems(value: unknown): ChecklistItem[] {
   const list = Array.isArray(value) ? value : [];
-  if (list.length > MAX_ITEMS) reject("invalid", `清单最多 ${MAX_ITEMS} 条`);
+  if (list.length > MAX_ITEMS) rejectT("invalid", "checklist_max", { max: MAX_ITEMS });
   return list.map((it, i) => {
     const text = typeof it?.text === "string" ? it.text.trim() : "";
-    if (text.length > 300) reject("invalid", `清单第 ${i + 1} 条太长了`);
+    if (text.length > 300) rejectT("invalid", "checklist_item_long", { n: i + 1 });
     return { text, done: !!it?.done };
   });
 }
@@ -79,8 +80,8 @@ function mustItems(value: unknown): ChecklistItem[] {
 function mustBlockText(type: BlockType, value: unknown): string | null {
   if (type !== "heading" && type !== "text") return null;
   const s = typeof value === "string" ? value : "";
-  if (type === "heading" && s.length > 120) reject("invalid", "标题太长了（最多 120 字）");
-  if (s.length > MAX_TEXT) reject("invalid", `段落太长了（最多 ${MAX_TEXT} 字）`);
+  if (type === "heading" && s.length > 120) rejectT("invalid", "heading_long");
+  if (s.length > MAX_TEXT) rejectT("invalid", "paragraph_long", { max: MAX_TEXT });
   return s;
 }
 
@@ -103,11 +104,11 @@ export const addBlock = guarded<AddBlockInput>((rm, input, ctx) => {
   const page = mustEditPage(rm, ctx, input.pageId);
   const type = mustBeOneOf(input.type, BLOCK_TYPE, "块的类型");
   const list = blocksOfPage(rm, page.id);
-  if (list.length >= 300) reject("state", "这一页的块太多了，另开一页吧");
+  if (list.length >= 300) rejectT("state", "blocks_full");
   let sort = (list.length ? list[list.length - 1].sort : 0) + 1;
   if (input.afterBlockId) {
     const i = list.findIndex((b) => b.id === input.afterBlockId);
-    if (i < 0) reject("not_found", "找不到要放在它后面的块");
+    if (i < 0) rejectT("not_found", "block_after_missing");
     sort = i === list.length - 1 ? list[i].sort + 1 : (list[i].sort + list[i + 1].sort) / 2;
   }
   const b = insert(ctx, "blocks", {
@@ -135,15 +136,15 @@ export const updateBlock = guarded<UpdateBlockInput>((rm, input, ctx) => {
   const page = mustGet(rm, ctx, "pages", block.pageId, "资料页");
   const patch: Partial<BlockRow> = {};
   if (input.text !== undefined) {
-    if (block.type !== "heading" && block.type !== "text") reject("invalid", "这种块没有字可以改");
+    if (block.type !== "heading" && block.type !== "text") rejectT("invalid", "block_no_text");
     patch.text = mustBlockText(block.type, input.text);
   }
   if (input.fileIds !== undefined) {
-    if (block.type !== "image" && block.type !== "gallery" && block.type !== "file") reject("invalid", "这种块不放文件");
+    if (block.type !== "image" && block.type !== "gallery" && block.type !== "file") rejectT("invalid", "block_no_files");
     patch.fileIds = mustFiles(rm, ctx, page.projectId, input.fileIds, block.type);
   }
   if (input.items !== undefined) {
-    if (block.type !== "checklist") reject("invalid", "只有清单块有清单");
+    if (block.type !== "checklist") rejectT("invalid", "block_not_checklist");
     patch.items = mustItems(input.items);
   }
   const ch = update("blocks", block, patch);
@@ -163,8 +164,8 @@ export const moveBlock = guarded<MoveBlockInput>((rm, input, ctx) => {
   const list = blocksOfPage(rm, block.pageId);
   const i = list.findIndex((b) => b.id === block.id);
   const j = direction === "up" ? i - 1 : i + 1;
-  if (j < 0) reject("state", "已经在最上面了");
-  if (j >= list.length) reject("state", "已经在最下面了");
+  if (j < 0) rejectT("state", "block_top");
+  if (j >= list.length) rejectT("state", "block_bottom");
   const other = list[j];
   // 两块的顺序号一样时（以前插的），给出一个确定的新顺序。
   const a = other.sort === block.sort ? (direction === "up" ? block.sort - 0.5 : block.sort + 0.5) : other.sort;

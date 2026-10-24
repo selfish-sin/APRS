@@ -12,6 +12,7 @@ import { pinsOf } from "@/domain/queries";
 import { useFiles } from "@/lib/files/FilesProvider";
 import { ISSUE_LABEL, MAX_ROWS, cellRef, checkWorkbook, colName, headerRow, parseRef, rangeRef, type SheetIssue, type WorkbookData } from "@/lib/sheets/model";
 import { useGuild } from "@/lib/store";
+import { U, useI18n } from "@/i18n/I18n";
 import { FileFacts, MissingPlaceholder, SaveFileButton } from "./tiles";
 import { PinForm, PinItem, type Draft } from "./Viewer";
 
@@ -22,6 +23,7 @@ interface Pos {
 
 export function SheetStage({ file, forReview, panel, focusPinId }: { file: FileRow; forReview: boolean; panel: "pins" | "info"; focusPinId: Id | null }) {
   const { world, me, now } = useGuild();
+  const { L, f, t2 } = useI18n();
   const { present, ready, getBlob } = useFiles();
   const here = present.has(file.sha256);
   const [wb, setWb] = useState<WorkbookData | null>(null);
@@ -43,12 +45,12 @@ export function SheetStage({ file, forReview, panel, focusPinId }: { file: FileR
     (async () => {
       try {
         const blob = await getBlob(file.sha256);
-        if (!blob) throw new Error("读不到文件");
+        if (!blob) throw new Error(L.viewer.cantRead);
         const { readWorkbook } = await import("@/lib/sheets/read");
         const parsed = await readWorkbook(new Uint8Array(await blob.arrayBuffer()));
         if (alive) setWb(parsed);
       } catch (e) {
-        if (alive) setError(e instanceof Error ? e.message : "读不了这个表格");
+        if (alive) setError(e instanceof Error ? e.message : L.viewer.sheetUnreadable);
       }
     })();
     return () => {
@@ -137,36 +139,36 @@ export function SheetStage({ file, forReview, panel, focusPinId }: { file: FileR
           </div>
         ) : error ? (
           <div className="viewer-stage viewer-stage-file">
-            <p className="error-text">这个表格读不了（{error}）。可以保存到这台设备，用 Excel 打开。</p>
+            <p className="error-text">{f(L.viewer.sheetError, { why: error })}</p>
           </div>
         ) : !sheet ? (
           <div className="viewer-stage viewer-stage-file">
-            <p className="label">正在读表格…</p>
+            <p className="label">{L.viewer.sheetLoading}</p>
           </div>
         ) : (
           <>
             <div className="viewer-tools">
-              <div className="chips" role="tablist" aria-label="工作表">
+              <div className="chips" role="tablist" aria-label={L.viewer.sheetTabs}>
                 {wb!.sheets.map((s, i) => (
-                  <button key={s.name} type="button" role="tab" className="ui-chip" aria-selected={i === sheetIdx} aria-pressed={i === sheetIdx} onClick={() => { setSheetIdx(i); setSel(null); }} data-testid="sheet-tab">
+                  <button key={s.name} type="button" role="tab" className="ui-chip" aria-selected={i === sheetIdx} aria-pressed={i === sheetIdx} onClick={() => { setSheetIdx(i); setSel(null); }} data-testid="sheet-tab" data-uc="">
                     {s.name}
                   </button>
                 ))}
               </div>
               <div className="row">
-                <input className="field-control sheet-search" type="search" placeholder="搜格子里的字" aria-label="搜格子里的字" value={q} onChange={(e) => { setQ(e.target.value); setHit(0); }} data-testid="sheet-search" />
+                <input className="field-control sheet-search" type="search" placeholder={L.viewer.sheetSearch} aria-label={L.viewer.sheetSearch} value={q} onChange={(e) => { setQ(e.target.value); setHit(0); }} data-testid="sheet-search" />
                 {q ? (
                   <span className="label num" data-testid="sheet-search-count">
                     {matches.length ? `${hit + 1} / ${matches.length}` : "0"}
                   </span>
                 ) : null}
-                {matches.length > 1 ? <Button Label="下一个" Size="Small" Style="Ghost" onClick={() => setHit((h) => (h + 1) % matches.length)} /> : null}
-                <Button Label="检查这张表" Size="Small" Style="Secondary" onClick={() => setIssues(checkWorkbook(wb!))} data-testid="sheet-check" />
+                {matches.length > 1 ? <Button Label={L.viewer.nextHit} Size="Small" Style="Ghost" onClick={() => setHit((h) => (h + 1) % matches.length)} /> : null}
+                <Button Label={L.viewer.checkSheet} Size="Small" Style="Secondary" onClick={() => setIssues(checkWorkbook(wb!))} data-testid="sheet-check" />
               </div>
             </div>
             {sheet.totalRows > MAX_ROWS ? (
               <p className="label sheet-note" data-testid="sheet-truncated">
-                这张表有 {sheet.totalRows} 行，先显示前 {MAX_ROWS} 行。要看全部，保存到这台设备用 Excel 打开。
+                {f(L.viewer.truncated, { total: sheet.totalRows, max: MAX_ROWS })}
               </p>
             ) : null}
             <div className="sheet-scroll" ref={scroller} data-testid="sheet-grid" onMouseUp={() => (dragging.current = false)} onMouseLeave={() => (dragging.current = false)}>
@@ -218,10 +220,12 @@ export function SheetStage({ file, forReview, panel, focusPinId }: { file: FileR
                             onMouseEnter={() => dragging.current && sel && setSel({ a: sel.a, b: { r, c } })}
                             data-testid="sheet-cell"
                           >
-                            <span className="sheet-v">{cell?.v ?? ""}</span>
-                            {cell?.f ? <span className="sheet-f" aria-label={`公式 =${cell.f}`} data-testid="sheet-formula" /> : null}
+                            <span className="sheet-v" data-uc="">
+                              {cell?.v ?? ""}
+                            </span>
+                            {cell?.f ? <span className="sheet-f" aria-label={f(L.viewer.formula, { f: cell.f })} data-testid="sheet-formula" /> : null}
                             {marks?.filter((m) => m.number).map((m) => (
-                              <button key={m.id} type="button" className="sheet-pin" data-status={m.resolved ? "resolved" : "open"} onClick={(e) => { e.stopPropagation(); setActivePin(m.id); }} aria-label={`${m.number} 号意见`}>
+                              <button key={m.id} type="button" className="sheet-pin" data-status={m.resolved ? "resolved" : "open"} onClick={(e) => { e.stopPropagation(); setActivePin(m.id); }} aria-label={f(L.viewer.cellPin, { n: m.number })}>
                                 {m.number}
                               </button>
                             ))}
@@ -235,18 +239,18 @@ export function SheetStage({ file, forReview, panel, focusPinId }: { file: FileR
             </div>
             <div className="row sheet-status">
               <span className="label">
-                {selRef ? `选中 ${selRef}` : "点一个格子，或者拖选一片"}
-                {sheet.totalRows ? ` · 共 ${sheet.totalRows} 行 ${sheet.totalCols} 列` : ""}
+                {selRef ? f(L.viewer.selected, { ref: selRef }) : L.viewer.pickCell}
+                {sheet.totalRows ? f(L.viewer.sheetSize, { rows: sheet.totalRows, cols: sheet.totalCols }) : ""}
               </span>
-              {selRef ? <Button Label={`在 ${selRef} 留意见`} Size="Small" Style="Accent" onClick={() => setDraft({ kind: "cell", sheet: sheet.name, ref: selRef })} data-testid="sheet-comment" /> : null}
+              {selRef ? <Button Label={f(L.viewer.commentAt, { ref: selRef })} Size="Small" Style="Accent" onClick={() => setDraft({ kind: "cell", sheet: sheet.name, ref: selRef })} data-testid="sheet-comment" /> : null}
             </div>
           </>
         )}
       </div>
-      <aside className="viewer-side" aria-label={panel === "info" ? "文件信息" : "这张表上的意见"}>
+      <aside className="viewer-side" aria-label={panel === "info" ? L.viewer.sideInfo : L.viewer.sideSheetPins}>
         {panel === "info" ? (
           <div className="stack" data-gap="small">
-            <h2 className="t-heading-18">文件信息</h2>
+            <h2 className="t-heading-18">{L.viewer.sideInfo}</h2>
             <FileFacts file={file} />
             <SaveFileButton file={file} />
           </div>
@@ -256,24 +260,41 @@ export function SheetStage({ file, forReview, panel, focusPinId }: { file: FileR
               <div className="stack" data-gap="small" data-testid="sheet-issues">
                 <div className="row" data-justify="between">
                   <h2 className="t-heading-18">
-                    检查结果 <span className="count">{issues.length}</span>
+                    {L.viewer.issues} <span className="count">{issues.length}</span>
                   </h2>
-                  <Button Label="收起" Size="Small" Style="Ghost" onClick={() => setIssues(null)} />
+                  <Button Label={L.viewer.collapse} Size="Small" Style="Ghost" onClick={() => setIssues(null)} />
                 </div>
-                <p className="label">只提醒，不改原表。点一条跳到那个格子。</p>
-                {issues.length === 0 ? <p className="muted">没查出问题。</p> : null}
+                <p className="label">{L.viewer.issuesNote}</p>
+                {issues.length === 0 ? <p className="muted">{L.viewer.noIssues}</p> : null}
                 <ol className="pin-list">
                   {issues.map((i, n) => (
                     <li key={n} className="pin-item" data-kind={i.kind} data-testid="sheet-issue">
                       <button type="button" className="pin-item-head" onClick={() => goTo(i.sheet, i.ref)}>
                         <span className="num t-body-14m">{i.ref}</span>
                         <span>
-                          {ISSUE_LABEL[i.kind].zh}
-                          {i.column ? `：「${i.column}」` : ""}
-                          {i.value ? `（${i.value}）` : ""}
+                          {t2(ISSUE_LABEL[i.kind])}
+                          {i.column ? (
+                            <>
+                              {L.common.colon}
+                              {L.common.quoteOpen}
+                              <U>{i.column}</U>
+                              {L.common.quoteClose}
+                            </>
+                          ) : null}
+                          {i.value ? (
+                            <>
+                              {" ("}
+                              <U>{i.value}</U>
+                              {")"}
+                            </>
+                          ) : null}
                         </span>
                       </button>
-                      {wb!.sheets.length > 1 ? <span className="label">{i.sheet}</span> : null}
+                      {wb!.sheets.length > 1 ? (
+                        <span className="label" data-uc="">
+                          {i.sheet}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ol>
@@ -284,16 +305,16 @@ export function SheetStage({ file, forReview, panel, focusPinId }: { file: FileR
             ) : null}
             <div className="row" data-justify="between">
               <h2 className="t-heading-18">
-                格子上的意见 <span className="count">{pins.length}</span>
+                {L.viewer.cellNotes} <span className="count">{pins.length}</span>
               </h2>
               {pins.some((p) => p.status === "resolved") ? (
                 <label className="check-row label">
                   <input type="checkbox" checked={hideResolved} onChange={(e) => setHideResolved(e.target.checked)} />
-                  隐藏已解决的
+                  {L.viewer.hideResolved}
                 </label>
               ) : null}
             </div>
-            {shownPins.length === 0 ? <p className="label">还没有。选一个格子，点「在这里留意见」。</p> : null}
+            {shownPins.length === 0 ? <p className="label">{L.viewer.noCellNotes}</p> : null}
             <ol className="pin-list" data-testid="pin-list">
               {shownPins.map((p) => (
                 <PinItem key={p.id} pin={p} active={activePin === p.id} now={now} onJump={() => { setActivePin(p.id); goTo(p.cell!.sheet, p.cell!.ref); }} />
