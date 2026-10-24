@@ -8,6 +8,7 @@ import { GROUP_LABEL, LEDGER_KIND_LABEL, ROLE_LABEL, formatNumber, formatPoints,
 import { AVATAR_TONE, type AvatarToneName } from "@/domain/model";
 import { accountOfMember, collaboratorsOf, enrollmentsOf, growthOf, memberRoles, members, memberById, taskViewById } from "@/domain/queries";
 import { isAdmin } from "@/domain/commands/core";
+import { ExportMyRecord } from "@/components/app/report";
 import { SelectField } from "@/components/app/bits";
 import type { Group } from "@/domain/model";
 import { GROUPS } from "@/domain/templates";
@@ -180,6 +181,15 @@ export function MemberPage() {
           </section>
 
           <MemberRolesCard memberId={member.id} self={self} />
+          {self || isAdmin(me) ? (
+            <section className="card" aria-label="导出记录">
+              <h2 className="t-heading-18">导出记录</h2>
+              <p className="muted">做过的任务、各环节的工时和每一笔活力点，放进一个 Excel 文件（三张表）。</p>
+              <div className="form-actions">
+                <ExportMyRecord memberId={member.id} />
+              </div>
+            </section>
+          ) : null}
         </div>
       </div>
       {editing === "profile" ? <ProfileDialog onClose={() => setEditing(null)} /> : null}

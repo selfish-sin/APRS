@@ -10,6 +10,7 @@ import { assignTask, claimTask, enroll, expireTask, reclaimTask, releaseTask, re
 import { makeRuling, openThread, replyThread, resolveThread } from "./thread";
 import { addFile, archiveFile, moveFile, renameFile, tagFile } from "./file";
 import { addPin, reopenPin, replyPin, resolvePin } from "./pin";
+import { markLinkBroken, replaceLink } from "./links";
 import { assignRole, publishTask, setStageLock, setStagePeriod, setStageRate, unassignRole } from "./flex";
 import { addBlock, archivePage, createPage, moveBlock, removeBlock, renamePage, updateBlock } from "./page";
 
@@ -32,6 +33,8 @@ export const COMMANDS = {
   "task.assign": assignTask,
   "task.review": reviewTask,
   "task.publish": publishTask,
+  "link.mark_broken": markLinkBroken,
+  "link.replace": replaceLink,
   "role.assign": assignRole,
   "role.unassign": unassignRole,
   "stage.set_lock": setStageLock,

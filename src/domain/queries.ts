@@ -30,6 +30,7 @@ import type {
   ReviewRow,
   RulingRow,
   StageRow,
+  SubmissionLink,
   SubmissionRow,
   TaskRow,
   TaskStatus,
@@ -42,6 +43,7 @@ import { cutCode, fileNameFor, folderFor, taskLabel } from "./naming";
 import { HOURS_PER_DAY, deadlineFactorOf, hoursOf, levelOf, rateFor, rewardOf, stageLocked, type LevelInfo } from "./rules";
 import { GROUPS, groupTemplate, type StageTemplate } from "./templates";
 import { isAdmin, isReviewer } from "./commands/core";
+import { linksOf } from "./commands/links";
 
 // ---------------------------------------------------------------------------
 // 索引（每个世界状态建一次）
@@ -915,6 +917,8 @@ export interface Inbox {
   todos: ThreadView[];
   /** 图上的意见：@ 了我的、审核退回时钉在我的任务上的、钉在我手上任务的图上的。 */
   pins: PinView[];
+  /** 审核员标了「打不开」的链接。 */
+  links: BrokenLink[];
   total: number;
 }
 
@@ -958,7 +962,31 @@ export function inboxOf(state: WorldState, memberId: Id): Inbox {
     })
     .map((p) => pinView(state, p))
     .filter((v): v is PinView => !!v);
-  return { returned, asked, todos, pins, total: returned.length + asked.length + todos.length + pins.length };
+  // 审核员标了「打不开」的链接（我交的版本上）：换一条就清掉。
+  const links: BrokenLink[] = [];
+  for (const t of idx.tasks) {
+    for (const sub of idx.subsByTask.get(t.id) ?? []) {
+      if (sub.byMemberId !== memberId) continue;
+      for (const link of linksOf(sub)) {
+        if (!link.broken) continue;
+        const view = taskView(state, t);
+        if (view) links.push({ submission: sub, view, link, by: idx.memberById.get(link.broken.byMemberId) ?? null });
+      }
+    }
+  }
+  return { returned, asked, todos, pins, links, total: returned.length + asked.length + todos.length + pins.length + links.length };
+}
+
+export interface BrokenLink {
+  submission: SubmissionRow;
+  view: TaskView;
+  link: SubmissionLink;
+  by: MemberRow | null;
+}
+
+/** 一版挂的链接（旧的记录只有一条 link）。 */
+export function submissionLinks(sub: SubmissionRow): SubmissionLink[] {
+  return linksOf(sub);
 }
 
 /** 开着的设定问题（管理员拍板用）。 */
@@ -1052,6 +1080,14 @@ export function feedText(state: WorldState, e: JournalEntry): string | null {
       return `${who} 把「${stageById(state, p.stageId as Id)?.name ?? "环节"}」${p.locked ? "锁成只给指派的人" : "放开给大家认领"}`;
     case "stage.set_period":
       return `${who} 改了「${stageById(state, p.stageId as Id)?.name ?? "环节"}」的计划周期（第 ${String(p.startWeek)} 周起，${String(p.weeks)} 周）`;
+    case "link.mark_broken": {
+      const sub = state.submissions[p.submissionId as Id];
+      return sub ? `${who} 标了 ${taskShort(state, sub.taskId)} v${String(sub.versionNo).padStart(2, "0")} 的一条链接「打不开」` : null;
+    }
+    case "link.replace": {
+      const sub = state.submissions[p.submissionId as Id];
+      return sub ? `${who} 换了 ${taskShort(state, sub.taskId)} v${String(sub.versionNo).padStart(2, "0")} 的一条链接` : null;
+    }
     case "stage.set_rate":
       return `${who} 改了「${stageById(state, p.stageId as Id)?.name ?? "环节"}」的时限参数`;
     case "project.create":
@@ -1267,9 +1303,9 @@ export const points = formatPoints;
 // 资料库（SPEC §11）
 // ---------------------------------------------------------------------------
 
-export type FileKind = "image" | "pdf" | "video" | "archive" | "clip" | "other";
+export type FileKind = "image" | "sheet" | "pdf" | "video" | "archive" | "clip" | "other";
 
-export const FILE_KIND_LABEL: Record<FileKind, string> = { image: "图片", pdf: "PDF", video: "视频", archive: "压缩包", clip: "CLIP 文件", other: "文件" };
+export const FILE_KIND_LABEL: Record<FileKind, string> = { image: "图片", sheet: "表格", pdf: "PDF", video: "视频", archive: "压缩包", clip: "CLIP 文件", other: "文件" };
 
 export function extOf(name: string): string {
   const i = name.lastIndexOf(".");
@@ -1279,6 +1315,7 @@ export function extOf(name: string): string {
 export function fileKind(f: Pick<FileRow, "name" | "mime" | "width">): FileKind {
   const ext = extOf(f.name);
   if (f.width || f.mime.startsWith("image/")) return "image";
+  if (["xlsx", "xlsm", "xls", "csv", "ods"].includes(ext)) return "sheet";
   if (ext === "pdf" || f.mime === "application/pdf") return "pdf";
   if (["mp4", "webm", "mov", "m4v"].includes(ext) || f.mime.startsWith("video/")) return "video";
   if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return "archive";

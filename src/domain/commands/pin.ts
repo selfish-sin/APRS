@@ -7,6 +7,10 @@ import type { ReadModel } from "../readmodel";
 import { RETURN_TAGS } from "../rules";
 import { guarded, insert, isReviewer, mustBeOneOf, mustGet, mustMember, mustText, ok, reject, update, type Ctx } from "./core";
 
+/** 表格文件（能在格子上留意见的）。 */
+export const SHEET_FILE = /\.(xlsx|xlsm|xls|csv|ods)$/i;
+const CELL_REF = /^[A-Z]{1,3}[1-9]\d{0,6}(:[A-Z]{1,3}[1-9]\d{0,6})?$/;
+
 function ratio(value: unknown, what: string): number {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 1) reject("invalid", `${what}要在图里面`);
@@ -22,9 +26,11 @@ function taskOfFile(rm: ReadModel, subjectType: string, subjectId: Id): Id | nul
 
 export interface AddPinInput {
   fileId: Id;
-  kind: "point" | "box";
-  x: number;
-  y: number;
+  kind?: "point" | "box";
+  x?: number;
+  y?: number;
+  /** 表格上的意见：哪个工作表、哪一格 / 哪一片（SPEC §15.2）。 */
+  cell?: { sheet: string; ref: string } | null;
   w?: number | null;
   h?: number | null;
   text: string;
@@ -39,13 +45,21 @@ export interface AddPinInput {
 export const addPin = guarded<AddPinInput>((rm, input, ctx) => {
   const me = mustMember(rm, ctx);
   const file = mustGet(rm, ctx, "files", input.fileId, "图");
-  if (!file.width || !file.height) reject("invalid", "只能在图片上钉");
-  const kind = mustBeOneOf(input.kind, PIN_KIND, "钉还是框");
-  const x = ratio(input.x, "位置");
-  const y = ratio(input.y, "位置");
+  let cell: { sheet: string; ref: string } | null = null;
+  if (input.cell) {
+    if (!SHEET_FILE.test(file.name)) reject("invalid", "只能在表格上钉格子");
+    const sheet = typeof input.cell.sheet === "string" ? input.cell.sheet.trim() : "";
+    if (!sheet || sheet.length > 31) reject("invalid", "工作表的名字不对");
+    const ref = typeof input.cell.ref === "string" ? input.cell.ref.trim().toUpperCase() : "";
+    if (!CELL_REF.test(ref)) reject("invalid", "格子的位置不对（例如 B3 或 B3:D5）");
+    cell = { sheet, ref };
+  } else if (!file.width || !file.height) reject("invalid", "只能在图片上钉");
+  const kind = cell ? (cell.ref.includes(":") ? "box" : "point") : mustBeOneOf(input.kind, PIN_KIND, "钉还是框");
+  const x = cell ? 0 : ratio(input.x, "位置");
+  const y = cell ? 0 : ratio(input.y, "位置");
   let w: number | null = null;
   let h: number | null = null;
-  if (kind === "box") {
+  if (kind === "box" && !cell) {
     w = ratio(input.w, "框的宽");
     h = ratio(input.h, "框的高");
     if (w < 0.005 || h < 0.005) reject("invalid", "框太小了，拖大一点");
@@ -85,6 +99,7 @@ export const addPin = guarded<AddPinInput>((rm, input, ctx) => {
     replies: [],
     byMemberId: me.id,
     at: ctx.worldNow,
+    cell,
   });
   return ok([p.change], { pinId: p.row.id });
 });

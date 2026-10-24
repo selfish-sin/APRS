@@ -334,6 +334,19 @@ export interface SubmissionRow extends RowHeader {
   selfFix: boolean;
   onTime: boolean;
   at: IsoDateTime;
+  /** 这一版挂的几条链接（SPEC §15.1；旧的记录只有 link）。 */
+  links?: SubmissionLink[];
+}
+
+export interface SubmissionLink {
+  /** 在这一版里的编号（l1、l2 …），换链接时不变。 */
+  id: string;
+  url: string;
+  name: string;
+  /** 是什么：文件 · 文件夹 · 表格 · 文档。 */
+  kind: "file" | "folder" | "sheet" | "doc";
+  /** 审核员点开以后标的「打不开」。交的人换一条就清掉。 */
+  broken: { byMemberId: Id; at: IsoDateTime } | null;
 }
 
 export interface ReviewComment {
@@ -466,6 +479,8 @@ export interface PinRow extends RowHeader {
   replies: PinReply[];
   byMemberId: Id;
   at: IsoDateTime;
+  /** 表格上的意见（SPEC §15.2）：钉在哪个工作表的哪一格 / 哪一片（例如 B3、B3:D5）。图上的钉没有。 */
+  cell?: { sheet: string; ref: string } | null;
 }
 
 /** 资料页（像 Notion，但以图为主）。 */

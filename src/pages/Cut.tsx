@@ -8,6 +8,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Empty, MemberAvatar, MemberLink, SelectField, Tag } from "@/components/app/bits";
 import { TaskActions } from "@/components/app/task";
 import { ThreadBody } from "@/components/app/thread";
+import { LinkList } from "@/components/app/links";
 import { DropZone } from "@/components/library/intake";
 import { FileDialog, FileTile } from "@/components/library/tiles";
 import { Viewer } from "@/components/library/Viewer";
@@ -177,19 +178,14 @@ export function CutPage() {
                             <span className="label">{dateTimeZh(item.at)}</span>
                           </div>
                           {item.submission ? (
-                            <span className="label break">
-                              {item.submission.fileName}
-                              {item.submission.link ? (
-                                <>
-                                  {" · "}
-                                  <a href={item.submission.link} target="_blank" rel="noreferrer noopener">
-                                    打开链接
-                                  </a>
-                                </>
-                              ) : null}
-                              {item.submission.note ? ` · ${item.submission.note}` : ""}
-                              {item.submission.onTime ? "" : " · 超时交的"}
-                            </span>
+                            <>
+                              <span className="label break">
+                                {item.submission.fileName}
+                                {item.submission.note ? ` · ${item.submission.note}` : ""}
+                                {item.submission.onTime ? "" : " · 超时交的"}
+                              </span>
+                              <LinkList submission={item.submission} compact />
+                            </>
                           ) : null}
                           {item.pin ? <span className="break">{item.pin.text}</span> : null}
                           {item.pin ? (

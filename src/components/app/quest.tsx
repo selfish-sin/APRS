@@ -3,7 +3,9 @@
  * 一屏最多一两张黑卡，给「现在这件事」。
  */
 import { useState } from "react";
+import { LinksEditor, emptyLink, type LinkDraft } from "./links";
 import { DropZone } from "@/components/library/intake";
+import { submissionLinks } from "@/domain/queries";
 import { useFiles } from "@/lib/files/FilesProvider";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
@@ -169,12 +171,15 @@ export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => 
   const { dispatch, notify } = useGuild();
   const files = useFiles();
   const [attached, setAttached] = useState<File[]>([]);
-  const [link, setLink] = useState(quest.view.latest?.link ?? "");
+  const [links, setLinks] = useState<LinkDraft[]>(() => {
+    const prev = quest.view.latest ? submissionLinks(quest.view.latest) : [];
+    return prev.length ? prev.map((l) => ({ url: l.url, name: l.name, kind: l.kind })) : [emptyLink()];
+  });
   const [note, setNote] = useState("");
   const [fileName, setFileName] = useState(quest.indicator.deliver.fileName);
   const [error, setError] = useState<string | null>(null);
   const submit = () => {
-    const r = dispatch("task.submit", { taskId: quest.view.task.id, link, note, fileName }, { quiet: true });
+    const r = dispatch("task.submit", { taskId: quest.view.task.id, links: links.map((l) => ({ url: l.url, name: l.name || null, kind: l.kind || null })), note, fileName }, { quiet: true });
     if (!r.ok) {
       setError(r.error.message);
       return;
@@ -194,7 +199,7 @@ export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => 
     <Drawer
       Type="Dialog"
       Title={`交 ${quest.view.label}`}
-      Body={`这一版是 v${String(quest.indicator.deliver.version).padStart(2, "0")}。大文件放飞书，这里只贴链接。`}
+      Body={`这一版是 v${String(quest.indicator.deliver.version).padStart(2, "0")}。大文件放飞书（或者 Google Drive、Dropbox），这里只贴链接。`}
       open
       onClose={onClose}
       actions={
@@ -212,7 +217,7 @@ export function SubmitDialog({ quest, onClose }: { quest: Quest; onClose: () => 
           submit();
         }}
       >
-        <TextField label="飞书链接" type="url" inputMode="url" placeholder="https://…" value={link} onChange={(e) => setLink(e.target.value)} hint="只收 http:// 或 https:// 开头的链接" />
+        <LinksEditor value={links} onChange={setLinks} />
         <TextArea label="说明" placeholder="改了哪里、还有什么要说的" value={note} onChange={(e) => setNote(e.target.value)} hint="链接和说明至少写一个" />
         <TextField label="文件名" value={fileName} onChange={(e) => setFileName(e.target.value)} hint="按规范自动生成，可以改；扩展名照你的软件" />
         <DropZone testId="submit-drop" hint="附截图 / 导出的胶片预览（可以不附）" onFiles={(f) => setAttached((xs) => [...xs, ...f])} />

@@ -17,6 +17,7 @@ import { RETURN_TAGS } from "@/domain/rules";
 import { useFiles, useFileUrl } from "@/lib/files/FilesProvider";
 import { useGuild } from "@/lib/store";
 import { FileFacts, MissingPlaceholder, SaveFileButton } from "./tiles";
+import { SheetStage } from "./SheetView";
 
 const MIN_SCALE = 0.05;
 const MAX_SCALE = 16;
@@ -27,7 +28,7 @@ interface View {
   ty: number;
 }
 
-type Draft = { kind: "point"; x: number; y: number } | { kind: "box"; x: number; y: number; w: number; h: number };
+export type Draft = { kind: "point"; x: number; y: number } | { kind: "box"; x: number; y: number; w: number; h: number } | { kind: "cell"; sheet: string; ref: string };
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n));
@@ -123,6 +124,8 @@ export function Viewer({ files, startId, onClose, forReview = false, focusPinId 
       </header>
       {other && isImage ? (
         <Compare left={other} right={live} mode={compareMode} setMode={setCompareMode} candidates={candidates} setCompareId={setCompareId} />
+      ) : fileKind(live) === "sheet" ? (
+        <SheetStage key={live.id} file={live} forReview={forReview} panel={panel} focusPinId={focusPinId} />
       ) : isImage ? (
         <ImageStage key={live.id} file={live} forReview={forReview} panel={panel} focusPinId={focusPinId} />
       ) : (
@@ -379,9 +382,9 @@ function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; for
               <span className="pin-dot" data-pin="draft" style={screen(draft.x, draft.y)}>
                 <span className="pin-num">＋</span>
               </span>
-            ) : (
+            ) : draft.kind === "box" ? (
               <span className="pin-box" data-pin="draft" style={{ ...screen(draft.x, draft.y), width: draft.w * W * view.s, height: draft.h * H * view.s }} />
-            )
+            ) : null
           ) : null}
           {drag ? (
             <span
@@ -441,7 +444,7 @@ function ImageStage({ file, forReview, panel, focusPinId }: { file: FileRow; for
   );
 }
 
-function PinForm({ file, draft, forReview, onDone }: { file: FileRow; draft: Draft; forReview: boolean; onDone: (pinId: Id | null) => void }) {
+export function PinForm({ file, draft, forReview, onDone }: { file: FileRow; draft: Draft; forReview: boolean; onDone: (pinId: Id | null) => void }) {
   const { world, me, dispatch, notify } = useGuild();
   const [text, setText] = useState("");
   const [layer, setLayer] = useState("");
@@ -453,16 +456,13 @@ function PinForm({ file, draft, forReview, onDone }: { file: FileRow; draft: Dra
   const area = useRef<HTMLTextAreaElement>(null);
   useEffect(() => area.current?.focus(), [draft]);
   const add = () => {
-    const r = dispatch(
-      "pin.add",
-      { fileId: file.id, ...draft, text, layer: layer || null, sheets: sheets || null, tag: tag || null, mentions, forReview },
-      { quiet: true }
-    );
+    const common = { fileId: file.id, text, layer: layer || null, sheets: sheets || null, tag: tag || null, mentions, forReview };
+    const r = dispatch("pin.add", draft.kind === "cell" ? { ...common, cell: { sheet: draft.sheet, ref: draft.ref } } : { ...common, ...draft }, { quiet: true });
     if (!r.ok) {
       setError(r.error.message);
       return;
     }
-    notify(draft.kind === "box" ? "框好了" : "钉好了", "Neutral");
+    notify(draft.kind === "cell" ? "意见留在格子上了" : draft.kind === "box" ? "框好了" : "钉好了", "Neutral");
     onDone(r.created.pinId);
   };
   return (
@@ -475,7 +475,10 @@ function PinForm({ file, draft, forReview, onDone }: { file: FileRow; draft: Dra
         add();
       }}
     >
-      <span className="t-body-14m">{draft.kind === "box" ? "框了一块" : "放了一个钉"}{forReview ? " · 审核意见" : ""}</span>
+      <span className="t-body-14m">
+        {draft.kind === "cell" ? `在「${draft.sheet}」的 ${draft.ref} 留意见` : draft.kind === "box" ? "框了一块" : "放了一个钉"}
+        {forReview ? " · 审核意见" : ""}
+      </span>
       <textarea ref={area} className="field-control" aria-label="意见" placeholder="哪里不对、要怎么改" value={text} onChange={(e) => setText(e.target.value)} data-testid="pin-text" />
       <div className="form-grid">
         <TextField label="层" placeholder="A" value={layer} onChange={(e) => setLayer(e.target.value)} />
@@ -517,7 +520,7 @@ function PinForm({ file, draft, forReview, onDone }: { file: FileRow; draft: Dra
   );
 }
 
-function PinItem({ pin, active, onJump, now }: { pin: PinRow; active: boolean; onJump: () => void; now: string }) {
+export function PinItem({ pin, active, onJump, now }: { pin: PinRow; active: boolean; onJump: () => void; now: string }) {
   const { world, dispatch, notify } = useGuild();
   const [reply, setReply] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -535,7 +538,7 @@ function PinItem({ pin, active, onJump, now }: { pin: PinRow; active: boolean; o
         <span className="break">{pin.text}</span>
       </button>
       <div className="row">
-        {pin.kind === "box" ? <Tag>框</Tag> : null}
+        {pin.cell ? <Tag>{pin.cell.sheet} · {pin.cell.ref}</Tag> : pin.kind === "box" ? <Tag>框</Tag> : null}
         {meta ? <span className="label">{meta}</span> : null}
         {pin.tag ? <Tag tone="warning">{pin.tag}</Tag> : null}
         {pin.reviewTaskId ? <Tag tone="danger">审核</Tag> : null}

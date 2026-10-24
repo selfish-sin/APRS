@@ -26,6 +26,7 @@ import {
 import { stageTemplate } from "../templates";
 import { guarded, insert, isAdmin, isReviewer, mustAdmin, mustBeOneOf, mustGet, mustMember, ok, optInteger, optText, reject, round1, update, type Ctx } from "./core";
 import { optFileName, optLink } from "./validate";
+import { mustLinks } from "./links";
 
 // ---------------------------------------------------------------------------
 // 共用
@@ -250,8 +251,16 @@ export const claimTask = guarded<ClaimInput>((rm, input, ctx) => {
   return reject("state", "你报到的环节现在都没有可接的任务，等上游放出来再来");
 });
 
+export interface SubmitLinkInput {
+  url: string;
+  name?: string | null;
+  kind?: "file" | "folder" | "sheet" | "doc" | null;
+}
+
 export interface SubmitInput {
   taskId: Id;
+  /** 一版可以挂几条链接（SPEC §15.1）。 */
+  links?: SubmitLinkInput[];
   link?: string | null;
   note?: string | null;
   /** 不写就用规范文件名。 */
@@ -267,7 +276,8 @@ export const submitTask = guarded<SubmitInput>((rm, input, ctx) => {
   if (task.status !== "claimed" && task.status !== "returned") reject("state", `${label}现在不能交（${task.status === "submitted" ? "已经在等审核" : "不在谁手上"}）`);
   const mineToDo = task.assigneeId === me.id;
   if (!mineToDo && !isAdmin(me)) reject("forbidden", "这张任务不在你手上");
-  const link = optLink(input.link, "飞书链接");
+  const links = mustLinks(input.links ?? (input.link ? [{ url: input.link }] : []));
+  const link = links[0]?.url ?? null;
   const note = optText(input.note, 1000);
   if (!link && !note) reject("invalid", "链接和说明至少写一个");
   const project = mustGet(rm, ctx, "projects", task.projectId, "项目");
@@ -286,6 +296,7 @@ export const submitTask = guarded<SubmitInput>((rm, input, ctx) => {
     selfFix: false,
     onTime,
     at: ctx.worldNow,
+    links,
   });
   const c = update("tasks", task, { status: "submitted", versions: version, submittedAt: ctx.worldNow });
   return ok([sub.change, ...(c ? [c] : [])], { submissionId: sub.row.id, taskId: task.id });

@@ -12,6 +12,7 @@ import { Link } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 import { MemberLink, SelectField, TextField } from "./bits";
 import { ReleaseDialog, SubmitDialog } from "./quest";
+import { LinkList } from "./links";
 
 export function TaskActions({ task, size = "Small" }: { task: TaskRow; size?: "Small" | "Medium" }) {
   const { world, me, dispatch, notify } = useGuild();
@@ -177,11 +178,7 @@ export function TaskDrawer({ task, onClose }: { task: TaskRow; onClose: () => vo
                       v{String(s.versionNo).padStart(2, "0")} · <MemberLink member={world.members[s.byMemberId ?? ""]} fallback="外包" />
                     </span>
                     <span className="label break">{s.fileName}</span>
-                    {s.link ? (
-                      <a href={s.link} target="_blank" rel="noreferrer noopener" className="label">
-                        打开链接
-                      </a>
-                    ) : null}
+                    <LinkList submission={s} compact />
                     {s.note ? <span className="label break">{s.note}</span> : null}
                     {r ? <span className="label">{VERDICT_LABEL[r.verdict]}{r.quality !== null ? ` · 质量 ${r.quality.toFixed(1)}` : ""}</span> : null}
                   </div>

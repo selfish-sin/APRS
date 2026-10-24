@@ -48,6 +48,16 @@ pnpm shots          # 主要页面的截图 → artifacts/shots/（不进仓库�
 | `vite`、`@vitejs/plugin-react` | 要静态、能装到桌面 / 手机、能打成一个 HTML |
 | `vite-plugin-singlefile` | `pnpm build:single` 把 JS 和 CSS 内联进一个 `index.html`，用来发预览（没有服务器、没有别的文件也能打开） |
 
+| `xlsx`（SheetJS CE **0.20.3**，`vendor/xlsx-0.20.3.tgz`） | 表格预览 / 检查（§15.2）和导出汇报（§15.3）。理由见下 |
+
+
+### 表格库为什么选 SheetJS CE 0.20.3
+
+- 维护中（官方在 cdn.sheetjs.com 发版，0.20.3 是现在的最新版），一个库就能在浏览器里**读** .xlsx / .xls / .csv（公式和算好的值、合并单元格、列宽都读得出来）、**写** .xlsx。ExcelJS 读不了 .xls；read-excel-file / write-excel-file 读不出公式和合并。
+- **不用 npm 上的 `xlsx@0.18.5`**：它有已知漏洞（CVE-2023-30533 原型污染、CVE-2024-22363 ReDoS），SheetJS 之后不再往 npm 发版。0.20.3 已修。
+- 不从 CDN 加载：官方 tarball 放在 `vendor/xlsx-0.20.3.tgz`（sha256 `8dc73fc3…b99fe8`），`pnpm install` 从本地装，打进程序。
+- 普通构建里按需加载：打开表格或导出汇报时才下载 `assets/xlsx-*.js`（约 500 KB，gzip 约 163 KB）；单文件版里内联，**单文件版因此大了约 500 KB（gzip 约 163 KB）**。
+- 社区版写文件时不写单元格样式：导出汇报的颜色（计划 / 实际 / 超出）和冻结表头由 `src/lib/sheets/write.ts` 在写好的 .xlsx（zip）里补进 `styles.xml` 和各表的 xml，用的是同一个库自带的 zip（`XLSX.CFB`）。
 
 ## 网页 + 本地
 

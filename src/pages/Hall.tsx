@@ -8,6 +8,7 @@ import { isReviewer } from "@/domain/commands/core";
 import { formatPoints, ROLE_LABEL } from "@/domain/labels";
 import { enrollmentsOf, feedOf, growthOf, inboxOf, pendingReviewCount, questFor, reviewQueue, taskViewById } from "@/domain/queries";
 import { Viewer } from "@/components/library/Viewer";
+import { LinkList } from "@/components/app/links";
 import { Link, useRoute } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 
@@ -106,6 +107,18 @@ export function HallPage() {
                         {t.by?.nickname ?? "有人"}：{t.thread.text}
                       </span>
                     </div>
+                  </li>
+                ))}
+                {inbox.links.map((x) => (
+                  <li key={`${x.submission.id}:${x.link.id}`} data-testid="inbox-broken-link" style={{ flexDirection: "column", alignItems: "stretch" }}>
+                    <div className="row">
+                      <Tag tone="danger">链接打不开</Tag>
+                      <span className="t-body-14m break">
+                        {x.view.title} v{String(x.submission.versionNo).padStart(2, "0")}
+                      </span>
+                    </div>
+                    <span className="label">{x.by?.nickname ?? "审核员"} 点开打不开，换一条就清掉：</span>
+                    <LinkList submission={x.submission} compact />
                   </li>
                 ))}
                 {inbox.pins.map((v) => (

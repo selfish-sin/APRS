@@ -79,7 +79,7 @@ test("主流程：开项目 → 派发 → 报到拿任务单 → 交 → 退回
   const quest = page.getByTestId("quest-card");
   await expect(quest).toContainText(NAME);
   await quest.getByRole("button", { name: "交", exact: true }).click();
-  await page.getByLabel("飞书链接").fill("https://feishu.example.com/drive/etoe/c001/a/v01");
+  await page.getByTestId("link-url-0").fill("https://feishu.example.com/drive/etoe/c001/a/v01");
   await page.getByLabel("说明").fill("第一版");
   await page.getByTestId("submit-confirm").click();
   await expect(page.getByText(/交了 C001 · 中割 · A 层 v01/)).toBeVisible();
@@ -102,7 +102,7 @@ test("主流程：开项目 → 派发 → 报到拿任务单 → 交 → 退回
   await expect(quest).toContainText(NAME);
   await expect(quest).toContainText("第 3 张漏了轨目");
   await quest.getByRole("button", { name: "改好了，再交" }).click();
-  await page.getByLabel("飞书链接").fill("https://feishu.example.com/drive/etoe/c001/a/v02");
+  await page.getByTestId("link-url-0").fill("https://feishu.example.com/drive/etoe/c001/a/v02");
   await page.getByTestId("submit-confirm").click();
   await expect(page.getByText(/交了 C001 · 中割 · A 层 v02/)).toBeVisible();
 

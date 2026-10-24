@@ -11,6 +11,7 @@ import { Board, StatusLegend } from "@/components/app/board";
 import { MapLegend, StageMap } from "@/components/app/stage";
 import { TaskDrawer } from "@/components/app/task";
 import { BatchAssign, ExtrasList, PublishForm, ScheduleView, StageSettings } from "@/components/app/flex";
+import { ReportDialog } from "@/components/app/report";
 import { ThreadBody } from "@/components/app/thread";
 import { dateZh } from "@/domain/clock";
 import { isAdmin, isReviewer } from "@/domain/commands/core";
@@ -37,6 +38,7 @@ export function ProjectPage() {
   const [node, setNode] = useState<StageNode | null>(null);
   const [task, setTask] = useState<TaskRow | null>(null);
   const [editing, setEditing] = useState(false);
+  const [reporting, setReporting] = useState(false);
   const [view, setView] = useState<"flow" | "schedule">(route.query.get("view") === "schedule" ? "schedule" : "flow");
   const project = projectById(world, id);
   const pipeline = useMemo(() => (project ? pipelineOf(world, project.id) : null), [world, project]);
@@ -79,6 +81,7 @@ export function ProjectPage() {
           ) : (
             <span className="label">还没填飞书根文件夹</span>
           )}
+          <Button Label="导出汇报" Style="Secondary" onClick={() => setReporting(true)} data-testid="report-open" />
           {admin ? <Button Label="改项目" Style="Secondary" onClick={() => setEditing(true)} /> : null}
         </div>
       </div>
@@ -184,6 +187,7 @@ export function ProjectPage() {
       {liveNode ? <StageDrawer node={liveNode} onClose={() => setNode(null)} /> : null}
       {liveTask ? <TaskDrawer task={liveTask} onClose={() => setTask(null)} /> : null}
       {editing ? <ProjectEditDialog projectId={project.id} onClose={() => setEditing(false)} /> : null}
+      {reporting ? <ReportDialog projectId={project.id} onClose={() => setReporting(false)} /> : null}
     </>
   );
 }

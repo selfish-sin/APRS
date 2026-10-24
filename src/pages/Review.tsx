@@ -4,6 +4,7 @@
  */
 import { useMemo, useState } from "react";
 import { DropZone } from "@/components/library/intake";
+import { LinkList } from "@/components/app/links";
 import { FileTile } from "@/components/library/tiles";
 import { Viewer } from "@/components/library/Viewer";
 import { useFiles } from "@/lib/files/FilesProvider";
@@ -153,15 +154,9 @@ function ReviewPanel({ item, next }: { item: ReviewItem; next: ReviewItem | null
           </dd>
         </div>
         <div>
-          <dt className="label">链接</dt>
+          <dt className="label">链接（点了在新标签页打开；打不开就标出来）</dt>
           <dd style={{ margin: 0 }}>
-            {submission.link ? (
-              <a href={submission.link} target="_blank" rel="noreferrer noopener" className="break">
-                打开飞书链接
-              </a>
-            ) : (
-              <span className="muted">没贴链接</span>
-            )}
+            <LinkList submission={submission} />
           </dd>
         </div>
         {submission.note ? (
