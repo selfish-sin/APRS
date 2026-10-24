@@ -13,7 +13,11 @@ import { upstreamTasksOf, hubScope } from "./flow";
 import { GROUP_LABEL, TASK_STATUS_LABEL, THREAD_KIND_LABEL, VERDICT_LABEL, formatNumber, formatPoints } from "./labels";
 import type {
   AccountRow,
+  BlockRow,
   CutRow,
+  FileRow,
+  PageRow,
+  PinRow,
   EnrollmentRow,
   Group,
   Id,
@@ -66,6 +70,12 @@ interface Index {
   rulings: RulingRow[];
   ledgerByMember: Map<Id, LedgerRow[]>;
   enrollments: EnrollmentRow[];
+  files: FileRow[];
+  fileById: Map<Id, FileRow>;
+  pins: PinRow[];
+  pinsByFile: Map<Id, PinRow[]>;
+  pages: PageRow[];
+  blocksByPage: Map<Id, BlockRow[]>;
 }
 
 const INDEX = new WeakMap<WorldState, Index>();
@@ -116,7 +126,18 @@ export function indexOf(state: WorldState): Index {
     rulings: live(state.rulings).sort(compareBy<RulingRow>((r) => timeKey(r.at))),
     ledgerByMember: new Map(),
     enrollments: live(state.enrollments).sort(compareBy<EnrollmentRow>((e) => timeKey(e.createdAt))),
+    files: live(state.files ?? {}).sort(compareBy<FileRow>((f) => timeKey(f.at), (f) => timeKey(f.createdAt))),
+    fileById: new Map(),
+    pins: live(state.pins ?? {}).sort(compareBy<PinRow>((p) => timeKey(p.at))),
+    pinsByFile: new Map(),
+    pages: live(state.pages ?? {}).sort(compareBy<PageRow>((p) => timeKey(p.at), (p) => timeKey(p.createdAt))),
+    blocksByPage: new Map(),
   };
+  for (const f of idx.files) idx.fileById.set(f.id, f);
+  for (const p of idx.pins) push(idx.pinsByFile, p.fileId, p);
+  for (const list of Array.from(idx.pinsByFile.values())) list.sort((a, b) => a.number - b.number);
+  for (const b of live(state.blocks ?? {})) push(idx.blocksByPage, b.pageId, b);
+  for (const list of Array.from(idx.blocksByPage.values())) list.sort((a, b) => a.sort - b.sort || cmp(a.id, b.id));
   for (const s of stages) push(idx.stagesByProject, s.projectId, s);
   for (const list of Array.from(idx.stagesByProject.values())) list.sort(bySort);
   for (const c of cuts) push(idx.cutsByProject, c.projectId, c);
@@ -722,7 +743,7 @@ export function collaboratorsOf(state: WorldState, memberId: Id): { member: Memb
 // 卡的时间线
 // ---------------------------------------------------------------------------
 
-export type TimelineKind = "claim" | "release" | "expire" | "reclaim" | "reopen" | "dispatch" | "submit" | "review" | "thread" | "ruling";
+export type TimelineKind = "claim" | "release" | "expire" | "reclaim" | "reopen" | "dispatch" | "submit" | "review" | "thread" | "ruling" | "file" | "pin";
 
 export interface TimelineItem {
   key: string;
@@ -736,6 +757,8 @@ export interface TimelineItem {
   review?: ReviewRow;
   thread?: ThreadRow;
   ruling?: RulingRow;
+  file?: FileRow;
+  pin?: PinRow;
   seq: number;
 }
 
@@ -814,6 +837,27 @@ export function timelineOfCut(state: WorldState, cutId: Id): TimelineItem[] {
     const text = th.kind === "todo" ? th.text : `${name(th.byMemberId)} ${th.kind === "ask" ? "提问" : th.kind === "setting" ? "提了设定问题" : "留了意见"}`;
     items.push({ key: th.id, at: th.at, kind: "thread", memberId: th.byMemberId, task: t, stage, text, thread: th, seq: seqOf.get(th.id) ?? 0 });
   }
+  for (const f of idx.files) {
+    if (f.cutId !== cutId) continue;
+    items.push({ key: f.id, at: f.at, kind: "file", memberId: f.byMemberId, task: null, stage: null, text: `${name(f.byMemberId)} 放了${f.width ? "图" : "文件"}「${f.name}」`, file: f, seq: seqOf.get(f.id) ?? 0 });
+  }
+  for (const p of idx.pins) {
+    if (p.cutId !== cutId) continue;
+    const f = idx.fileById.get(p.fileId);
+    const t = p.taskId ? idx.taskById.get(p.taskId) ?? null : null;
+    items.push({
+      key: p.id,
+      at: p.at,
+      kind: "pin",
+      memberId: p.byMemberId,
+      task: t,
+      stage: stageOfTask(t ?? undefined),
+      text: `${name(p.byMemberId)} 在「${f?.name ?? "图"}」上${p.kind === "box" ? "框了" : "钉了"} #${p.number}${p.reviewTaskId ? "（审核退回时）" : ""}`,
+      file: f,
+      pin: p,
+      seq: seqOf.get(p.id) ?? 0,
+    });
+  }
   return items.sort((a, b) => cmp(timeKey(b.at), timeKey(a.at)) || b.seq - a.seq || cmp(b.key, a.key));
 }
 
@@ -848,6 +892,8 @@ export interface Inbox {
   returned: Quest[];
   asked: ThreadView[];
   todos: ThreadView[];
+  /** 图上的意见：@ 了我的、审核退回时钉在我的任务上的、钉在我手上任务的图上的。 */
+  pins: PinView[];
   total: number;
 }
 
@@ -882,7 +928,16 @@ export function inboxOf(state: WorldState, memberId: Id): Inbox {
     .filter((t) => t.kind === "todo" && t.status === "open" && !!t.cutId)
     .filter((t) => (t.stageKey ? worked.has(`${t.cutId}:${t.stageKey}`) : workedCut.has(t.cutId!)))
     .map((t) => threadView(state, t));
-  return { returned, asked, todos, total: returned.length + asked.length + todos.length };
+  const pins = indexOf(state)
+    .pins.filter((p) => p.status === "open" && p.byMemberId !== memberId)
+    .filter((p) => {
+      if (p.mentions.includes(memberId)) return true;
+      const task = p.reviewTaskId ? idx.taskById.get(p.reviewTaskId) : p.taskId ? idx.taskById.get(p.taskId) : undefined;
+      return !!task && task.assigneeId === memberId && task.status !== "passed";
+    })
+    .map((p) => pinView(state, p))
+    .filter((v): v is PinView => !!v);
+  return { returned, asked, todos, pins, total: returned.length + asked.length + todos.length + pins.length };
 }
 
 /** 开着的设定问题（管理员拍板用）。 */
@@ -906,6 +961,10 @@ export interface FeedItem {
   at: IsoDateTime;
   memberId: Id | null;
   text: string;
+}
+
+function p0(p: Record<string, unknown>): Id {
+  return String(p.pinId ?? "");
 }
 
 function taskShort(state: WorldState, id: unknown): string {
@@ -976,6 +1035,25 @@ export function feedText(state: WorldState, e: JournalEntry): string | null {
       return `${who} 改了「${groupTemplate((p.group as Group) ?? "animation").stages.find((s) => s.key === p.stageKey)?.name ?? "环节"}」的工时`;
     case "rules.set":
       return `${who} 改了工会规则`;
+    case "file.add": {
+      const f = created.fileId ? state.files[created.fileId] : undefined;
+      return f ? `${who} 放了${f.width ? "图" : "文件"}「${f.name}」` : null;
+    }
+    case "pin.add": {
+      const pin = created.pinId ? state.pins[created.pinId] : undefined;
+      const f = pin ? state.files[pin.fileId] : undefined;
+      return pin ? `${who} 在「${f?.name ?? "图"}」上${pin.kind === "box" ? "框了" : "钉了"} #${pin.number}：${pin.text}` : null;
+    }
+    case "pin.reply": {
+      const pin = state.pins[p0(p)];
+      return pin ? `${who} 回复了 #${pin.number}（${state.files[pin.fileId]?.name ?? "图"}）` : null;
+    }
+    case "pin.resolve": {
+      const pin = state.pins[p0(p)];
+      return pin ? `${who} 解决了 #${pin.number}（${state.files[pin.fileId]?.name ?? "图"}）` : null;
+    }
+    case "page.create":
+      return `${who} 建了资料页「${String(p.title ?? "")}」`;
     case "stage.set_reviewer":
       return `${who} 指定了「${stageById(state, p.stageId as Id)?.name ?? "环节"}」的审核员`;
     default:
@@ -1131,3 +1209,207 @@ export function thisWeek(state: WorldState): { from: string; to: string } {
 
 /** 活力点的字。 */
 export const points = formatPoints;
+
+// ---------------------------------------------------------------------------
+// 资料库（SPEC §11）
+// ---------------------------------------------------------------------------
+
+export type FileKind = "image" | "pdf" | "video" | "archive" | "clip" | "other";
+
+export const FILE_KIND_LABEL: Record<FileKind, string> = { image: "图片", pdf: "PDF", video: "视频", archive: "压缩包", clip: "CLIP 文件", other: "文件" };
+
+export function extOf(name: string): string {
+  const i = name.lastIndexOf(".");
+  return i > 0 && i < name.length - 1 ? name.slice(i + 1).toLowerCase() : "";
+}
+
+export function fileKind(f: Pick<FileRow, "name" | "mime" | "width">): FileKind {
+  const ext = extOf(f.name);
+  if (f.width || f.mime.startsWith("image/")) return "image";
+  if (ext === "pdf" || f.mime === "application/pdf") return "pdf";
+  if (["mp4", "webm", "mov", "m4v"].includes(ext) || f.mime.startsWith("video/")) return "video";
+  if (["zip", "rar", "7z", "tar", "gz"].includes(ext)) return "archive";
+  if (ext === "clip") return "clip";
+  return "other";
+}
+
+/** 「1.2 MB」 */
+export function sizeLabel(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+}
+
+export interface FileView {
+  file: FileRow;
+  kind: FileKind;
+  kindLabel: string;
+  uploader: MemberRow | null;
+  /** 挂在哪：「C005 · 上色 · A 层 v04」「资料库」「资料页「设定集」」。 */
+  where: string;
+  cut: CutRow | null;
+  pins: { open: number; total: number };
+}
+
+export function fileWhere(state: WorldState, f: FileRow): string {
+  const idx = indexOf(state);
+  const project = idx.projectById.get(f.projectId);
+  switch (f.subjectType) {
+    case "project":
+      return "资料库";
+    case "cut": {
+      const c = idx.cutById.get(f.subjectId);
+      return c ? cutCode(c, project?.group) : "卡";
+    }
+    case "task":
+      return taskViewById(state, f.subjectId)?.label ?? "任务";
+    case "submission": {
+      const sub = state.submissions[f.subjectId];
+      const v = sub ? taskViewById(state, sub.taskId) : null;
+      return v ? `${v.label} v${String(sub.versionNo).padStart(2, "0")}` : "版本";
+    }
+    case "page":
+      return `资料页「${state.pages[f.subjectId]?.title ?? ""}」`;
+    case "thread": {
+      const t = state.threads[f.subjectId];
+      return t ? `${THREAD_KIND_LABEL[t.kind]}里` : "意见里";
+    }
+  }
+}
+
+export function fileView(state: WorldState, f: FileRow): FileView {
+  const idx = indexOf(state);
+  const kind = fileKind(f);
+  const pins = idx.pinsByFile.get(f.id) ?? [];
+  return {
+    file: f,
+    kind,
+    kindLabel: FILE_KIND_LABEL[kind],
+    uploader: idx.memberById.get(f.byMemberId) ?? null,
+    where: fileWhere(state, f),
+    cut: f.cutId ? idx.cutById.get(f.cutId) ?? null : null,
+    pins: { open: pins.filter((p) => p.status === "open").length, total: pins.length },
+  };
+}
+
+export function fileById(state: WorldState, id: Id | null | undefined): FileRow | undefined {
+  return id ? indexOf(state).fileById.get(id) : undefined;
+}
+
+export interface LibraryFilter {
+  cutId?: Id | null;
+  stageKey?: string | null;
+  kind?: FileKind | null;
+  tag?: string | null;
+  byMemberId?: Id | null;
+  q?: string | null;
+  order?: "new" | "old";
+}
+
+/** 一个项目的资料库：这个项目里所有文件（不管挂在哪），可以筛、可以搜文件名，按时间排。 */
+export function libraryOf(state: WorldState, projectId: Id, filter: LibraryFilter = {}): FileView[] {
+  const q = filter.q?.trim().toLowerCase() ?? "";
+  const list = indexOf(state).files.filter((f) => {
+    if (f.projectId !== projectId) return false;
+    if (filter.cutId && f.cutId !== filter.cutId) return false;
+    if (filter.stageKey && f.stageKey !== filter.stageKey) return false;
+    if (filter.kind && fileKind(f) !== filter.kind) return false;
+    if (filter.tag && !f.tags.includes(filter.tag)) return false;
+    if (filter.byMemberId && f.byMemberId !== filter.byMemberId) return false;
+    // 只比 ASCII 和字本身（toLowerCase 只影响拉丁字母），不用 localeCompare。
+    if (q && !f.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const ordered = filter.order === "old" ? list : [...list].reverse();
+  return ordered.map((f) => fileView(state, f));
+}
+
+export function libraryFacets(state: WorldState, projectId: Id): { tags: string[]; uploaders: MemberRow[]; stageKeys: string[] } {
+  const idx = indexOf(state);
+  const files = idx.files.filter((f) => f.projectId === projectId);
+  const tags = Array.from(new Set(files.flatMap((f) => f.tags))).sort(cmp);
+  const uploaderIds = new Set(files.map((f) => f.byMemberId));
+  const stageKeys = new Set(files.map((f) => f.stageKey).filter((k): k is string => !!k));
+  return {
+    tags,
+    uploaders: idx.members.filter((m) => uploaderIds.has(m.id)),
+    stageKeys: (idx.stagesByProject.get(projectId) ?? []).map((s) => s.templateKey).filter((k) => stageKeys.has(k)),
+  };
+}
+
+/** 挂在某个东西上的文件（卡详情、交的版本、意见、资料页）。 */
+export function filesOn(state: WorldState, subjectType: FileRow["subjectType"], subjectId: Id): FileRow[] {
+  return indexOf(state).files.filter((f) => f.subjectType === subjectType && f.subjectId === subjectId);
+}
+
+/** 这一卡的全部文件（不管挂在卡、任务还是版本上）。 */
+export function filesOfCut(state: WorldState, cutId: Id): FileRow[] {
+  return indexOf(state).files.filter((f) => f.cutId === cutId);
+}
+
+/** 同一张任务所有版本上的文件。 */
+export function filesOfTask(state: WorldState, taskId: Id): FileRow[] {
+  const subs = new Set(submissionsOf(state, taskId).map((s) => s.id));
+  return indexOf(state).files.filter((f) => (f.subjectType === "task" && f.subjectId === taskId) || (f.subjectType === "submission" && subs.has(f.subjectId)));
+}
+
+export function pinsOf(state: WorldState, fileId: Id): PinRow[] {
+  return indexOf(state).pinsByFile.get(fileId) ?? [];
+}
+
+export interface PinView {
+  pin: PinRow;
+  file: FileRow;
+  by: MemberRow | null;
+  /** 「安娜的旅程 · C005 · 上色 A 层 v04」 */
+  where: string;
+}
+
+export function pinView(state: WorldState, pin: PinRow): PinView | null {
+  const f = indexOf(state).fileById.get(pin.fileId);
+  if (!f) return null;
+  const project = projectById(state, f.projectId);
+  return { pin, file: f, by: memberById(state, pin.byMemberId) ?? null, where: [project?.name, fileWhere(state, f)].filter(Boolean).join(" · ") };
+}
+
+/**
+ * 两版对比的候选：同一卡同一环节的别的图（先），再是同一卡的，再是同一个项目的；新的在前。
+ */
+export function compareCandidates(state: WorldState, fileId: Id): FileRow[] {
+  const idx = indexOf(state);
+  const f = idx.fileById.get(fileId);
+  if (!f) return [];
+  const images = idx.files.filter((x) => x.id !== f.id && x.projectId === f.projectId && fileKind(x) === "image");
+  const rank = (x: FileRow) => (f.cutId && x.cutId === f.cutId && x.stageKey === f.stageKey ? 0 : f.cutId && x.cutId === f.cutId ? 1 : 2);
+  return images.sort((a, b) => rank(a) - rank(b) || cmp(timeKey(b.at), timeKey(a.at)) || cmp(a.id, b.id));
+}
+
+export function pagesOf(state: WorldState, projectId: Id): PageRow[] {
+  return indexOf(state).pages.filter((p) => p.projectId === projectId);
+}
+
+export function pageById(state: WorldState, id: Id | null | undefined): PageRow | undefined {
+  const p = id ? state.pages?.[id] : undefined;
+  return p && !p.archivedAt ? p : undefined;
+}
+
+export function blocksOf(state: WorldState, pageId: Id): BlockRow[] {
+  return indexOf(state).blocksByPage.get(pageId) ?? [];
+}
+
+/** 资料库里一共存了多少字节（同一个文件只算一次）。 */
+export function libraryBytes(state: WorldState): { files: number; bytes: number } {
+  const seen = new Map<string, number>();
+  for (const f of indexOf(state).files) seen.set(f.sha256, f.size);
+  let bytes = 0;
+  for (const v of Array.from(seen.values())) bytes += v;
+  return { files: seen.size, bytes };
+}
+
+/** 世界里用到的全部文件的 sha256（导出「连文件一起」用）。 */
+export function usedShas(state: WorldState): { sha256: string; size: number; mime: string; name: string }[] {
+  const seen = new Map<string, { sha256: string; size: number; mime: string; name: string }>();
+  for (const f of Object.values(state.files ?? {})) if (!seen.has(f.sha256)) seen.set(f.sha256, { sha256: f.sha256, size: f.size, mime: f.mime, name: f.name });
+  return Array.from(seen.values());
+}

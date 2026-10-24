@@ -8,6 +8,9 @@ import { createAccount, joinMember, setPasscode, setRole, updateMember } from ".
 import { createProject, hubDispatch, setRate, setReviewer, updateProject } from "./project";
 import { assignTask, claimTask, enroll, expireTask, reclaimTask, releaseTask, reopenTask, reviewTask, submitTask, unenroll } from "./task";
 import { makeRuling, openThread, replyThread, resolveThread } from "./thread";
+import { addFile, archiveFile, moveFile, renameFile, tagFile } from "./file";
+import { addPin, reopenPin, replyPin, resolvePin } from "./pin";
+import { addBlock, archivePage, createPage, moveBlock, removeBlock, renamePage, updateBlock } from "./page";
 
 export const COMMANDS = {
   "guild.create": createGuild,
@@ -36,6 +39,22 @@ export const COMMANDS = {
   "thread.reply": replyThread,
   "thread.resolve": resolveThread,
   "ruling.make": makeRuling,
+  "file.add": addFile,
+  "file.rename": renameFile,
+  "file.tag": tagFile,
+  "file.move": moveFile,
+  "file.archive": archiveFile,
+  "pin.add": addPin,
+  "pin.reply": replyPin,
+  "pin.resolve": resolvePin,
+  "pin.reopen": reopenPin,
+  "page.create": createPage,
+  "page.rename": renamePage,
+  "page.archive": archivePage,
+  "block.add": addBlock,
+  "block.update": updateBlock,
+  "block.move": moveBlock,
+  "block.remove": removeBlock,
 } as const;
 
 export type CommandName = keyof typeof COMMANDS;

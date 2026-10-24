@@ -19,6 +19,10 @@ export const ID_PREFIX = {
   threads: "thr",
   rulings: "rul",
   ledger: "led",
+  files: "fil",
+  pins: "pin",
+  pages: "pag",
+  blocks: "blk",
   journal: "jnl",
 } as const;
 

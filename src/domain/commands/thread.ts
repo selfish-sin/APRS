@@ -17,6 +17,11 @@ function subjectOf(rm: ReadModel, ctx: Ctx, type: ThreadSubject, id: Id) {
     const c = mustGet(rm, ctx, "cuts", id, "卡");
     return { projectId: c.projectId, cutId: c.id as Id | null, stageKey: null as string | null };
   }
+  if (type === "block") {
+    const b = mustGet(rm, ctx, "blocks", id, "资料页里的块");
+    const page = mustGet(rm, ctx, "pages", b.pageId, "资料页");
+    return { projectId: page.projectId, cutId: null as Id | null, stageKey: null as string | null };
+  }
   const t = mustGet(rm, ctx, "tasks", id, "任务");
   const s = mustGet(rm, ctx, "stages", t.stageId, "环节");
   return { projectId: t.projectId, cutId: t.cutId, stageKey: s.templateKey as string | null };

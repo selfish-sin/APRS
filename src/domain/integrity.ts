@@ -24,6 +24,10 @@ const REFS: Partial<Record<TableName, Record<string, TableName>>> = {
   threads: { projectId: "projects", cutId: "cuts", askMemberId: "members", byMemberId: "members", rulingId: "rulings" },
   rulings: { projectId: "projects", threadId: "threads", byMemberId: "members" },
   ledger: { memberId: "members", taskId: "tasks" },
+  files: { projectId: "projects", cutId: "cuts", byMemberId: "members" },
+  pins: { fileId: "files", projectId: "projects", cutId: "cuts", taskId: "tasks", reviewTaskId: "tasks", byMemberId: "members" },
+  pages: { projectId: "projects", byMemberId: "members" },
+  blocks: { pageId: "pages", byMemberId: "members" },
 };
 
 const REQUIRED = new Set([
@@ -42,9 +46,17 @@ const REQUIRED = new Set([
   "rulings.projectId",
   "rulings.byMemberId",
   "ledger.memberId",
+  "files.projectId",
+  "files.byMemberId",
+  "pins.fileId",
+  "pins.projectId",
+  "pins.byMemberId",
+  "pages.projectId",
+  "blocks.pageId",
 ]);
 
-const SUBJECT_TABLE = { project: "projects", cut: "cuts", task: "tasks" } as const;
+const SUBJECT_TABLE = { project: "projects", cut: "cuts", task: "tasks", block: "blocks" } as const;
+const FILE_SUBJECT_TABLE = { project: "projects", cut: "cuts", task: "tasks", submission: "submissions", page: "pages", thread: "threads" } as const;
 
 export function checkIntegrity(state: WorldState): IntegrityProblem[] {
   const problems: IntegrityProblem[] = [];
@@ -72,6 +84,20 @@ export function checkIntegrity(state: WorldState): IntegrityProblem[] {
     const target = SUBJECT_TABLE[t.subjectType];
     const row = target ? (state[target] as Record<Id, { worldId: Id }>)[t.subjectId] : undefined;
     if (!row) problems.push({ table: "threads", id: t.id, field: "subjectId", problem: `→ ${t.subjectType}/${t.subjectId} does not exist` });
+  }
+  for (const f of Object.values(state.files)) {
+    const target = FILE_SUBJECT_TABLE[f.subjectType];
+    const row = target ? (state[target] as Record<Id, { worldId: Id }>)[f.subjectId] : undefined;
+    if (!row) problems.push({ table: "files", id: f.id, field: "subjectId", problem: `→ ${f.subjectType}/${f.subjectId} does not exist` });
+    if (!/^[0-9a-f]{64}$/.test(f.sha256)) problems.push({ table: "files", id: f.id, field: "sha256", problem: "not a sha256" });
+  }
+  for (const p of Object.values(state.pins)) {
+    const f = state.files[p.fileId];
+    if (f && f.projectId !== p.projectId) problems.push({ table: "pins", id: p.id, field: "projectId", problem: "pin is in another project than its file" });
+    if (p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1) problems.push({ table: "pins", id: p.id, field: "x", problem: "position out of the image" });
+  }
+  for (const b of Object.values(state.blocks)) {
+    for (const fid of b.fileIds) if (!state.files[fid]) problems.push({ table: "blocks", id: b.id, field: "fileIds", problem: `→ files/${fid} does not exist` });
   }
   for (const t of Object.values(state.tasks)) {
     const stage = state.stages[t.stageId];

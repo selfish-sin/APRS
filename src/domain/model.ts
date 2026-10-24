@@ -68,8 +68,8 @@ export type ThreadKind = (typeof THREAD_KIND)[number];
 export const THREAD_STATUS = ["open", "answered", "ruled", "done"] as const;
 export type ThreadStatus = (typeof THREAD_STATUS)[number];
 
-/** 意见挂在哪：项目 · 卡 · 任务。 */
-export const THREAD_SUBJECT = ["project", "cut", "task"] as const;
+/** 意见挂在哪：项目 · 卡 · 任务 · 资料页里的一个块。 */
+export const THREAD_SUBJECT = ["project", "cut", "task", "block"] as const;
 export type ThreadSubject = (typeof THREAD_SUBJECT)[number];
 
 export const PROJECT_STATUS = ["active", "paused", "done"] as const;
@@ -78,6 +78,21 @@ export type ProjectStatus = (typeof PROJECT_STATUS)[number];
 /** 活力点流水的种类：做任务 · 审核员自修 · 超时扣分。 */
 export const LEDGER_KIND = ["task", "self_fix", "penalty"] as const;
 export type LedgerKind = (typeof LEDGER_KIND)[number];
+
+/** 文件挂在哪（SPEC §11.1）：项目（资料库）· 卡 · 任务 · 版本 · 资料页 · 意见。 */
+export const FILE_SUBJECT = ["project", "cut", "task", "submission", "page", "thread"] as const;
+export type FileSubject = (typeof FILE_SUBJECT)[number];
+
+/** 图上的评论：点一下 = 钉 · 拖一下 = 框。 */
+export const PIN_KIND = ["point", "box"] as const;
+export type PinKind = (typeof PIN_KIND)[number];
+
+export const PIN_STATUS = ["open", "resolved"] as const;
+export type PinStatus = (typeof PIN_STATUS)[number];
+
+/** 资料页的块（SPEC §11.5）：标题 · 段落 · 图片（单张）· 图片网格 · 文件 · 清单 · 分割线。 */
+export const BLOCK_TYPE = ["heading", "text", "image", "gallery", "file", "checklist", "divider"] as const;
+export type BlockType = (typeof BLOCK_TYPE)[number];
 
 /** 头像色（Figma color/avatar/*，只给人用）。 */
 export const AVATAR_TONE = ["peach", "lilac", "sand", "sage", "slate"] as const;
@@ -340,6 +355,93 @@ export interface LedgerRow extends RowHeader {
   note: string | null;
 }
 
+/**
+ * 文件的信息（SPEC §11.1）。文件本身在 IndexedDB（`arps-files`，按 sha256 存，同一个文件只存一份），
+ * 这里只有「是什么、挂在哪、谁传的」和一张很小的缩略图，和别的数据一样走日志、能导出、能重放。
+ */
+export interface FileRow extends RowHeader {
+  sha256: string;
+  name: string;
+  mime: string;
+  size: number;
+  /** 图片的宽高（像素）；不是图片为 null。 */
+  width: number | null;
+  height: number | null;
+  /** ≤ 20KB 的缩略图 dataURL（文件不在这台设备上时也能看个大概）。 */
+  thumb: string | null;
+  subjectType: FileSubject;
+  subjectId: Id;
+  /** 从挂的地方带出来的（资料库筛选用）。 */
+  projectId: Id;
+  cutId: Id | null;
+  stageKey: string | null;
+  tags: string[];
+  byMemberId: Id;
+  at: IsoDateTime;
+}
+
+export interface PinReply {
+  byMemberId: Id;
+  text: string;
+  at: IsoDateTime;
+}
+
+/** 图上的一个钉 / 框：位置按图的比例存（0–1），缩放以后还在原处。 */
+export interface PinRow extends RowHeader {
+  fileId: Id;
+  /** 这张图上的第几个（1、2、3 …）。 */
+  number: number;
+  kind: PinKind;
+  x: number;
+  y: number;
+  /** 框才有。 */
+  w: number | null;
+  h: number | null;
+  layer: string | null;
+  sheets: string | null;
+  tag: string | null;
+  text: string;
+  /** @ 了谁。 */
+  mentions: Id[];
+  /** 审核退回时钉的：哪张任务（交的人的「等我处理」里会有）。 */
+  reviewTaskId: Id | null;
+  /** 从图带出来的（卡的时间线用）。 */
+  projectId: Id;
+  cutId: Id | null;
+  taskId: Id | null;
+  status: PinStatus;
+  replies: PinReply[];
+  byMemberId: Id;
+  at: IsoDateTime;
+}
+
+/** 资料页（像 Notion，但以图为主）。 */
+export interface PageRow extends RowHeader {
+  projectId: Id;
+  title: string;
+  byMemberId: Id;
+  at: IsoDateTime;
+}
+
+export interface ChecklistItem {
+  text: string;
+  done: boolean;
+}
+
+export interface BlockRow extends RowHeader {
+  pageId: Id;
+  type: BlockType;
+  /** 标题 / 段落的字。 */
+  text: string | null;
+  /** 图片 / 网格 / 文件块：只存文件 id。 */
+  fileIds: Id[];
+  /** 清单。 */
+  items: ChecklistItem[];
+  /** 顺序（小的在前，可以是小数）。 */
+  sort: number;
+  byMemberId: Id;
+}
+
 // ---------------------------------------------------------------------------
 // 表
 // ---------------------------------------------------------------------------
@@ -358,6 +460,10 @@ export interface Tables {
   threads: ThreadRow;
   rulings: RulingRow;
   ledger: LedgerRow;
+  files: FileRow;
+  pins: PinRow;
+  pages: PageRow;
+  blocks: BlockRow;
 }
 
 export type TableName = keyof Tables;
@@ -376,6 +482,10 @@ export const TABLE_NAMES: TableName[] = [
   "threads",
   "rulings",
   "ledger",
+  "files",
+  "pins",
+  "pages",
+  "blocks",
 ];
 
 /** Fields a command may never patch. */

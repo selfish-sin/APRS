@@ -17,7 +17,11 @@ const K = new Uint32Array([
 
 /** 纯 JS 的 SHA-256（只在没有 crypto.subtle 时用）。 */
 export function sha256HexSync(text: string): string {
-  const bytes = new TextEncoder().encode(text);
+  return sha256BytesSync(new TextEncoder().encode(text));
+}
+
+/** 同上，算字节（文件用）。 */
+export function sha256BytesSync(bytes: Uint8Array): string {
   const len = bytes.length;
   const withPad = Math.ceil((len + 9) / 64) * 64;
   const msg = new Uint8Array(withPad);

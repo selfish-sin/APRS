@@ -38,6 +38,29 @@ export interface WorldFile {
   /** Only in exported files: when and from which build. */
   exportedAt?: IsoDateTime;
   build?: string | null;
+  /**
+   * 只在勾了「连文件一起」的备份里：sha256 → 文件本身（base64）。浏览器里存的那一份没有它
+   * （文件在 IndexedDB）。加的是可选字段，信封版本不用变。
+   */
+  files?: Record<string, EmbeddedFile>;
+}
+
+export interface EmbeddedFile {
+  mime: string;
+  size: number;
+  /** base64 */
+  data: string;
+}
+
+function embeddedFiles(x: unknown): Record<string, EmbeddedFile> | undefined {
+  if (!isRecord(x)) return undefined;
+  const out: Record<string, EmbeddedFile> = {};
+  for (const [sha, v] of Object.entries(x)) {
+    if (!/^[0-9a-f]{64}$/.test(sha) || !isRecord(v)) continue;
+    if (typeof v.data !== "string" || typeof v.size !== "number") continue;
+    out[sha] = { mime: typeof v.mime === "string" ? v.mime : "", size: v.size, data: v.data };
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 export type MigrationResult = { ok: true; file: WorldFile; from: string } | { ok: false; reason: string };
@@ -102,6 +125,8 @@ export function migrateWorldFile(raw: unknown): MigrationResult {
     ...(typeof current.exportedAt === "string" ? { exportedAt: current.exportedAt } : {}),
     ...(typeof current.build === "string" ? { build: current.build } : {}),
   };
+  const files = embeddedFiles(current.files);
+  if (files) file.files = files;
   return { ok: true, file, from: raw.formatVersion === WORLD_FORMAT_VERSION ? "current" : `v${String(raw.formatVersion)}` };
 }
 
