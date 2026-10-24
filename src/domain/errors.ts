@@ -252,6 +252,13 @@ export const ERRORS = {
   block_no_text: t2("这种块没有字可以改", "This kind of block has no text to edit."),
   block_no_files: t2("这种块不放文件", "This kind of block doesn't hold files."),
   block_not_checklist: t2("只有清单块有清单", "Only checklist blocks have items."),
+  stage_folder_bad: t2("交到哪写 1–24 个字（不能有 \\ / : * ? \" < > |）", "The delivery folder must be 1–24 characters (no \\ / : * ? \" < > |)."),
+  extend_pick: t2("先选要延期的任务", "Pick the tasks to extend first."),
+  stage_person_pick: t2("选一个成员，或者写一个外部名字", "Pick a member or type an outside name."),
+  stage_person_dup: t2("{name} 已经在这个环节上了", "{name} is already on this stage."),
+  stage_person_missing: t2("{name} 不在这个环节的人员里", "{name} isn't on this stage."),
+  setup_step_bad: t2("开局向导只有 1–5 步", "The setup has steps 1–5 only."),
+  setup_not_zero: t2("项目已经开工了，不用再走开局向导", "The project has already started; the setup is done."),
   block_top: t2("已经在最上面了", "It's already at the top."),
   block_bottom: t2("已经在最下面了", "It's already at the bottom."),
 } satisfies Record<string, Text2>;

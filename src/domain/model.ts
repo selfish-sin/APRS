@@ -211,6 +211,8 @@ export interface ProjectRow extends RowHeader {
   staff?: StaffPosition[];
   /** 开工的时间。 */
   startedAt?: IsoDateTime | null;
+  /** 开局向导做到第几步（1 介绍 · 2 日期 · 3 结构 · 4 人员 · 5 开工；SPEC §17.4）。离开再回来从这一步接着做。 */
+  setupStep?: number | null;
 }
 
 export interface KeyDate {

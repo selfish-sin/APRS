@@ -15,6 +15,7 @@ import { addPosition, draftProject, setStaff, setStructure, startProject } from 
 import { acceptStage, addCuts, addStage, archiveCut, disableStage, extendProject, extendStage, extendTask, moveStage, removeStage, updateCut, updateStage } from "./edit";
 import { assignRole, publishTask, setStageLock, setStagePeriod, setStageRate, unassignRole } from "./flex";
 import { addBlock, archivePage, createPage, moveBlock, removeBlock, renamePage, updateBlock } from "./page";
+import { assignStagePerson, setSetupStep, unassignStagePerson } from "./route";
 
 export const COMMANDS = {
   "guild.create": createGuild,
@@ -63,6 +64,9 @@ export const COMMANDS = {
   "project.create": createProject,
   "project.update": updateProject,
   "stage.set_reviewer": setReviewer,
+  "stage.assign": assignStagePerson,
+  "stage.unassign": unassignStagePerson,
+  "project.set_setup_step": setSetupStep,
   "template.set_rate": setRate,
   "hub.dispatch": hubDispatch,
   "thread.open": openThread,

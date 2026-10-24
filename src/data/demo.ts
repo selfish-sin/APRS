@@ -485,6 +485,49 @@ export function buildDemoWorld(): WorldState {
     staff("sound", [{ name: "外面的录音老师" }]);
   }
 
+  // —— 刚开工不久的示范项目（SPEC §17.4）：前 2 个环节已结束 ✓、第 3 个进行中，其余还没到（编的示范内容）——
+  {
+    const t0 = at("2026-10-12 10:00");
+    const cat = b.run(bailu, "project.draft", { template: "anim_standard", name: "（示范）星期三的猫", code: "XQSM", startOn: "2026-10-12", planEndOn: "2026-12-20" }, t0).projectId;
+    b.run(
+      bailu,
+      "project.update",
+      {
+        projectId: cat,
+        intro: "示范：一只猫每个星期三都去同一家书店，2 分钟的短片。用来看项目怎么从零一点点往后推（内容是编的）。",
+        keyDates: [
+          { id: "k1", name: "分镜定稿", date: "2026-10-30" },
+          { id: "k2", name: "原画完成", date: "2026-11-27" },
+          { id: "k3", name: "交片", date: "2026-12-20" },
+        ],
+      },
+      t0
+    );
+    b.run(bailu, "project.set_structure", { projectId: cat, structure: { episodes: 1, scenesPerEpisode: 1, cutsPerScene: 6, layers: ["A", "B"], sheetsPerLayer: 12, secondsPerCut: 4 } }, t0);
+    const staff = (positionKey: string, people: ({ memberId: Id } | { name: string })[]) => b.run(bailu, "staff.set", { projectId: cat, positionKey, people }, t0);
+    staff("producer", [{ memberId: bailu }]);
+    staff("script", [{ memberId: bailu }]);
+    staff("storyboard", [{ memberId: songzhen }]);
+    staff("art_design", [{ memberId: lizi }]);
+    b.run(bailu, "project.start", { projectId: cat }, at("2026-10-12 11:00"));
+    const link = (folder: string) => `${LINK_ROOT}/XQSM/${folder}`;
+    // 1 策划：白鹭写、青柠审 → 通过 → 验收
+    const planDone = work(b, b.task(cat, "plan", null), { worker: bailu, reviewer: qingning, start: at("2026-10-12 14:00"), workHours: 8, link: link("策划"), note: "示范：策划案（2 分钟、6 卡、两个月）" });
+    b.run(bailu, "stage.accept", { stageId: b.stageId(cat, "plan") }, plusHours(planDone, 1));
+    // 2 剧本：白鹭写、青柠审，退回一次 → 通过 → 验收
+    const scriptDone = work(b, b.task(cat, "script", null), {
+      worker: bailu,
+      reviewer: qingning,
+      start: at("2026-10-14 10:00"),
+      workHours: 10,
+      link: link("剧本"),
+      rounds: [{ comments: [c("示范：第二场书店老板的台词太长，砍一半")] }],
+    });
+    b.run(bailu, "stage.accept", { stageId: b.stageId(cat, "script") }, plusHours(scriptDone, 2));
+    // 3 分镜：松针接了，在画
+    work(b, b.task(cat, "storyboard", null), { worker: songzhen, reviewer: bailu, start: at("2026-10-23 08:30"), workHours: 0, stopAt: "claimed" });
+  }
+
   const state = b.state;
   // 示范世界的时钟冻结在 2026-10-23 10:00（底的一部分，不是一步操作）。
   const world = state.worlds[DEMO_WORLD_ID];

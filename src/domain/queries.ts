@@ -1325,8 +1325,19 @@ export function feedPhrase(state: WorldState, e: JournalEntry): Phrase | null {
       return P("{who} 验收通过了「{stage}」", "{who} accepted “{stage}”", { stage: stageP(state, p.stageId, t2("", "")) });
     case "stage.extend":
       return P("{who} 给「{stage}」在做的任务延期{by}", "{who} extended the tasks in progress in “{stage}”{by}", { stage: stageP(state, p.stageId, t2("", "")), by: extendP(p) });
-    case "task.extend":
-      return P("{who} 给 {task} 延期{by}", "{who} extended {task}{by}", { task: taskShort(state, p.taskId), by: extendP(p) });
+    case "task.extend": {
+      const ids = Array.isArray(p.taskIds) && p.taskIds.length ? (p.taskIds as Id[]) : [p.taskId as Id];
+      return ids.length > 1
+        ? P("{who} 给 {task} 等 {n} 张延期{by}", "{who} extended {task} and {more} more{by}", { task: taskShort(state, ids[0]), n: ids.length, more: ids.length - 1, by: extendP(p) })
+        : P("{who} 给 {task} 延期{by}", "{who} extended {task}{by}", { task: taskShort(state, ids[0]), by: extendP(p) });
+    }
+    case "stage.assign":
+    case "stage.unassign": {
+      const params = { name: p.memberId ? memberP(state, p.memberId) : uc(String(p.name ?? "")), stage: stageP(state, p.stageId) };
+      return e.command === "stage.assign"
+        ? P("{who} 把 {name} 指派到「{stage}」", "{who} assigned {name} to “{stage}”", params)
+        : P("{who} 把 {name} 从「{stage}」撤掉了", "{who} removed {name} from “{stage}”", params);
+    }
     case "cut.add": {
       const n = Number(p.count ?? 1);
       return p.afterCutId && state.cuts[p.afterCutId as Id]
@@ -1431,6 +1442,8 @@ const PROJECT_COMMANDS = new Set([
   "stage.set_period",
   "stage.set_rate",
   "stage.set_reviewer",
+  "stage.assign",
+  "stage.unassign",
   "task.extend",
   "task.reopen",
   "task.publish",
@@ -1459,6 +1472,7 @@ function projectOfEntry(state: WorldState, e: JournalEntry): Id | null {
   const stageId = (p.stageId ?? p.hubStageId) as Id | undefined;
   if (stageId && state.stages[stageId]) return state.stages[stageId].projectId;
   if (typeof p.taskId === "string" && state.tasks[p.taskId]) return state.tasks[p.taskId].projectId;
+  if (Array.isArray(p.taskIds) && typeof p.taskIds[0] === "string" && state.tasks[p.taskIds[0]]) return state.tasks[p.taskIds[0]].projectId;
   if (typeof p.cutId === "string" && state.cuts[p.cutId]) return state.cuts[p.cutId].projectId;
   return null;
 }
@@ -2037,4 +2051,293 @@ export function startPreview(state: WorldState, projectId: Id): StartPreview | n
   const members = new Set<Id>();
   for (const pos of staff) if (pos.stageKeys.length) for (const x of pos.people) if ("memberId" in x) members.add(x.memberId);
   return { cuts: plan.length, tasks, unfilled, autoEnroll: members.size, ready: plan.length > 0 };
+}
+
+// ---------------------------------------------------------------------------
+// v1.1 · 项目按环节分层（SPEC §17）：环节路线 · 环节页
+// ---------------------------------------------------------------------------
+
+/** 环节在路线上的状态：还没到 · 可以开始 · 进行中 · 待验收 · 已结束。 */
+export type RouteStatus = "locked" | "ready" | "active" | "review" | "done";
+export const ROUTE_STATUS: readonly RouteStatus[] = ["locked", "ready", "active", "review", "done"];
+
+export interface RouteCounts {
+  total: number;
+  passed: number;
+  /** 交了等审。 */
+  submitted: number;
+  /** 在做（已接 · 退回）。 */
+  working: number;
+  /** 可接（含收回的）。 */
+  open: number;
+  locked: number;
+}
+
+export interface RoutePerson {
+  memberId: Id | null;
+  name: string;
+  external: boolean;
+}
+
+export interface RouteRow {
+  /** 第几个环节（1 起，按路线顺序）。 */
+  no: number;
+  stage: StageRow;
+  status: RouteStatus;
+  counts: RouteCounts;
+  /** 在这个环节做事的人：人员表里管这个环节的 + 接过这个环节任务的（外包写名字）。 */
+  people: RoutePerson[];
+  plan: { start: number; end: number } | null;
+  actual: { start: number; end: number; done: boolean } | null;
+  /** 超出计划几周。 */
+  overrun: number;
+  alerts: { pending: number; returned: number; nearDue: number; noPeople: boolean };
+  /** 这个环节随时发的新任务还没做完的几张。 */
+  extrasOpen: number;
+  current: boolean;
+}
+
+export interface RoutePhase {
+  phase: Phase;
+  rows: RouteRow[];
+  done: number;
+  total: number;
+  allDone: boolean;
+  /** 这一段走到哪（最后一个开始了的环节）。 */
+  reached: RouteRow | null;
+  started: boolean;
+}
+
+export interface StageRoute {
+  project: ProjectRow;
+  rows: RouteRow[];
+  phases: RoutePhase[];
+  /** 现在在第几个环节（最后一个开始了的；都没开始 = 第一个可以开始的）。 */
+  current: RouteRow | null;
+  total: number;
+}
+
+const NEAR_DUE_MS = 6 * 3600_000;
+
+/** 一个环节的状态（只看流程里的任务，随时发的新任务不算）。 */
+export function routeStatusOf(stage: StageRow, tasks: TaskRow[]): RouteStatus {
+  if (stage.acceptedAt) return "done";
+  const list = tasks.filter((t) => !t.extra && !t.archivedAt);
+  if (!list.length) return "locked";
+  if (list.every((t) => t.status === "passed")) return "review";
+  if (list.some((t) => t.status === "claimed" || t.status === "submitted" || t.status === "returned" || t.status === "passed")) return "active";
+  if (list.some((t) => t.status === "open" || t.status === "reclaimed")) return "ready";
+  return "locked";
+}
+
+function routeCounts(tasks: TaskRow[]): RouteCounts {
+  const c: RouteCounts = { total: 0, passed: 0, submitted: 0, working: 0, open: 0, locked: 0 };
+  for (const t of tasks) {
+    if (t.extra || t.archivedAt) continue;
+    c.total += 1;
+    if (t.status === "passed") c.passed += 1;
+    else if (t.status === "submitted") c.submitted += 1;
+    else if (t.status === "claimed" || t.status === "returned") c.working += 1;
+    else if (t.status === "open" || t.status === "reclaimed") c.open += 1;
+    else c.locked += 1;
+  }
+  return c;
+}
+
+/** 管这个环节的人：人员表（职位）里的 + 接过这个环节任务的。 */
+export function stagePeopleOf(state: WorldState, stage: StageRow): RoutePerson[] {
+  const idx = indexOf(state);
+  const p = idx.projectById.get(stage.projectId);
+  const out: RoutePerson[] = [];
+  const seen = new Set<string>();
+  const add = (x: RoutePerson) => {
+    const k = x.memberId ? `m:${x.memberId}` : `n:${x.name}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(x);
+  };
+  for (const pos of p?.staff ?? []) {
+    if (!pos.stageKeys.includes(stage.templateKey)) continue;
+    for (const x of pos.people) {
+      if ("memberId" in x) {
+        const m = idx.memberById.get(x.memberId);
+        if (m) add({ memberId: m.id, name: m.nickname, external: false });
+      } else add({ memberId: null, name: x.name, external: true });
+    }
+  }
+  for (const t of [...(idx.tasksByStage.get(stage.id) ?? []), ...(idx.extrasByStage.get(stage.id) ?? [])]) {
+    if (t.assigneeId) {
+      const m = idx.memberById.get(t.assigneeId);
+      if (m) add({ memberId: m.id, name: m.nickname, external: false });
+    } else if (t.outsourced && t.outsourceName) add({ memberId: null, name: t.outsourceName, external: true });
+    for (const sub of idx.subsByTask.get(t.id) ?? []) {
+      if (sub.selfFix || !sub.byMemberId) continue;
+      const m = idx.memberById.get(sub.byMemberId);
+      if (m) add({ memberId: m.id, name: m.nickname, external: false });
+    }
+  }
+  return out;
+}
+
+/** 项目页的环节路线：1…N 编号，每行的状态 · 进度 · 人 · 计划和实际 · 提醒。 */
+export function stageRouteOf(state: WorldState, projectId: Id): StageRoute | null {
+  const idx = indexOf(state);
+  const project = idx.projectById.get(projectId);
+  if (!project) return null;
+  const stages = idx.stagesByProject.get(projectId) ?? [];
+  const sched = scheduleOf(state, projectId);
+  const schedRow = new Map<Id, ScheduleRow>();
+  for (const ph of sched?.phases ?? []) for (const r of ph.rows) schedRow.set(r.stage.id, r);
+  const now = Date.parse(nowOf(state));
+  const rows: RouteRow[] = stages.map((stage, i) => {
+    const tasks = idx.tasksByStage.get(stage.id) ?? [];
+    const counts = routeCounts(tasks);
+    const status = routeStatusOf(stage, tasks);
+    const people = stagePeopleOf(state, stage);
+    const sr = schedRow.get(stage.id);
+    const nearDue = tasks.filter((t) => (t.status === "claimed" || t.status === "returned") && t.dueAt && Date.parse(t.dueAt) - now < NEAR_DUE_MS).length;
+    const returned = tasks.filter((t) => t.status === "returned").length;
+    const extrasOpen = (idx.extrasByStage.get(stage.id) ?? []).filter((t) => t.status !== "passed").length;
+    return {
+      no: i + 1,
+      stage,
+      status,
+      counts,
+      people,
+      plan: sr ? { start: sr.plan.start, end: sr.plan.end } : null,
+      actual: sr?.actual ?? null,
+      overrun: sr?.overrun ?? 0,
+      alerts: { pending: counts.submitted, returned, nearDue, noPeople: !people.length && status !== "done" && !stage.disabled },
+      extrasOpen,
+      current: false,
+    };
+  });
+  const live = rows.filter((r) => !r.stage.disabled);
+  const started = live.filter((r) => r.status === "active" || r.status === "review");
+  const current = started.length ? started[started.length - 1] : live.find((r) => r.status === "ready") ?? null;
+  if (current) current.current = true;
+  const phases: RoutePhase[] = PHASE.map((phase) => {
+    const list = rows.filter((r) => r.stage.phase === phase);
+    const active = list.filter((r) => !r.stage.disabled);
+    const done = active.filter((r) => r.status === "done").length;
+    const began = active.filter((r) => r.status !== "locked" && r.status !== "ready");
+    return { phase, rows: list, done, total: active.length, allDone: active.length > 0 && done === active.length, reached: began.length ? began[began.length - 1] : null, started: began.length > 0 };
+  });
+  return { project, rows, phases, current, total: rows.length };
+}
+
+export interface StageTaskView {
+  task: TaskRow;
+  view: TaskView;
+  latest: SubmissionRow | null;
+  /** 最近一次审核（交付物里写谁审的、质量）。 */
+  review: ReviewRow | null;
+}
+
+export interface StagePerson extends RoutePerson {
+  /** 怎么来的：人员表指派 · 自己认领 / 接过任务。 */
+  how: "assigned" | "claimed";
+  inHand: number;
+  passed: number;
+  /** 准时率（这个环节里交过的）；没交过 = null。 */
+  onTime: number | null;
+}
+
+export interface StagePage {
+  project: ProjectRow;
+  row: RouteRow;
+  prev: RouteRow | null;
+  next: RouteRow | null;
+  upstream: StageRow[];
+  downstream: StageRow[];
+  tasks: StageTaskView[];
+  extras: StageTaskView[];
+  people: StagePerson[];
+  reviewer: MemberRow | null;
+  /** 这个环节是枢纽：派发下游时管到哪些环节。 */
+  hubScope: StageRow[];
+}
+
+function stageTaskView(state: WorldState, t: TaskRow): StageTaskView | null {
+  const view = taskView(state, t);
+  if (!view) return null;
+  const subs = submissionsOf(state, t.id);
+  const reviews = reviewsOf(state, t.id);
+  return { task: t, view, latest: subs[subs.length - 1] ?? null, review: reviews[reviews.length - 1] ?? null };
+}
+
+/** 第二层 · 环节页（`#/project/<id>/stage/<key>`）要的东西。 */
+export function stagePageOf(state: WorldState, projectId: Id, key: string): StagePage | null {
+  const route = stageRouteOf(state, projectId);
+  if (!route) return null;
+  const i = route.rows.findIndex((r) => r.stage.templateKey === key);
+  if (i < 0) return null;
+  const row = route.rows[i];
+  const idx = indexOf(state);
+  const stages = route.rows.map((r) => r.stage);
+  const stage = row.stage;
+  const byKey = new Map(stages.map((s) => [s.templateKey, s]));
+  const upstream = stage.upstream.map((k) => byKey.get(k)).filter((s): s is StageRow => !!s);
+  const downstream = stages.filter((s) => s.upstream.includes(stage.templateKey));
+  const tasks = (idx.tasksByStage.get(stage.id) ?? []).map((t) => stageTaskView(state, t)).filter((x): x is StageTaskView => !!x);
+  const extras = (idx.extrasByStage.get(stage.id) ?? []).map((t) => stageTaskView(state, t)).filter((x): x is StageTaskView => !!x);
+  const staffIds = new Set<string>();
+  for (const pos of route.project.staff ?? []) {
+    if (!pos.stageKeys.includes(stage.templateKey)) continue;
+    for (const x of pos.people) staffIds.add("memberId" in x ? `m:${x.memberId}` : `n:${x.name}`);
+  }
+  const all = [...tasks, ...extras];
+  const people: StagePerson[] = row.people.map((x) => {
+    const mine = all.filter((v) => (x.memberId ? v.task.assigneeId === x.memberId : v.task.outsourced && v.task.outsourceName === x.name));
+    const subs = all.flatMap((v) => submissionsOf(state, v.task.id).filter((s) => !s.selfFix && (x.memberId ? s.byMemberId === x.memberId : false)));
+    const firstSubs = new Map<Id, SubmissionRow>();
+    for (const s of subs) if (!firstSubs.has(s.taskId)) firstSubs.set(s.taskId, s);
+    const timed = Array.from(firstSubs.values());
+    return {
+      ...x,
+      how: staffIds.has(x.memberId ? `m:${x.memberId}` : `n:${x.name}`) ? "assigned" : "claimed",
+      inHand: mine.filter((v) => v.task.status === "claimed" || v.task.status === "returned").length,
+      passed: x.memberId ? all.filter((v) => v.task.status === "passed" && submissionsOf(state, v.task.id).some((s) => s.byMemberId === x.memberId && !s.selfFix)).length : mine.filter((v) => v.task.status === "passed").length,
+      onTime: timed.length ? timed.filter((s) => s.onTime).length / timed.length : null,
+    };
+  });
+  return {
+    project: route.project,
+    row,
+    prev: route.rows[i - 1] ?? null,
+    next: route.rows[i + 1] ?? null,
+    upstream,
+    downstream,
+    tasks,
+    extras,
+    people,
+    reviewer: stage.reviewerId ? idx.memberById.get(stage.reviewerId) ?? null : null,
+    hubScope: stage.hub ? hubScope(stages, stage) : [],
+  };
+}
+
+/** 这个环节的动态：派了谁、谁交了、谁审了、改了什么（新的在前）。 */
+export function stageActivityOf(state: WorldState, stageId: Id, limit = 30): FeedItem[] {
+  const out: FeedItem[] = [];
+  const touches = (e: JournalEntry): boolean => {
+    const p = (e.payload ?? {}) as Record<string, unknown>;
+    if (p.stageId === stageId || p.hubStageId === stageId) return true;
+    const ids = [p.taskId, ...(Array.isArray(p.taskIds) ? p.taskIds : []), e.created?.taskId].filter((x): x is string => typeof x === "string");
+    if (ids.some((id) => state.tasks[id]?.stageId === stageId)) return true;
+    for (const c of e.changes) {
+      if (c.table === "stages" && (c.op === "insert" ? c.row.id : c.id) === stageId) return true;
+      if (c.table === "tasks") {
+        const id = c.op === "insert" ? c.row.id : c.id;
+        if (state.tasks[id]?.stageId === stageId && c.op !== "insert") return true;
+      }
+    }
+    return false;
+  };
+  for (let i = state.journal.length - 1; i >= 0 && out.length < limit; i--) {
+    const e = state.journal[i];
+    if (!touches(e)) continue;
+    const ph = feedPhrase(state, e);
+    if (ph) out.push({ entry: e, at: e.worldAt ?? e.createdAt, memberId: e.actorMemberId, text: phraseText(ph, "zh"), phrase: ph });
+  }
+  return out;
 }

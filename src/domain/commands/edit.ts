@@ -15,7 +15,7 @@ import { deadlineHours } from "../rules";
 import { groupTemplate } from "../templates";
 import { guarded, insert, mustAdmin, mustBeOneOf, mustGet, mustText, ok, optDate, optNumber, rejectT, update, type Ctx } from "./core";
 import { newTasks, openReady, workloadFor, workloadRuleOf } from "./materialize";
-import { tasksToUnlock } from "../flow";
+import { tasksToUnlock, upstreamReady } from "../flow";
 import { cmp } from "../agenda";
 
 function mustActiveProject(rm: ReadModel, ctx: Ctx, projectId: Id) {
@@ -131,6 +131,26 @@ export const addStage = guarded<AddStageInput>((rm, input, ctx) => {
   const r = newTasks(ctx, p.group, stage, cuts, cuts);
   changes.push(...r.changes);
   openReady(rm, p.id, allStages, r.rows, changes);
+  // 插在中间（SPEC §17.1）：下游原来「可接」、还没人接的任务，现在多了一个没做完的上游，回到「还没到」。
+  if (updatedStages.length) {
+    const byKey = new Map(allStages.filter((s) => !s.archivedAt).map((s) => [s.templateKey, s]));
+    const all = [...rm.where("tasks", { projectId: p.id }), ...r.rows];
+    const byStage = new Map<Id, TaskRow[]>();
+    for (const t of all) {
+      if (t.archivedAt) continue;
+      const list = byStage.get(t.stageId) ?? [];
+      list.push(t);
+      byStage.set(t.stageId, list);
+    }
+    for (const d of updatedStages) {
+      for (const t of byStage.get(d.id) ?? []) {
+        if (t.status !== "open" || t.assigneeId || t.extra) continue;
+        if (upstreamReady(t, d, byKey, byStage)) continue;
+        const c = update("tasks", t, { status: "locked" });
+        if (c) changes.push(c);
+      }
+    }
+  }
   return ok(changes, { stageId: stage.id });
 });
 
@@ -144,6 +164,8 @@ export interface UpdateStageInput {
   receive?: string;
   deliver?: string;
   handTo?: string;
+  /** 交到哪（文件夹里的那一段，例如 ANI、分镜）。 */
+  folder?: string;
   note?: string | null;
 }
 
@@ -176,6 +198,11 @@ export const updateStage = guarded<UpdateStageInput>((rm, input, ctx) => {
     };
   }
   if (input.note !== undefined) patch.note = input.note ? String(input.note).slice(0, 200) : null;
+  if (input.folder !== undefined) {
+    const folder = String(input.folder).trim().replace(/[\\/:*?"<>|]+/g, "");
+    if (!folder || folder.length > 24) rejectT("invalid", "stage_folder_bad");
+    patch.folder = folder;
+  }
   const c = update("stages", s, patch);
   return ok(c ? [c] : [], { stageId: s.id });
 });
@@ -296,19 +323,28 @@ function newDue(current: string, input: ExtendInput): string {
 }
 
 export interface TaskExtendInput extends ExtendInput {
-  taskId: Id;
+  taskId?: Id;
+  /** 一起延几张（环节页里多选，SPEC §17.2）。 */
+  taskIds?: Id[];
 }
 
 export const extendTask = guarded<TaskExtendInput>((rm, input, ctx) => {
   mustAdmin(rm, ctx, "延期");
   mustReason(input.reason);
-  const t = mustGet(rm, ctx, "tasks", input.taskId, "任务");
-  const s = mustGet(rm, ctx, "stages", t.stageId, "环节");
-  const p = mustGet(rm, ctx, "projects", t.projectId, "项目");
-  const cut = t.cutId ? rm.get("cuts", t.cutId) ?? null : null;
-  if ((t.status !== "claimed" && t.status !== "returned") || !t.dueAt) rejectT("state", "extend_not_running", { label: taskLabelP(s, cut, t, p.group) });
-  const c = update("tasks", t, { dueAt: newDue(t.dueAt, input) });
-  return ok(c ? [c] : [], { taskId: t.id });
+  const ids = Array.from(new Set([...(input.taskId ? [input.taskId] : []), ...(Array.isArray(input.taskIds) ? input.taskIds : [])]));
+  if (!ids.length) rejectT("invalid", "extend_pick");
+  if (ids.length > 60) rejectT("invalid", "assign_max");
+  const changes: Change[] = [];
+  for (const id of ids) {
+    const t = mustGet(rm, ctx, "tasks", id, "任务");
+    const s = mustGet(rm, ctx, "stages", t.stageId, "环节");
+    const p = mustGet(rm, ctx, "projects", t.projectId, "项目");
+    const cut = t.cutId ? rm.get("cuts", t.cutId) ?? null : null;
+    if ((t.status !== "claimed" && t.status !== "returned") || !t.dueAt) rejectT("state", "extend_not_running", { label: taskLabelP(s, cut, t, p.group) });
+    const c = update("tasks", t, { dueAt: newDue(t.dueAt, input) });
+    if (c) changes.push(c);
+  }
+  return ok(changes, { taskId: ids[0] });
 });
 
 export interface StageExtendInput extends ExtendInput {

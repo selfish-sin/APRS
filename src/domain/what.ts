@@ -104,6 +104,7 @@ export const WHAT_EN: Record<string, string> = {
   重新放出任务: "reopen tasks",
   指派职位: "assign positions",
   撤掉职位: "remove positions",
+  开局: "set up projects",
   改计划周期: "change the planned schedule",
   改时限参数: "change deadline settings",
   改环节设置: "change stage settings",
