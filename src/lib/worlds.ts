@@ -44,3 +44,12 @@ export function rebuildWorld(base: WorldBase, worldId: Id, journal: JournalEntry
     ],
   };
 }
+
+/** 进门页上介绍示范工会用的几个数（从示范数据里读，页面不写死）。 */
+export function demoSummary(): { projects: string[]; members: number } {
+  const s = baseWorld("demo");
+  return {
+    projects: Object.values(s.projects).filter((p) => !p.archivedAt).map((p) => p.name),
+    members: Object.values(s.members).filter((m) => !m.archivedAt).length,
+  };
+}

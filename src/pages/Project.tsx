@@ -187,7 +187,7 @@ function ProjectThreadComposer({ projectId }: { projectId: string }) {
           </button>
         </div>
       </div>
-      <textarea className="field-control" aria-label="写意见" placeholder={kind === "setting" ? "例如：箭头影要简化去掉，还是沿用第 9 卡的设定？" : "对整个项目说的话"} value={text} onChange={(e) => setText(e.target.value)} />
+      <textarea className="field-control" aria-label="写意见" placeholder={kind === "setting" ? "要管理员拍板的设定：用哪个版本、要不要加、要补哪些卡" : "对整个项目说的话"} value={text} onChange={(e) => setText(e.target.value)} />
       {error ? <p className="error-text">{error}</p> : null}
       <div className="form-actions">
         <Button Label="留下" Size="Small" Style="Accent" type="submit" />

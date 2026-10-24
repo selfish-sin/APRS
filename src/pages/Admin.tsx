@@ -160,7 +160,7 @@ function NewProject() {
       </div>
       <div className="form-grid">
         <TextField label="项目名字" value={name} onChange={(e) => setName(e.target.value)} data-testid="new-name" />
-        <TextField label="代号（2–6 位大写）" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="例如 ANDLC" data-testid="new-code" />
+        <TextField label="代号（2–6 位大写）" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="2–6 位大写字母" data-testid="new-code" />
         <TextField label="集" value={episode} onChange={(e) => setEpisode(e.target.value.toUpperCase())} />
         <TextField label="场" value={scene} onChange={(e) => setScene(e.target.value.toUpperCase())} />
         <TextField label="开始" type="date" value={startOn} onChange={(e) => setStartOn(e.target.value)} />
@@ -338,7 +338,7 @@ function Dispatch() {
                       <table className="data">
                         <thead>
                           <tr>
-                            <th>任务</th>
+                            <th>{GROUPS[plan.project.group].cutLabel}</th>
                             <th>状态</th>
                             <th>工作量（{unit}）</th>
                           </tr>
@@ -346,7 +346,10 @@ function Dispatch() {
                         <tbody>
                           {scope.rows.map((r) => (
                             <tr key={r.task.id}>
-                              <td>{r.label}</td>
+                              <td className="num">
+                                {r.cut ? cutCode(r.cut, plan.project.group) : "全项目"}
+                                {r.task.layer ? ` · ${r.task.layer} 层` : ""}
+                              </td>
                               <td>
                                 <StatusPill Status={r.task.status} />
                               </td>
@@ -440,7 +443,7 @@ function RulingForm({ projectId, threadId, onDone }: { projectId: Id; threadId?:
   return (
     <div className="stack" data-gap="small">
       {threadId ? null : <TextArea label="问题" value={question} onChange={(e) => setQuestion(e.target.value)} />}
-      <TextArea label="结论" placeholder="例如：照设定补耳饰、皇冠的宝石" value={decision} onChange={(e) => setDecision(e.target.value)} />
+      <TextArea label="结论" placeholder="拍板的结论：照哪个设定、怎么补" value={decision} onChange={(e) => setDecision(e.target.value)} />
       <span className="label">要补的{tpl.cutLabel}（每{tpl.cutLabel}会留一条「要补」）</span>
       <div className="chips">
         {cuts.map((c) => (

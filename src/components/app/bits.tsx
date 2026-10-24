@@ -108,11 +108,11 @@ export function Tag({ children, tone }: { children: ReactNode; tone?: "danger" |
   );
 }
 
-export function Stat({ label, value, zh = false }: { label: string; value: ReactNode; zh?: boolean }) {
+export function Stat({ label, value, zh = false, testId }: { label: string; value: ReactNode; zh?: boolean; testId?: string }) {
   return (
     <div className="stat">
       <span className="label">{label}</span>
-      <span className="stat-value" data-text={zh ? "zh" : undefined}>
+      <span className="stat-value" data-text={zh ? "zh" : undefined} data-testid={testId}>
         {value}
       </span>
     </div>

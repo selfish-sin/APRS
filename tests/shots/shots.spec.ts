@@ -1,0 +1,44 @@
+/** 主要页面的截图：artifacts/shots/<页>-<desktop|mobile>.png。页面里的口令框都是空的。 */
+import { expect, test } from "@playwright/test";
+import { HAS_PASS, enterDemo, login, logout, offlineFonts, open } from "../smoke/helpers";
+
+test.skip(!HAS_PASS, "没有设 ARPS_PASS_ADMIN / ARPS_PASS_MEMBER");
+
+test("截图", async ({ page }, info) => {
+  test.setTimeout(120_000);
+  const tag = info.project.name;
+  const shot = (name: string) => page.screenshot({ path: `artifacts/shots/${name}-${tag}.png`, fullPage: true });
+  await offlineFonts(page);
+  await open(page, "/");
+  await shot("p1-entry");
+  await enterDemo(page);
+  await shot("login");
+  await login(page, "member01");
+  await shot("p2-hall-member01");
+  await open(page, "/enroll?group=animation&stage=inbetween");
+  await shot("p3-enroll");
+  await open(page, "/me");
+  await shot("p9-member");
+  await logout(page);
+  await login(page, "admin");
+  await shot("p2-hall-admin");
+  await open(page, "/projects");
+  await shot("p4-projects");
+  await page.locator("a.project-card").first().click();
+  await expect(page.getByTestId("board")).toBeVisible();
+  await shot("p5-project");
+  await page.locator("table.board tbody th a").nth(4).click();
+  await expect(page).toHaveURL(/#\/cut\//);
+  await shot("p6-cut");
+  await open(page, "/review");
+  await shot("p7-review");
+  await open(page, "/admin?tab=dispatch");
+  await page.getByTestId("dispatch-hub").selectOption({ label: "中割检修" });
+  await shot("p8-admin-dispatch");
+  await open(page, "/admin?tab=new");
+  await shot("p8-admin-new");
+  await open(page, "/admin?tab=ruling");
+  await shot("p8-admin-ruling");
+  await open(page, "/backup");
+  await shot("p10-backup");
+});

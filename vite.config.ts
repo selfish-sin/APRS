@@ -50,8 +50,8 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   const sameOrigin = url.origin === self.location.origin;
-  const fonts = url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com";
-  if (!sameOrigin && !fonts) return;
+  // 只管自己的文件（字体断网时用系统字体）。
+  if (!sameOrigin) return;
   if (req.mode === "navigate") {
     // 页面：先上网拿新的，断网用缓存里的那一份。
     event.respondWith(
@@ -65,13 +65,13 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-  // 静态文件和字体：缓存里有就用，没有就上网拿一份存下。
+  // 静态文件：缓存里有就用，没有就上网拿一份存下。
   event.respondWith(
     caches.match(req).then(
       (hit) =>
         hit ||
         fetch(req).then((res) => {
-          if (res && (res.ok || res.type === "opaque")) {
+          if (res && res.ok) {
             const copy = res.clone();
             caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => undefined);
           }

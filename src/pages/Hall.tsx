@@ -7,7 +7,7 @@ import { relativeZh } from "@/domain/clock";
 import { isReviewer } from "@/domain/commands/core";
 import { formatPoints, ROLE_LABEL } from "@/domain/labels";
 import { enrollmentsOf, feedOf, growthOf, inboxOf, pendingReviewCount, questFor, reviewQueue, taskViewById } from "@/domain/queries";
-import { Link } from "@/lib/router";
+import { Link, useRoute } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 
 export function HallPage() {
@@ -17,7 +17,8 @@ export function HallPage() {
   const inbox = useMemo(() => inboxOf(world, me.id), [world, me.id]);
   const feed = useMemo(() => feedOf(world, 10), [world]);
   const enrolled = enrollmentsOf(world, me.id).length;
-  const [picked, setPicked] = useState<string | null>(null);
+  const route = useRoute();
+  const [picked, setPicked] = useState<string | null>(route.query.get("task"));
   const current = quests.find((q) => q.view.task.id === picked) ?? quests[0] ?? null;
   const canReview = isReviewer(me);
   const myQueue = canReview ? reviewQueue(world, me.id).length : 0;

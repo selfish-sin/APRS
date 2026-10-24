@@ -230,3 +230,18 @@ describe("enrollOptions · dispatchPlan · estimateOf", () => {
     expect(q.estimateOf(0, 0, 0)).toEqual({ hours: 0, days: 0, peopleByPlan: null });
   });
 });
+
+describe("overdueTasks · isStuck", () => {
+  it("过了时限还在手上的（打开时要收回的）", () => {
+    const { g, worker } = flowing();
+    const t = g.run(worker, "enroll.add", { group: "animation", stageKey: "inbetween", skill: 0 }).taskId;
+    expect(q.overdueTasks(g.state)).toEqual([]);
+    g.advance(8);
+    expect(q.isStuck(g.state, g.state.tasks[t])).toBe(true);
+    expect(q.overdueTasks(g.state)).toEqual([]);
+    g.advance(2);
+    expect(q.overdueTasks(g.state).map((x) => x.id)).toEqual([t]);
+    g.run(worker, "task.expire", { taskId: t });
+    expect(q.overdueTasks(g.state)).toEqual([]);
+  });
+});

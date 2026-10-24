@@ -257,7 +257,7 @@ function ReviewPanel({ item, next }: { item: ReviewItem; next: ReviewItem | null
                 </option>
               ))}
             </SelectField>
-            <TextField label="说什么" placeholder="例如：第 18 张下巴漏色" value={c.text} onChange={(e) => setComments(comments.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} data-testid={`comment-text-${i}`} />
+            <TextField label="说什么" placeholder="哪里不对、怎么改" value={c.text} onChange={(e) => setComments(comments.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))} data-testid={`comment-text-${i}`} />
             <Button Label="去掉" Size="Small" Style="Ghost" onClick={() => setComments(comments.length > 1 ? comments.filter((_, j) => j !== i) : [blank()])} />
           </div>
         ))}

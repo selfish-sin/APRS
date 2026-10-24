@@ -192,11 +192,11 @@ export function EnrollPage() {
           actions={
             <>
               <Button Label="留在这里" Style="Secondary" onClick={() => setGotTaskId(null)} />
-              <Button Label="去大厅" Style="Accent" onClick={() => navigate("/hall")} />
+              <Button Label="去大厅交" Style="Accent" onClick={() => navigate(`/hall?task=${gotTaskId}`)} data-testid="goto-hall" />
             </>
           }
         >
-          <QuestCard quest={gotQuest} eyebrow="新任务单" />
+          <QuestCard quest={gotQuest} eyebrow="新任务单" actions={false} />
         </Drawer>
       ) : null}
     </>

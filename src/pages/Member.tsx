@@ -60,7 +60,7 @@ export function MemberPage() {
             </div>
             <XpBar points={growth.points} level={growth.level} />
             <div className="stats">
-              <Stat label="累计活力点" value={formatPoints(growth.points)} />
+              <Stat label="累计活力点" value={formatPoints(growth.points)} testId="points" />
               <Stat label="本周" value={formatPoints(growth.weekPoints)} />
               <Stat label="准时率" value={growth.onTime.rate === null ? "—" : `${Math.round(growth.onTime.rate * 100)}%`} />
               <Stat label="加入" value={`${growth.joinedDays} 天`} />

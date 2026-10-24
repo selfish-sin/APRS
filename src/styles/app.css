@@ -242,13 +242,18 @@ p {
 
   .sidebar {
     transform: translateX(-100%);
-    transition: transform var(--motion-base) var(--ease-standard);
+    visibility: hidden;
+    transition:
+      transform var(--motion-base) var(--ease-standard),
+      visibility 0s linear var(--motion-base);
     width: min(300px, 86vw);
     box-shadow: none;
   }
 
   .shell[data-nav="open"] .sidebar {
     transform: none;
+    visibility: visible;
+    transition: transform var(--motion-base) var(--ease-standard);
   }
 
   .shell[data-nav="open"] .drawer-scrim {
@@ -1829,4 +1834,17 @@ a.ui-button[data-size="Medium"] {
 .ui-drawer {
   overflow-y: auto;
   box-shadow: 0 0 0 1px var(--color-border-subtle);
+}
+
+/* 一次性的提示不挡按钮（只有报错那条能点「关闭」）。 */
+.toast-stack {
+  pointer-events: none;
+}
+
+.toast-stack .ui-toast[data-tone="Error"] {
+  pointer-events: auto;
+}
+
+.ui-pill {
+  white-space: nowrap;
 }

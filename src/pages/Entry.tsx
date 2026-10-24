@@ -1,5 +1,5 @@
 /** P1 进门：进示范工会看看 · 建自己的空工会（建的人是管理员）· 导入备份 · 这台设备上的工会。 */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { useStorageUi } from "@/components/storage";
 import { TextField, Empty, Tag } from "@/components/app/bits";
@@ -7,10 +7,12 @@ import { dateTimeZh } from "@/domain/clock";
 import { passcodeProblem } from "@/lib/passcode";
 import { navigate } from "@/lib/router";
 import { useStore } from "@/lib/store";
+import { demoSummary } from "@/lib/worlds";
 
 export function EntryPage() {
   const { guilds, openDemo, openGuild, createGuild } = useStore();
   const ui = useStorageUi();
+  const demo = useMemo(() => demoSummary(), []);
   const [title, setTitle] = useState("");
   const [nickname, setNickname] = useState("");
   const [login, setLogin] = useState("admin");
@@ -49,7 +51,9 @@ export function EntryPage() {
               </h2>
               <Tag tone="sky">示范</Tag>
             </div>
-            <p className="muted">两个真实的项目（安娜的旅程、电猫与电鼠），八个编出来的成员。用工会给你的账号和口令登录。</p>
+            <p className="muted">
+              {demo.projects.length} 个真实的项目（{demo.projects.join("、")}），{demo.members} 个编出来的成员。用工会给你的账号和口令登录。
+            </p>
             <div className="form-actions">
               <Button
                 Label="进示范工会"

@@ -266,7 +266,7 @@ function CutComposer({ cutId }: { cutId: Id }) {
       <textarea
         className="field-control"
         aria-label="内容"
-        placeholder={kind === "ask" ? "例如：第 4、5 张之间有中割标记，轨目漏了，这里怎么读？" : kind === "setting" ? "例如：箭头影要简化去掉，还是沿用第 9 卡加影的设定？" : "对这一卡说的话：哪一层、第几张、什么问题"}
+        placeholder={kind === "ask" ? "要问上游的事：哪一层、第几张、哪里看不懂" : kind === "setting" ? "要管理员拍板的设定：用哪个版本、要不要加、要补哪些卡" : "对这一卡说的话：哪一层、第几张、什么问题"}
         value={text}
         onChange={(e) => setText(e.target.value)}
       />

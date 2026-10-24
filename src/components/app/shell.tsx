@@ -6,7 +6,7 @@ import { WorldMenu } from "@/components/storage";
 import { isAdmin, isReviewer } from "@/domain/commands/core";
 import { ROLE_LABEL } from "@/domain/labels";
 import { inboxOf, reviewQueue, theWorld } from "@/domain/queries";
-import { Link, useRoute } from "@/lib/router";
+import { Link, navigate, useRoute } from "@/lib/router";
 import { useGuild, useStore } from "@/lib/store";
 import { MemberAvatar } from "./bits";
 
@@ -79,7 +79,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link to="/me">{me.nickname}</Link>
             <span className="label">{ROLE_LABEL[me.role]}</span>
           </div>
-          <button type="button" className="inline-link label" onClick={logout} data-testid="logout">
+          <button
+            type="button"
+            className="inline-link label"
+            onClick={() => {
+              logout();
+              navigate("/login", { replace: true });
+            }}
+            data-testid="logout"
+          >
             换人
           </button>
         </div>

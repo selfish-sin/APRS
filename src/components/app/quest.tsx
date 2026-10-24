@@ -13,7 +13,7 @@ import { Link } from "@/lib/router";
 import { useGuild } from "@/lib/store";
 import { SelectField, TextArea, TextField, copyText } from "./bits";
 
-export function QuestCard({ quest, eyebrow = "当前任务单", showCutLink = true }: { quest: Quest; eyebrow?: string; showCutLink?: boolean }) {
+export function QuestCard({ quest, eyebrow = "当前任务单", showCutLink = true, actions = true }: { quest: Quest; eyebrow?: string; showCutLink?: boolean; actions?: boolean }) {
   const { view, indicator, countdown } = quest;
   const { task, stage, project, cut } = view;
   const { notify } = useGuild();
@@ -138,6 +138,7 @@ export function QuestCard({ quest, eyebrow = "当前任务单", showCutLink = tr
         </div>
       </dl>
 
+      {actions ? (
       <div className="quest-actions">
         {inHand ? <Button Label={task.status === "returned" ? "改好了，再交" : "交"} Style="Accent" onClick={() => setDialog("submit")} /> : null}
         <Button Label="提问" Style="Secondary" onClick={() => setDialog("ask")} />
@@ -148,6 +149,7 @@ export function QuestCard({ quest, eyebrow = "当前任务单", showCutLink = tr
           </Link>
         ) : null}
       </div>
+      ) : null}
       {dialog === "submit" ? <SubmitDialog quest={quest} onClose={() => setDialog(null)} /> : null}
       {dialog === "ask" ? <AskDialog quest={quest} onClose={() => setDialog(null)} /> : null}
       {dialog === "release" ? <ReleaseDialog taskId={task.id} label={view.label} onClose={() => setDialog(null)} /> : null}
@@ -253,7 +255,7 @@ export function AskDialog({ quest, onClose }: { quest: Quest; onClose: () => voi
           <option value="setting">设定问题（要管理员拍板）</option>
           <option value="comment">只留个意见</option>
         </SelectField>
-        <TextArea label="问题" placeholder="例如：第 4、5 张之间有中割标记，轨目漏了，这里怎么读？" value={text} onChange={(e) => setText(e.target.value)} />
+        <TextArea label="问题" placeholder="要问上游的事：哪一层、第几张、哪里看不懂" value={text} onChange={(e) => setText(e.target.value)} />
         {error ? (
           <p className="error-text" role="alert">
             {error}
@@ -293,7 +295,7 @@ export function ReleaseDialog({ taskId, label, onClose }: { taskId: Id; label: s
 /** 白色的小任务单（手上不止一张时）。 */
 export function MiniQuest({ quest, selected, onSelect }: { quest: Quest; selected: boolean; onSelect: () => void }) {
   return (
-    <button type="button" className="mini-quest" aria-pressed={selected} onClick={onSelect}>
+    <button type="button" className="mini-quest" aria-pressed={selected} onClick={onSelect} data-testid="mini-quest">
       <div className="list-main">
         <span className="t-body-14m">{quest.view.label}</span>
         <span className="label">
