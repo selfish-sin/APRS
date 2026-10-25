@@ -1,5 +1,5 @@
 /**
- * 盘点和「以图为主」的小零件（设计组 v7-11）：AuditBadge（字 + 颜色 + 图形）· Thumb（缩略图 / 占位）· WallTile（墙上一格）· NameSegs（文件名切开）。
+ * 盘点和「以图为主」的小零件（设计稿 v7-11）：AuditBadge（字 + 颜色 + 图形）· Thumb（缩略图 / 占位）· WallTile（墙上一格）· NameSegs（文件名切开）。
  * 颜色只用 tokens.css 里的变量（app.css 的 .audit-* 一节）。
  */
 import type { ReactNode } from "react";

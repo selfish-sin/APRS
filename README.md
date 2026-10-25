@@ -1,10 +1,16 @@
-# ARPS制作工会
+# ARPS制作工会 · ARPS Production Guild
 
 带游戏感的工会任务板：管理员开项目 → 项目按组（动画 / 视频）套流程模板，拆成「卡 × 环节」的任务格 →
-成员报到某个环节，系统自动配一张任务单 → 交上来（飞书链接 + 规范文件名 + 版本号）→ 审核员通过 / 退回 /
+成员报到某个环节，系统自动配一张任务单 → 交上来（链接 + 规范文件名 + 版本号）→ 审核员通过 / 退回 /
 自修后通过 → 通过的格子点亮、下游解锁 → 每一步按必要劳动时间记活力点，人有等级和成长。
+项目做到一半时，可以按命名规范把已经交了的文件读进来，先自动查、再看图复查（交付物盘点）。
 
-规格：ARPS制作工会 · 规格 v1（`SPEC.md`）。
+A local-first task board for animation / video production guilds: a *cut × stage* grid, automatic task cards,
+review, points by necessary labour time, and an image-first deliverables audit. Chinese / English UI.
+
+> **main 分支就是核心设计逻辑的正本**（The `main` branch is the canonical source of the core design logic）。
+> 给 AI 和新加入的人：先读 [`AGENTS.md`](AGENTS.md) → [`docs/DESIGN.md`](docs/DESIGN.md)（核心设计逻辑）→
+> [`src/domain/README.md`](src/domain/README.md)（数据层）→ 需要细节时查 [`docs/SPEC.md`](docs/SPEC.md)（代码里的「SPEC §N」）。
 
 ## 怎么跑
 
@@ -35,12 +41,14 @@ pnpm shots          # 主要页面的截图 → artifacts/shots/（不进仓库�
 | 目录 | 内容 |
 |---|---|
 | `src/domain/` | 数据层：表（`model.ts`）· 流程模板（`templates.ts`，纯数据）· 命令（`commands/*`）· 查询（`queries.ts`）· 连线推进（`flow.ts`）· 计分和等级（`rules.ts`）· 文件名规范（`naming.ts`）· 时钟 / 排序 / id / apply / dispatch / replay / 完整性（骨架）。说明见 `src/domain/README.md` |
-| `src/data/` | 示范工会（`demo.ts`：从空世界一步一步跑命令建出来；项目真、人员编）· 两个账号的 salt + 哈希 |
+| `src/data/` | 示范工会（`demo.ts`：从空世界一步一步跑命令建出来；项目真、人员编）· 示范盘点和占位缩略图 · 两个账号的 salt + 哈希 |
 | `src/lib/` | store（打开工会、登录、存、导出导入、超时收回）· 存储（`arps:` 键、信封升级）· 口令（WebCrypto + 纯 JS 备用）· hash 路由 · `sync/`（SyncAdapter：本机 + HTTP） |
-| `src/pages/` | P1 进门 · 登录 · P2 大厅 · P3 报到 · P4 项目 · P5 项目总览 · P6 卡详情 · P7 审核台 · P8 管理 · P9 成员 · P10 备份 |
+| `src/pages/` | P1 进门 · 登录 · P2 大厅 · P3 报到 · P4 项目 · P5 项目页（环节路线 · 交付物墙 · 排期 · 资料库 · 动态 · 档案 · 盘点）· 环节页 · 开局向导 · P6 卡详情 · P7 审核台 · P8 管理 · P9 成员 · P10 备份 |
 | `src/components/` | `ui/`（基础组件）、`storage/`（本机存储和备份）· `app/`（任务单黑卡、关卡地图、网格、时间线、外壳…） |
+| `src/lib/audit/` | 盘点用的读取器：.clip（尾部 SQLite 块里的预览图）· 只读 SQLite · zip 目录 · psd 缩略图 |
+| `docs/` | `DESIGN.md` 核心设计逻辑 · `SPEC.md` 完整规格 |
 | `src/i18n/` | 中文 / English 词典（`zh.ts` · `en.ts` · `ns/*`）、`useI18n()`、「中 / EN」切换（§16） |
-| `tests/smoke/` | Playwright：每页打开 0 报错（三套设置）· 端到端主流程 · 断网 · 单文件 · English 每页扫汉字 · 从设计组搬来的 7 处界面（`ports.spec.ts`） |
+| `tests/smoke/` | Playwright：每页打开 0 报错（三套设置）· 端到端主流程 · 断网 · 单文件 · English 每页扫汉字 · 设计稿里的 7 处界面（`ports.spec.ts`）· 交付物盘点（`audit.spec.ts`） |
 
 ## 新依赖
 
@@ -74,3 +82,7 @@ pnpm shots          # 主要页面的截图 → artifacts/shots/（不进仓库�
 - 网页：同一份 `dist/` 部署到 Vercel（`vercel.json`）。以后接主服务器时只换存储那一层：`src/lib/sync` 里有
   `SyncAdapter`（`push(entries)` / `pull(afterSeq)`）的本机实现和 HTTP 实现（POST 一条命令 · GET 某个序号以后的日志），
   界面上没有「连接」按钮。
+
+---
+
+<sub><sup>designed with AI, including Claude Opus 5.5 — for art's future.</sup></sub>
