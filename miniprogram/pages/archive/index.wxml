@@ -1,0 +1,152 @@
+<view class="page-shell archive-page">
+  <app-nav title="已归档项目" back="{{true}}" fallback="/pages/projects/index" />
+
+  <view class="archive-content">
+    <view class="archive-hero rise-in">
+      <view class="archive-hero-top">
+        <view>
+          <text class="eyebrow">PROJECT ARCHIVE</text>
+          <view class="archive-title editorial">归档项目库</view>
+          <text class="archive-sub">只读保存历史项目，区分归档时仍在招揽与进行中的任务。</text>
+        </view>
+        <view class="archive-seal">档</view>
+      </view>
+
+      <view class="archive-stats">
+        <view class="archive-stat">
+          <text class="archive-stat-value">{{summary.projectCount}}</text>
+          <text class="archive-stat-label">归档项目</text>
+        </view>
+        <view class="archive-stat-line"></view>
+        <view class="archive-stat">
+          <text class="archive-stat-value">{{summary.totalTasks}}</text>
+          <text class="archive-stat-label">历史任务</text>
+        </view>
+        <view class="archive-stat-line"></view>
+        <view class="archive-stat">
+          <text class="archive-stat-value">{{summary.totalReward}}</text>
+          <text class="archive-stat-label">历史赏金</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{projects.length}}" class="archive-breakdown rise-in">
+      <view class="breakdown-head">
+        <text class="breakdown-title">归档时任务状态</text>
+        <text class="breakdown-note">用于区分未完成任务</text>
+      </view>
+      <view class="breakdown-grid">
+        <view class="breakdown-item">
+          <text class="breakdown-value">{{summary.recruiting}}</text>
+          <text class="breakdown-label">招揽中</text>
+        </view>
+        <view class="breakdown-item">
+          <text class="breakdown-value">{{summary.inProgress}}</text>
+          <text class="breakdown-label">进行中</text>
+        </view>
+        <view class="breakdown-item">
+          <text class="breakdown-value">{{summary.inReview}}</text>
+          <text class="breakdown-label">待验收</text>
+        </view>
+        <view class="breakdown-item">
+          <text class="breakdown-value">{{summary.done}}</text>
+          <text class="breakdown-label">已完成</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="section-head">
+      <view class="section-heading">
+        <text class="section-title">归档项目</text>
+        <text class="section-sub">共 {{projects.length}} 个项目，只读保留</text>
+      </view>
+    </view>
+
+    <view wx:if="{{loading}}" class="archive-loading">
+      <view class="loading-dot"></view>
+      <text>正在翻阅归档</text>
+    </view>
+
+    <view wx:if="{{showList}}" class="archive-list">
+      <view
+        wx:for="{{projects}}"
+        wx:key="id"
+        class="archive-card"
+        data-id="{{item.id}}"
+        hover-class="archive-card-hover"
+        bindtap="handleOpen"
+      >
+        <view class="archive-card-top">
+          <text class="archive-code">{{item.code || 'PROJECT'}}</text>
+          <view class="archive-badge">已归档</view>
+        </view>
+        <text class="archive-name editorial">{{item.name}}</text>
+        <text class="archive-date">归档于 {{item.archivedLabel}}</text>
+
+        <view class="archive-card-stats">
+          <view class="task-chip task-chip-open">
+            <text class="task-chip-number">{{item.archiveStats.recruiting}}</text>
+            <text class="task-chip-label">招揽中</text>
+          </view>
+          <view class="task-chip task-chip-progress">
+            <text class="task-chip-number">{{item.archiveStats.inProgress}}</text>
+            <text class="task-chip-label">进行中</text>
+          </view>
+          <view class="task-chip task-chip-review">
+            <text class="task-chip-number">{{item.archiveStats.inReview}}</text>
+            <text class="task-chip-label">待验收</text>
+          </view>
+          <view class="task-chip task-chip-done">
+            <text class="task-chip-number">{{item.archiveStats.done}}</text>
+            <text class="task-chip-label">已完成</text>
+          </view>
+        </view>
+
+        <view class="archive-card-foot">
+          <text>{{item.totalTasks}} 项任务 · {{item.totalReward}} 金币</text>
+          <view class="archive-enter">查看归档 <text class="arrow"></text></view>
+        </view>
+
+        <view class="archive-card-actions">
+          <view
+            class="archive-clear-project"
+            data-id="{{item.id}}"
+            data-name="{{item.name}}"
+            hover-class="archive-clear-hover"
+            catchtap="handleClearProject"
+          >
+            清除此项目
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <empty-state
+      wx:if="{{showEmpty}}"
+      title="归档区还是空的"
+      description="项目归档后会移入这里，项目、任务和工作日志都会保留。"
+      action-label="返回项目"
+      bindaction="goProjects"
+    />
+
+    <view wx:if="{{projects.length}}" class="clear-zone rise-in">
+      <view class="clear-copy">
+        <text class="clear-title">完全清除归档</text>
+        <text class="clear-desc">永久删除全部归档项目及其任务、工作日志和排行结算记录，进行中的项目不受影响。</text>
+      </view>
+      <button
+        class="clear-btn"
+        hover-class="clear-btn-hover"
+        loading="{{clearing}}"
+        disabled="{{clearing}}"
+        catchtap="handleClearArchive"
+      >
+        彻底清除
+      </button>
+    </view>
+
+    <view class="archive-footer">
+      <text>归档项目只读保留；完全清除后无法恢复</text>
+    </view>
+  </view>
+</view>

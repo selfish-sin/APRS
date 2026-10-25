@@ -1,0 +1,22 @@
+<view class="empty">
+  <view class="empty-art">
+    <view class="sheet sheet-back"></view>
+    <view class="sheet sheet-front">
+      <view class="sheet-line line-long"></view>
+      <view class="sheet-line line-short"></view>
+      <view class="sheet-check"></view>
+    </view>
+    <view class="art-dot dot-one"></view>
+    <view class="art-dot dot-two"></view>
+  </view>
+  <text class="empty-title">{{title}}</text>
+  <text class="empty-desc">{{description}}</text>
+  <button
+    wx:if="{{actionLabel}}"
+    class="empty-action"
+    hover-class="empty-action-hover"
+    bindtap="handleAction"
+  >
+    {{actionLabel}}
+  </button>
+</view>

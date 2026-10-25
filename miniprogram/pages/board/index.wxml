@@ -1,0 +1,268 @@
+<view class="page-shell board-page">
+  <view
+    class="topbar {{scrolled ? 'topbar-scrolled' : ''}}"
+    style="padding-top: {{layout.statusBarHeight}}px;"
+  >
+    <view class="topbar-inner" style="height: {{layout.navBarHeight}}px;">
+      <view class="mini-brand">
+        <view class="mini-mark">A</view>
+        <text class="mini-name">APRS 动画部</text>
+        <text class="mini-en">ANIMATION DEPT.</text>
+      </view>
+      <view class="role-pill role-{{role}}">
+        <view class="role-dot"></view>
+        <text>{{roleLabel}}</text>
+      </view>
+    </view>
+  </view>
+  <view style="height: {{layout.topInset}}px;"></view>
+
+  <view class="board-content">
+    <view class="welcome rise-in">
+      <view class="welcome-copy">
+        <text class="date-line">{{dateLine}} · {{workspace.studio}}</text>
+        <view class="welcome-title editorial">
+          {{greeting}}，{{user.name}}<text class="period">。</text>
+        </view>
+      </view>
+      <view
+        class="user-avatar"
+        style="background: {{user.avatarColor}};"
+        hover-class="user-avatar-hover"
+        bindtap="goProfile"
+      >
+        {{userInitial}}
+      </view>
+    </view>
+
+    <view class="overview rise-in" style="animation-delay: 60ms;">
+      <view class="overview-ring ring-one"></view>
+      <view class="overview-ring ring-two"></view>
+
+      <view class="overview-top">
+        <view class="overview-label">
+          <view class="live-dot"></view>
+          <text>本期委托总览</text>
+        </view>
+        <view class="local-badge">本地演示</view>
+      </view>
+
+      <view class="overview-main">
+        <text class="overview-number">{{hero.number}}</text>
+        <view class="overview-copy">
+          <text class="overview-lead">{{hero.lead}}</text>
+          <text class="overview-body">{{hero.body}}</text>
+        </view>
+      </view>
+
+      <view class="progress-block">
+        <view class="progress-meta">
+          <text>本期进度</text>
+          <text class="progress-value">{{stats.progress}}%</text>
+        </view>
+        <view class="progress-track">
+          <view class="progress-fill" style="width: {{stats.progress}}%;"></view>
+        </view>
+      </view>
+
+      <view class="overview-stats">
+        <view class="overview-stat">
+          <text class="stat-number">{{stats.in_progress}}</text>
+          <text class="stat-label">进行中</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="overview-stat">
+          <text class="stat-number">{{stats.in_review}}</text>
+          <text class="stat-label">待验收</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="overview-stat">
+          <text class="stat-number">{{stats.done}}</text>
+          <text class="stat-label">已归档</text>
+        </view>
+      </view>
+
+      <view class="overview-actions">
+        <button
+          class="overview-cta"
+          hover-class="overview-cta-hover"
+          bindtap="handleHeroAction"
+        >
+          <text>{{hero.ctaLabel}}</text>
+          <view class="cta-arrow"></view>
+        </button>
+        <button
+          wx:if="{{isAdmin}}"
+          class="overview-project-btn"
+          hover-class="overview-project-btn-hover"
+          bindtap="goProjects"
+        >
+          <text>立项</text>
+          <view class="cta-arrow"></view>
+        </button>
+      </view>
+    </view>
+
+    <block wx:if="{{!isAdmin}}">
+      <view
+        wx:if="{{noticeCount}}"
+        class="notice-banner rise-in"
+        hover-class="notice-banner-hover"
+        bindtap="handleNoticeTap"
+      >
+        <view class="notice-mark">!</view>
+        <view class="notice-copy">
+          <text class="notice-title">任务变更 · {{latestNotice.taskTitle}}</text>
+          <text class="notice-message">{{latestNotice.message}}</text>
+        </view>
+        <view class="notice-count">{{noticeCount}}</view>
+      </view>
+    </block>
+
+    <view class="task-section">
+      <view class="section-head">
+        <view class="section-heading">
+          <text class="section-title">委托告示栏</text>
+          <text class="section-sub">共 {{stats.total}} 份卷轴在栏上</text>
+        </view>
+      </view>
+
+      <scroll-view class="filter-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+        <view class="filter-row">
+          <view
+            wx:for="{{filters}}"
+            wx:key="key"
+            class="filter-chip {{activeFilter === item.key ? 'filter-chip-on' : ''}}"
+            data-key="{{item.key}}"
+            hover-class="filter-chip-hover"
+            bindtap="handleFilterTap"
+          >
+            <text>{{item.label}}</text>
+            <text class="filter-count">{{item.count}}</text>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view wx:if="{{!isAdmin}}" class="stage-block">
+        <view class="stage-label">
+          <text class="stage-label-title">生产阶段</text>
+          <text class="stage-label-sub">按前期 / 中期 / 后期逐级筛选</text>
+        </view>
+        <view class="stage-row">
+          <view
+            class="stage-chip stage-chip-all {{activeStage === 'all' ? 'stage-chip-on' : ''}}"
+            data-key="all"
+            hover-class="stage-chip-hover"
+            bindtap="handleStageTap"
+          >
+            <text class="stage-name">全部</text>
+            <text class="stage-count">{{stageAllTotal}}</text>
+          </view>
+          <view
+            wx:for="{{stages}}"
+            wx:key="key"
+            class="stage-chip stage-chip-{{item.key}} {{activeStage === item.key ? 'stage-chip-on' : ''}}"
+            data-key="{{item.key}}"
+            hover-class="stage-chip-hover"
+            bindtap="handleStageTap"
+          >
+            <text class="stage-name">{{item.name}}</text>
+            <text class="stage-count">{{item.count}}</text>
+          </view>
+        </view>
+
+        <scroll-view
+          wx:if="{{activeStage !== 'all'}}"
+          class="filter-scroll process-scroll"
+          scroll-x
+          enhanced
+          show-scrollbar="{{false}}"
+        >
+          <view class="filter-row">
+            <view
+              class="filter-chip {{activeProcess === '' ? 'filter-chip-on' : ''}}"
+              data-key=""
+              hover-class="filter-chip-hover"
+              bindtap="handleProcessTap"
+            >
+              <text>全部工序</text>
+              <text class="filter-count">{{stageTotal}}</text>
+            </view>
+            <view
+              wx:for="{{processes}}"
+              wx:key="key"
+              class="filter-chip {{activeProcess === item.key ? 'filter-chip-on' : ''}}"
+              data-key="{{item.key}}"
+              hover-class="filter-chip-hover"
+              bindtap="handleProcessTap"
+            >
+              <text>{{item.name}}</text>
+              <text class="filter-count">{{item.count}}</text>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view class="search-bar">
+        <view class="search-icon">
+          <view class="search-lens"></view>
+          <view class="search-handle"></view>
+        </view>
+        <input
+          class="search-input"
+          placeholder="搜索委托、卷宗或工作者"
+          placeholder-class="search-placeholder"
+          confirm-type="search"
+          value="{{keyword}}"
+          bindinput="handleKeywordInput"
+        />
+        <text wx:if="{{keyword}}" class="search-clear" bindtap="handleClearSearch">
+          清除
+        </text>
+      </view>
+
+      <view wx:if="{{loading}}" class="skeleton-list">
+        <view class="skeleton-card">
+          <view class="skeleton-chip"></view>
+          <view class="skeleton-line skeleton-title"></view>
+          <view class="skeleton-line skeleton-wide"></view>
+          <view class="skeleton-line skeleton-mid"></view>
+          <view class="skeleton-foot">
+            <view class="skeleton-avatar"></view>
+            <view class="skeleton-line skeleton-name"></view>
+          </view>
+        </view>
+        <view class="skeleton-card">
+          <view class="skeleton-chip"></view>
+          <view class="skeleton-line skeleton-title short"></view>
+          <view class="skeleton-line skeleton-wide"></view>
+          <view class="skeleton-line skeleton-mid"></view>
+        </view>
+      </view>
+
+      <view wx:else class="task-list">
+        <task-card
+          wx:for="{{tasks}}"
+          wx:key="id"
+          task="{{item}}"
+          index="{{index}}"
+          bind:open="handleTaskOpen"
+          bind:action="handleTaskAction"
+        />
+        <empty-state
+          wx:if="{{!tasks.length}}"
+          title="{{emptyTitle}}"
+          description="{{emptyDesc}}"
+          action-label="{{emptyActionLabel}}"
+          bind:action="handleEmptyAction"
+        />
+      </view>
+
+      <view class="board-foot">
+        <view class="foot-line"></view>
+        <text>APRS 动画部 · 每一份委托都有人接住</text>
+        <view class="foot-line"></view>
+      </view>
+    </view>
+  </view>
+</view>

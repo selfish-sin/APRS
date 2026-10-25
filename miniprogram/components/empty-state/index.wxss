@@ -1,0 +1,137 @@
+.empty {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 92rpx 48rpx 108rpx;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue",
+    "Microsoft YaHei", sans-serif;
+  text-align: center;
+}
+
+.empty-art {
+  position: relative;
+  width: 216rpx;
+  height: 184rpx;
+  margin-bottom: 36rpx;
+}
+
+.sheet {
+  position: absolute;
+  left: 50%;
+  width: 132rpx;
+  height: 156rpx;
+  border-radius: 12rpx;
+  transform-origin: center bottom;
+}
+
+.sheet-back {
+  top: 8rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.4);
+  background: #33261a;
+  transform: translateX(-62%) rotate(-9deg);
+}
+
+.sheet-front {
+  top: 18rpx;
+  border: 1rpx solid #b99a63;
+  background: linear-gradient(155deg, #f6ead2, #e8d4ab);
+  box-shadow: 0 18rpx 36rpx rgba(0, 0, 0, 0.4);
+  transform: translateX(-38%) rotate(5deg);
+}
+
+.sheet-line {
+  position: absolute;
+  left: 25rpx;
+  height: 5rpx;
+  border-radius: 999rpx;
+  background: rgba(90, 66, 37, 0.35);
+}
+
+.line-long {
+  top: 38rpx;
+  width: 76rpx;
+}
+
+.line-short {
+  top: 56rpx;
+  width: 48rpx;
+}
+
+.sheet-check {
+  position: absolute;
+  left: 38rpx;
+  bottom: 30rpx;
+  width: 32rpx;
+  height: 17rpx;
+  border-left: 5rpx solid #a6402f;
+  border-bottom: 5rpx solid #a6402f;
+  transform: rotate(-45deg);
+}
+
+.art-dot {
+  position: absolute;
+  border-radius: 50%;
+}
+
+.dot-one {
+  top: 18rpx;
+  right: 14rpx;
+  width: 18rpx;
+  height: 18rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.7);
+  background: #d9b45b;
+  opacity: 0.7;
+}
+
+.dot-two {
+  left: 4rpx;
+  bottom: 30rpx;
+  width: 11rpx;
+  height: 11rpx;
+  background: #6f8f6a;
+  opacity: 0.8;
+}
+
+.empty-title {
+  color: #f4e8d2;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 33rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+}
+
+.empty-desc {
+  max-width: 510rpx;
+  margin-top: 14rpx;
+  color: #a08a66;
+  font-size: 24rpx;
+  line-height: 1.75;
+}
+
+.empty-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 76rpx;
+  margin: 32rpx 0 0;
+  padding: 0 40rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.55);
+  border-radius: 8rpx;
+  background: rgba(217, 180, 91, 0.08);
+  color: #e2c37d;
+  font-family: inherit;
+  font-size: 25rpx;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+  line-height: 1.2;
+}
+
+.empty-action::after {
+  border: 0;
+}
+
+.empty-action-hover {
+  background: rgba(217, 180, 91, 0.18);
+}

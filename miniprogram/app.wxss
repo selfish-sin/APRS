@@ -1,0 +1,65 @@
+page {
+  background: #17120d;
+  color: #f0e3c8;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue",
+    "Microsoft YaHei", sans-serif;
+  font-size: 28rpx;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+view,
+text,
+scroll-view,
+button,
+input,
+textarea,
+image,
+picker,
+label {
+  box-sizing: border-box;
+}
+
+button {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-align: inherit;
+}
+
+button::after {
+  border: 0;
+}
+
+input,
+textarea {
+  font-family: inherit;
+}
+
+image {
+  display: block;
+}
+
+.editorial {
+  font-family: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC",
+    Georgia, serif;
+}
+
+.page-shell {
+  min-height: 100vh;
+  background: transparent;
+}
+
+.eyebrow {
+  color: #d9b45b;
+  font-size: 20rpx;
+  font-weight: 700;
+  letter-spacing: 5rpx;
+  line-height: 1.4;
+}

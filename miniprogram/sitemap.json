@@ -1,0 +1,9 @@
+{
+  "desc": "APRS 动画部 · RPG 委托告示栏",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}
