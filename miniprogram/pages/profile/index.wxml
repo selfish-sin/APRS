@@ -1,0 +1,232 @@
+<view class="page-shell profile-page">
+  <app-nav title="身份资料" back="{{false}}" />
+
+  <view class="profile-content">
+    <view class="profile-hero rise-in">
+      <view class="hero-ring ring-a"></view>
+      <view class="hero-ring ring-b"></view>
+      <view class="hero-head">
+        <view
+          class="profile-avatar"
+          style="background: {{user.avatarColor}};"
+        >
+          {{userInitial}}
+        </view>
+        <view class="hero-identity">
+          <view class="name-row">
+            <text class="profile-name editorial">{{user.name}}</text>
+            <view class="role-badge">{{roleLabel}}</view>
+          </view>
+          <text class="profile-role">{{user.title}}</text>
+          <text class="profile-project">{{workspace.studio}} · {{workspace.subtitle}}</text>
+          <view wx:if="{{isAdmin}}" class="profile-qq">
+            <text class="qq-label">QQ</text>
+            <text class="qq-value">{{user.qq}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="hero-divider"></view>
+
+      <view class="profile-stats">
+        <view wx:for="{{statsItems}}" wx:key="label" class="profile-stat">
+          <text class="profile-stat-number">{{item.value}}</text>
+          <text class="profile-stat-label">{{item.label}}</text>
+        </view>
+      </view>
+
+      <view wx:if="{{!isAdmin}}" class="score-strip">
+        <view class="score-copy">
+          <text class="score-label">累计赏金</text>
+          <text class="score-note">验收通过 {{myDone}} 份委托后自动累积</text>
+        </view>
+        <view class="score-value">
+          <text class="score-number">{{score}}</text>
+          <text class="score-unit">金币</text>
+        </view>
+      </view>
+
+      <view wx:else class="admin-strip">
+        <view class="admin-strip-mark">管</view>
+        <view class="admin-strip-copy">
+          <text class="admin-strip-title">维持动画部的委托流转</text>
+          <text class="admin-strip-sub">待验收 {{reviewCount}} 份委托，验收通过后会进入资料室。</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:if="{{!isAdmin}}" class="my-work-card rise-in" style="animation-delay: 40ms;">
+      <view class="my-work-head" hover-class="my-work-head-hover" bindtap="handleToggleMyWork">
+        <view class="my-work-copy">
+          <text class="my-work-title">已接取的任务</text>
+          <text class="my-work-sub">共 {{myTaskCount}} 份 · 点击展开</text>
+        </view>
+        <view class="chevron {{myTasksExpanded ? 'chevron-open' : ''}}"></view>
+      </view>
+      <view wx:if="{{myTasksExpanded}}" class="work-list">
+        <view
+          wx:for="{{myTasks}}"
+          wx:key="id"
+          class="work-item"
+          data-id="{{item.id}}"
+          hover-class="work-item-hover"
+          bindtap="handleTaskOpen"
+        >
+          <view class="work-main">
+            <text class="work-title">{{item.title}}</text>
+            <text class="work-meta">{{item.stageName}} · {{item.categoryName}} · {{item.reward}} 金币</text>
+          </view>
+          <text class="work-status" style="color: {{item.statusColor}};">{{item.statusName}}</text>
+        </view>
+        <view wx:if="{{!myTasks.length}}" class="work-empty">还没有接取委托。</view>
+      </view>
+    </view>
+
+    <view class="section-head">
+      <view class="section-heading">
+        <text class="section-title">部门名册</text>
+        <text class="section-sub">共 {{team.length}} 位工作者</text>
+      </view>
+      <text class="section-note">点击成员展开资料</text>
+    </view>
+
+    <view class="team-card rise-in" style="animation-delay: 60ms;">
+      <view wx:for="{{team}}" wx:key="id" class="team-block">
+        <view
+          class="team-row"
+          data-id="{{item.id}}"
+          hover-class="team-row-hover"
+          bindtap="handleToggleMember"
+        >
+          <view class="team-avatar" style="background: {{item.avatarColor}};">{{item.initial}}</view>
+          <view class="team-copy">
+            <text class="team-name">{{item.name}}</text>
+            <text class="team-role">{{item.title}}</text>
+          </view>
+          <view class="team-load">
+            <view class="load-pill">
+              <view class="load-dot"></view>
+              <text>进行中 {{item.active}}</text>
+            </view>
+            <text class="done-text">已归档 {{item.done}}</text>
+          </view>
+          <view class="chevron {{expandedMemberId === item.id ? 'chevron-open' : ''}}"></view>
+        </view>
+
+        <view wx:if="{{expandedMemberId === item.id}}" class="member-detail">
+          <view wx:if="{{isAdmin}}" class="member-qq">
+            <text class="member-qq-label">QQ</text>
+            <text class="member-qq-value">{{item.qq}}</text>
+          </view>
+          <view class="member-state {{item.executionActive ? 'member-state-ok' : 'member-state-off'}}">
+            {{item.executionActive ? '执行权正常' : '执行权已停用'}}
+          </view>
+          <view class="member-work-head">
+            <text class="member-work-title">已接取 {{item.total}} 份</text>
+            <text class="member-work-sub">进行中 {{item.active}} · 已归档 {{item.done}}</text>
+          </view>
+          <view
+            wx:for="{{item.tasks}}"
+            wx:for-item="work"
+            wx:key="id"
+            class="work-item"
+            data-id="{{work.id}}"
+            hover-class="work-item-hover"
+            catchtap="handleTaskOpen"
+          >
+            <view class="work-main">
+              <text class="work-title">{{work.title}}</text>
+              <text class="work-meta">{{work.stageName}} · {{work.categoryName}} · {{work.reward}} 金币</text>
+            </view>
+            <text class="work-status" style="color: {{work.statusColor}};">{{work.statusName}}</text>
+          </view>
+          <view wx:if="{{!item.tasks.length}}" class="work-empty">还没有接取委托。</view>
+          <block wx:if="{{isAdmin}}">
+            <view class="member-actions">
+              <view
+                class="member-action {{item.executionActive ? 'member-action-warn' : 'member-action-ok'}}"
+                data-id="{{item.id}}"
+                data-active="{{item.executionActive}}"
+                hover-class="member-action-hover"
+                catchtap="handleToggleExecution"
+              >
+                {{item.executionActive ? '取消执行权' : '恢复执行权'}}
+              </view>
+              <view
+                class="member-action member-action-danger"
+                data-id="{{item.id}}"
+                data-name="{{item.name}}"
+                hover-class="member-action-hover"
+                catchtap="handleDeleteMember"
+              >
+                删除资料
+              </view>
+            </view>
+          </block>
+        </view>
+      </view>
+    </view>
+
+    <view class="section-head settings-head">
+      <view class="section-heading">
+        <text class="section-title">资料与设置</text>
+        <text class="section-sub">身份、试炼与存储</text>
+      </view>
+    </view>
+
+    <view class="settings-card">
+      <view class="setting-row" hover-class="setting-row-hover" catchtap="handleSwitchIdentity">
+        <view class="setting-icon icon-switch">换</view>
+        <view class="setting-copy">
+          <text class="setting-title">切换身份</text>
+          <text class="setting-desc">在部门管理员与工作者之间切换</text>
+        </view>
+        <view class="chevron"></view>
+      </view>
+      <view class="setting-divider"></view>
+      <block wx:if="{{isAdmin}}">
+        <view class="setting-row" hover-class="setting-row-hover" catchtap="goProjects">
+          <view class="setting-icon icon-project">项</view>
+          <view class="setting-copy">
+            <text class="setting-title">项目管理</text>
+            <text class="setting-desc">立项、归档、任务量管理与发布后的修改</text>
+          </view>
+          <view class="chevron"></view>
+        </view>
+        <view class="setting-divider"></view>
+      </block>
+      <view class="setting-row" hover-class="setting-row-hover" catchtap="handleResetDemoData">
+        <view class="setting-icon icon-reset">重</view>
+        <view class="setting-copy">
+          <text class="setting-title">清空工作台数据</text>
+          <text class="setting-desc">清除任务、项目与通知，保留账号资料</text>
+        </view>
+        <view class="chevron"></view>
+      </view>
+      <view class="setting-divider"></view>
+      <view class="setting-row" hover-class="setting-row-hover" catchtap="handleDataInfo">
+        <view class="setting-icon icon-data">数</view>
+        <view class="setting-copy">
+          <text class="setting-title">数据存储说明</text>
+          <text class="setting-desc">了解当前本地演示模式</text>
+        </view>
+        <view class="chevron"></view>
+      </view>
+      <view class="setting-divider"></view>
+      <view class="setting-row" hover-class="setting-row-hover" catchtap="handleAbout">
+        <view class="setting-icon icon-about">A</view>
+        <view class="setting-copy">
+          <text class="setting-title">关于 APRS 动画部</text>
+          <text class="setting-desc">版本信息与动画部说明</text>
+        </view>
+        <view class="chevron"></view>
+      </view>
+    </view>
+
+    <view class="profile-footer">
+      <view class="footer-mark">A</view>
+      <text class="footer-brand">APRS 动画部 · ANIMATION DEPT.</text>
+      <text class="footer-version">v0.11.7 · RPG 委托主题</text>
+    </view>
+  </view>
+</view>

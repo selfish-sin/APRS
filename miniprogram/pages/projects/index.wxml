@@ -1,0 +1,73 @@
+<view class="page-shell projects-page">
+  <app-nav title="项目管理" back="{{true}}" />
+
+  <view class="projects-content">
+    <view class="intro rise-in">
+      <text class="eyebrow">PROJECT SETUP</text>
+      <view class="intro-title editorial">从立项开始。</view>
+      <text class="intro-sub">
+        输入项目名称后，系统会自动生成前期、中期、后期的完整任务链。你可以逐项调整工作量和单价，再正式发布。归档项目会移入独立的归档区。
+      </text>
+    </view>
+
+    <button class="create-btn rise-in" hover-class="create-btn-hover" bindtap="handleCreate">
+      <text>＋ 新建立项</text>
+    </button>
+
+    <view class="archive-entry rise-in" hover-class="archive-entry-hover" bindtap="goArchive">
+      <view class="archive-entry-mark">档</view>
+      <view class="archive-entry-copy">
+        <text class="archive-entry-title">已归档项目</text>
+        <text class="archive-entry-sub">只读保存 · 区分归档时招揽中与进行中的任务</text>
+      </view>
+      <text class="archive-entry-count">{{archiveCount}}</text>
+      <view class="chevron"></view>
+    </view>
+
+    <view class="section-head">
+      <view class="section-heading">
+        <text class="section-title">进行中项目</text>
+        <text class="section-sub">共 {{projects.length}} 个进行中项目</text>
+      </view>
+    </view>
+
+    <view wx:if="{{loading}}" class="loading-card">
+      <view class="loading-line loading-wide"></view>
+      <view class="loading-line loading-mid"></view>
+    </view>
+
+    <view wx:elif="{{projects.length}}" class="project-list">
+      <view
+        wx:for="{{projects}}"
+        wx:key="id"
+        class="project-card"
+        data-id="{{item.id}}"
+        hover-class="project-card-hover"
+        bindtap="handleOpen"
+      >
+        <view class="project-top">
+          <text class="project-code">{{item.code || 'PROJECT'}}</text>
+          <view class="project-status">进行中</view>
+        </view>
+        <text class="project-name editorial">{{item.name}}</text>
+        <view class="project-meta">
+          <text>{{item.taskCount}} 项任务</text>
+          <view class="meta-dot"></view>
+          <text>{{item.totalAmount}} 金币</text>
+          <view class="meta-dot"></view>
+          <text>截止 {{item.deadline}}</text>
+        </view>
+        <view class="project-foot">
+          <text class="project-created">创建于 {{item.createdLabel}}</text>
+          <view class="project-enter">管理任务 <text class="arrow"></text></view>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else class="project-empty">
+      <view class="empty-mark">A</view>
+      <text class="empty-title">还没有进行中的项目</text>
+      <text class="empty-desc">新建立项后，23 个制作工序会自动出现在任务清单里；已归档项目可在上方归档区查看。</text>
+    </view>
+  </view>
+</view>

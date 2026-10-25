@@ -1,0 +1,246 @@
+<view
+  class="page-shell detail-page"
+  style="padding-bottom: {{canClaim || canSubmit || canReview ? 210 : 55}}rpx;"
+>
+  <app-nav title="委托详情" back="{{true}}" />
+
+  <view wx:if="{{loading}}" class="detail-loading">
+    <view class="loading-card">
+      <view class="loading-line loading-chip"></view>
+      <view class="loading-line loading-title"></view>
+      <view class="loading-line loading-wide"></view>
+      <view class="loading-line loading-mid"></view>
+    </view>
+    <view class="loading-card small">
+      <view class="loading-line loading-mid"></view>
+      <view class="loading-line loading-wide"></view>
+    </view>
+  </view>
+
+  <view wx:elif="{{loadError}}" class="detail-error">
+    <empty-state
+      title="没有翻开这份卷轴"
+      description="{{loadError}}"
+      action-label="返回委托告示栏"
+      bind:action="handleEmptyAction"
+    />
+  </view>
+
+  <view wx:elif="{{task}}" class="detail-content">
+    <view class="detail-hero rise-in">
+      <view class="hero-top">
+        <view
+          class="category-chip"
+          style="color: {{task.categoryColor}}; background: {{task.categorySoft}};"
+        >
+          <view class="category-dot" style="background: {{task.categoryColor}};"></view>
+          <text>{{task.stageName}}</text>
+          <text class="category-sep">·</text>
+          <text>{{task.categoryName}}</text>
+        </view>
+        <view
+          class="status-pill"
+          style="color: {{task.statusColor}}; background: {{task.statusSoft}};"
+        >
+          <view class="status-dot" style="background: {{task.statusColor}};"></view>
+          {{task.statusName}}
+        </view>
+      </view>
+
+      <view class="task-title editorial">{{task.title}}</view>
+
+      <view class="task-subline">
+        <text class="task-code">委托 № {{task.id}}</text>
+        <view class="sub-dot"></view>
+        <text>{{task.batch}}</text>
+      </view>
+
+      <view wx:if="{{task.projectName}}" class="project-line">
+        <text class="project-line-label">项目</text>
+        <text>{{task.projectName}}</text>
+      </view>
+
+      <view class="hero-footer">
+        <view class="priority-chip" style="color: {{task.priorityColor}}; background: {{task.prioritySoft}};">
+          <text class="priority-stars">{{task.priorityStars}}</text>
+          <text>悬赏 · {{task.priorityName}}</text>
+        </view>
+        <text class="due-text due-{{task.dueTone}}">{{task.dueLabel}}</text>
+      </view>
+    </view>
+
+    <view class="meta-card rise-in" style="animation-delay: 50ms;">
+      <view class="meta-cell">
+        <text class="meta-label">制作工序</text>
+        <text class="meta-value">{{task.stageName}} · {{task.categoryName}}</text>
+      </view>
+      <view class="meta-cell">
+        <text class="meta-label">工作量</text>
+        <text wx:if="{{task.workloadUnitKey === 'once'}}" class="meta-value">一次性</text>
+        <text wx:else class="meta-value">{{task.workloadQuantity}} {{task.workloadUnitLabel}}</text>
+      </view>
+      <view class="meta-cell">
+        <text class="meta-label">单价</text>
+        <text wx:if="{{task.workloadUnitKey === 'once'}}" class="meta-value">一次性结算</text>
+        <text wx:else class="meta-value">{{task.unitPrice}} <text class="meta-unit">金币/{{task.workloadUnitLabel}}</text></text>
+      </view>
+      <view class="meta-cell">
+        <text class="meta-label">委托赏金</text>
+        <text class="meta-value">{{task.reward}} <text class="meta-unit">金币</text></text>
+      </view>
+      <view class="meta-cell">
+        <text class="meta-label">交付期限</text>
+        <text class="meta-value">{{task.dueDate}}</text>
+      </view>
+      <view class="meta-cell">
+        <text class="meta-label">张贴时间</text>
+        <text class="meta-value small">{{task.createdLabel}}</text>
+      </view>
+    </view>
+
+    <view class="section-card rise-in" style="animation-delay: 90ms;">
+      <view class="card-title-row">
+        <text class="card-title">委托说明</text>
+        <text class="card-index">QUEST BRIEF</text>
+      </view>
+      <text class="description">{{task.description ? task.description : '张贴者暂未补充委托说明。'}}</text>
+    </view>
+
+    <view class="assignee-card rise-in" style="animation-delay: 120ms;">
+      <view class="assignee-main">
+        <view class="assignee-avatar" style="background: {{task.assigneeColor}};">
+          {{task.assigneeInitial}}
+        </view>
+        <view class="assignee-copy">
+          <text class="assignee-label">接取人</text>
+          <text class="assignee-name">
+            {{task.assigneeName ? task.assigneeName : '等待一位工作者'}}
+          </text>
+          <text class="assignee-title">{{task.assigneeTitle}}</text>
+        </view>
+        <view
+          class="assignee-state"
+          style="color: {{task.assigneeName ? '#6f8f6a' : '#d9b45b'}};"
+        >
+          {{task.assigneeName ? '已接取' : '待接取'}}
+        </view>
+      </view>
+      <view class="assignee-foot">
+        <text>由 {{task.creatorName}} 张贴</text>
+        <text>更新于 {{task.updatedLabel}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{task.reviewNote}}" class="review-note-card rise-in">
+      <view class="review-note-head">
+        <view class="review-note-mark">批</view>
+        <text>部门批注</text>
+      </view>
+      <text class="review-note-text">{{task.reviewNote}}</text>
+    </view>
+
+    <view wx:if="{{canReview}}" class="review-panel rise-in">
+      <view class="card-title-row">
+        <text class="card-title">部门验收</text>
+        <text class="card-index">REVIEW</text>
+      </view>
+      <textarea
+        class="review-input"
+        placeholder="写下验收意见。通过时可选填，退回时请说明需要调整的地方。"
+        placeholder-class="review-placeholder"
+        maxlength="200"
+        cursor-spacing="120"
+        value="{{reviewNote}}"
+        bindinput="handleReviewInput"
+      ></textarea>
+      <text class="review-counter">{{reviewNote.length}} / 200</text>
+    </view>
+
+    <view wx:if="{{canCancel}}" class="admin-action-card rise-in">
+      <view class="admin-action-copy">
+        <text class="admin-action-title">管理员操作</text>
+        <text class="admin-action-desc">取消后任务不再允许接取或提交，已接取的工作者会收到通知。</text>
+      </view>
+      <button class="cancel-task-btn" hover-class="cancel-task-hover" bindtap="handleCancelTask">
+        取消任务
+      </button>
+    </view>
+
+    <view class="timeline-card rise-in" style="animation-delay: 160ms;">
+      <view class="card-title-row">
+        <text class="card-title">工作日志</text>
+        <text class="card-index">{{task.logCount}} 条</text>
+      </view>
+      <view class="timeline">
+        <view wx:for="{{task.logs}}" wx:key="id" class="timeline-item">
+          <view class="timeline-rail">
+            <view class="timeline-dot" style="background: {{item.actorColor}};"></view>
+            <view wx:if="{{!item.last}}" class="timeline-line"></view>
+          </view>
+          <view class="timeline-body">
+            <view class="timeline-head">
+              <text class="timeline-actor">{{item.actor}}</text>
+              <text class="timeline-time">{{item.timeLabel}}</text>
+            </view>
+            <text class="timeline-text">{{item.text}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="detail-foot">
+      <view class="foot-line"></view>
+      <text>委托编号 {{task.id}} · APRS 动画部资料室</text>
+      <view class="foot-line"></view>
+    </view>
+  </view>
+
+  <view
+    wx:if="{{canClaim || canSubmit || canReview}}"
+    class="action-bar"
+    style="padding-bottom: {{layout.safeBottom + 18}}px;"
+  >
+    <view class="action-inner">
+      <block wx:if="{{canReview}}">
+        <button
+          class="action-secondary"
+          hover-class="action-secondary-hover"
+          loading="{{submitting}}"
+          disabled="{{submitting}}"
+          bindtap="handleReturn"
+        >
+          退回修改
+        </button>
+        <button
+          class="action-primary action-approve"
+          hover-class="action-primary-hover"
+          loading="{{submitting}}"
+          disabled="{{submitting}}"
+          bindtap="handleApprove"
+        >
+          验收通过
+        </button>
+      </block>
+      <button
+        wx:elif="{{canClaim}}"
+        class="action-primary"
+        hover-class="action-primary-hover"
+        loading="{{submitting}}"
+        disabled="{{submitting}}"
+        bindtap="handleClaim"
+      >
+        接取这份委托
+      </button>
+      <button
+        wx:elif="{{canSubmit}}"
+        class="action-primary"
+        hover-class="action-primary-hover"
+        loading="{{submitting}}"
+        disabled="{{submitting}}"
+        bindtap="handleSubmit"
+      >
+        提交验收
+      </button>
+    </view>
+  </view>
+</view>

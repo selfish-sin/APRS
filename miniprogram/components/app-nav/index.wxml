@@ -1,0 +1,18 @@
+<view class="nav" style="padding-top: {{layout.statusBarHeight}}px;">
+  <view class="nav-inner" style="height: {{layout.navBarHeight}}px;">
+    <view
+      wx:if="{{back}}"
+      class="nav-back"
+      hover-class="nav-back-hover"
+      aria-role="button"
+      aria-label="返回"
+      bindtap="handleBack"
+    >
+      <view class="chevron"></view>
+    </view>
+    <view class="nav-title-wrap">
+      <text class="nav-title">{{title}}</text>
+    </view>
+  </view>
+</view>
+<view class="nav-spacer" style="height: {{layout.topInset}}px;"></view>

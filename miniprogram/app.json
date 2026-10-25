@@ -1,0 +1,57 @@
+{
+  "pages": [
+    "pages/board/index",
+    "pages/login/index",
+    "pages/create/index",
+    "pages/detail/index",
+    "pages/ranking/index",
+    "pages/archive/index",
+    "pages/profile/index",
+    "pages/projects/index",
+    "pages/project/index"
+  ],
+  "window": {
+    "navigationStyle": "custom",
+    "navigationBarTextStyle": "white",
+    "navigationBarBackgroundColor": "#17120D",
+    "backgroundColor": "#17120D",
+    "backgroundColorTop": "#17120D",
+    "backgroundColorBottom": "#17120D",
+    "backgroundTextStyle": "light",
+    "enablePullDownRefresh": false
+  },
+  "tabBar": {
+    "color": "#9D8A6B",
+    "selectedColor": "#E3BB63",
+    "backgroundColor": "#1B1410",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/board/index",
+        "text": "委托",
+        "iconPath": "assets/icons/board.png",
+        "selectedIconPath": "assets/icons/board-active.png"
+      },
+      {
+        "pagePath": "pages/ranking/index",
+        "text": "排行",
+        "iconPath": "assets/icons/ranking.png",
+        "selectedIconPath": "assets/icons/ranking-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "资料",
+        "iconPath": "assets/icons/profile.png",
+        "selectedIconPath": "assets/icons/profile-active.png"
+      }
+    ]
+  },
+  "usingComponents": {
+    "app-nav": "/components/app-nav/index",
+    "task-card": "/components/task-card/index",
+    "empty-state": "/components/empty-state/index"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

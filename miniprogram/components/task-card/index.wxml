@@ -1,0 +1,69 @@
+<view
+  class="card"
+  style="animation-delay: {{index > 7 ? 0 : index * 35}}ms;"
+  hover-class="card-hover"
+  hover-stay-time="60"
+  aria-role="button"
+  aria-label="{{task.title}}"
+  bindtap="handleOpen"
+>
+  <view class="accent" style="background: {{task.categoryColor}};"></view>
+
+  <view class="card-top">
+    <view
+      class="category-chip"
+      style="color: {{task.categoryColor}}; background: {{task.categorySoft}};"
+    >
+      <view class="category-dot" style="background: {{task.categoryColor}};"></view>
+      <text>{{task.stageName}}</text>
+      <text class="category-sep">·</text>
+      <text>{{task.categoryName}}</text>
+    </view>
+    <view class="priority" style="color: {{task.priorityColor}};">
+      <text class="priority-stars">{{task.priorityStars}}</text>
+      <text class="priority-label">{{task.priorityName}}</text>
+    </view>
+  </view>
+
+  <view class="task-heading">
+    <text class="task-id">№ {{task.id}}</text>
+    <text class="task-title">{{task.title}}</text>
+  </view>
+
+  <view class="meta-row">
+    <view class="meta-batch">
+      <text class="meta-key">卷宗</text>
+      <text class="meta-value">{{task.batch}}</text>
+    </view>
+    <text class="due due-{{task.dueTone}}">{{task.dueLabel}}</text>
+  </view>
+
+  <view wx:if="{{task.projectName}}" class="workload-row">
+    <text class="workload-tag">项目</text>
+    <text class="workload-brief">{{task.workloadBrief}}</text>
+  </view>
+
+  <text class="task-desc">{{task.description}}</text>
+
+  <view class="card-line"></view>
+
+  <view class="card-bottom">
+    <view class="assignee">
+      <view class="avatar" style="background: {{task.assigneeColor}};">
+        {{task.assigneeInitial}}
+      </view>
+      <view class="assignee-copy">
+        <text class="assignee-name">{{task.assigneeName ? task.assigneeName : '待接取'}}</text>
+        <text class="assignee-sub">{{task.statusName}} · {{task.reward}} 金币</text>
+      </view>
+    </view>
+    <button
+      wx:if="{{task.actionLabel}}"
+      class="action {{task.isActionable ? 'action-solid' : 'action-ghost'}}"
+      hover-class="action-hover"
+      catchtap="handleAction"
+    >
+      {{task.actionLabel}}
+    </button>
+  </view>
+</view>

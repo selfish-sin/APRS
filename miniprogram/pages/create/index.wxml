@@ -1,0 +1,283 @@
+<view class="page-shell create-page">
+  <app-nav title="张贴委托" back="{{true}}" />
+
+  <view class="create-content">
+    <view class="intro rise-in">
+      <text class="eyebrow">NEW QUEST SCROLL</text>
+      <view class="intro-title editorial">把卷轴挂上告示栏。</view>
+      <text class="intro-sub">
+        写清制作要求、赏金与期限。公开张贴后，工作者可以在告示栏接取；也可以直接指定一位工作者。
+      </text>
+    </view>
+
+    <view class="form-card rise-in" style="animation-delay: 60ms;">
+      <view class="field-group">
+        <view class="field-head">
+          <text class="field-no">01</text>
+          <text class="field-label">委托标题</text>
+          <text class="field-required">必填</text>
+        </view>
+        <input
+          class="text-field title-field"
+          placeholder="例如：雨巷追光 · 镜头 15 原画"
+          placeholder-class="input-placeholder"
+          maxlength="40"
+          value="{{title}}"
+          data-field="title"
+          bindinput="handleInput"
+        />
+      </view>
+
+      <view class="field-divider"></view>
+
+      <view class="field-group">
+        <view class="field-head">
+          <text class="field-no">02</text>
+          <text class="field-label">制作工序</text>
+          <text class="field-hint">先选阶段，再选具体工序</text>
+        </view>
+        <view class="stage-tabs">
+          <view
+            wx:for="{{stages}}"
+            wx:key="key"
+            class="stage-tab {{selectedStage === item.key ? 'stage-tab-on' : ''}}"
+            style="{{selectedStage === item.key ? 'border-color:' + item.color + ';background:' + item.soft + ';color:' + item.color + ';' : ''}}"
+            data-key="{{item.key}}"
+            hover-class="stage-tab-hover"
+            bindtap="handleStage"
+          >
+            <view class="stage-tab-dot" style="background: {{item.color}};"></view>
+            <text>{{item.name}}</text>
+          </view>
+        </view>
+        <view class="chip-wrap">
+          <view
+            wx:for="{{processes}}"
+            wx:key="key"
+            class="choice-chip {{selectedCategory === item.key ? 'choice-chip-on' : ''}}"
+            style="{{selectedCategory === item.key ? 'border-color:' + item.color + ';background:' + item.soft + ';color:' + item.color + ';' : ''}}"
+            data-key="{{item.key}}"
+            hover-class="choice-chip-hover"
+            bindtap="handleCategory"
+          >
+            <view class="chip-dot" style="background: {{item.color}};"></view>
+            <text>{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="field-divider"></view>
+
+      <view class="field-group">
+        <view class="field-head">
+          <text class="field-no">03</text>
+          <text class="field-label">悬赏等级</text>
+        </view>
+        <view class="priority-grid">
+          <view
+            wx:for="{{priorities}}"
+            wx:key="key"
+            class="priority-option {{selectedPriority === item.key ? 'priority-option-on' : ''}}"
+            style="{{selectedPriority === item.key ? 'border-color:' + item.color + ';background:' + item.soft + ';color:' + item.color + ';' : ''}}"
+            data-key="{{item.key}}"
+            hover-class="choice-chip-hover"
+            bindtap="handlePriority"
+          >
+            <text class="priority-stars">{{item.stars}}</text>
+            <text class="priority-name">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="field-divider"></view>
+
+      <view class="two-col">
+        <view class="col-item">
+          <view class="field-head compact">
+            <text class="field-label">卷宗 / 场次</text>
+          </view>
+          <input
+            class="text-field"
+            placeholder="EP01 · SC03"
+            placeholder-class="input-placeholder"
+            maxlength="30"
+            value="{{batch}}"
+            data-field="batch"
+            bindinput="handleInput"
+          />
+        </view>
+        <view class="col-item">
+          <view class="field-head compact">
+            <text class="field-label">交付期限</text>
+          </view>
+          <picker
+            class="date-picker"
+            mode="date"
+            value="{{dueDate}}"
+            start="{{minDate}}"
+            end="{{maxDate}}"
+            bindchange="handleDateChange"
+          >
+            <view class="date-field">
+              <text>{{dueDate}}</text>
+              <view class="date-chevron"></view>
+            </view>
+          </picker>
+        </view>
+      </view>
+    </view>
+
+    <view class="form-card rise-in" style="animation-delay: 110ms;">
+      <view class="field-group">
+        <view class="field-head">
+          <text class="field-no">04</text>
+          <text class="field-label">委托赏金</text>
+          <text class="field-hint">验收通过后记入工作者名册</text>
+        </view>
+        <view class="reward-row">
+          <view class="reward-copy">
+            <text class="reward-number">{{reward}}</text>
+            <text class="reward-unit">金币</text>
+          </view>
+          <view class="stepper">
+            <view
+              class="step-btn {{reward === 20 ? 'step-btn-disabled' : ''}}"
+              data-delta="-10"
+              hover-class="step-btn-hover"
+              bindtap="handleStep"
+            >
+              <view class="minus-mark"></view>
+            </view>
+            <view class="step-divider"></view>
+            <view
+              class="step-btn {{reward >= 500 ? 'step-btn-disabled' : ''}}"
+              data-delta="10"
+              hover-class="step-btn-hover"
+              bindtap="handleStep"
+            >
+              <view class="plus-mark"></view>
+              <view class="plus-mark plus-vertical"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="field-divider"></view>
+
+      <view class="field-group">
+        <view class="field-head">
+          <text class="field-no">05</text>
+          <text class="field-label">张贴方式</text>
+        </view>
+        <view class="assign-grid">
+          <view
+            class="assign-option {{assignMode === 'pool' ? 'assign-option-on' : ''}}"
+            data-mode="pool"
+            hover-class="choice-chip-hover"
+            bindtap="handleAssignMode"
+          >
+            <view class="assign-top">
+              <view class="assign-icon assign-icon-pool">告</view>
+              <view class="assign-radio">
+                <view wx:if="{{assignMode === 'pool'}}" class="radio-dot"></view>
+              </view>
+            </view>
+            <text class="assign-name">公开张贴</text>
+            <text class="assign-desc">挂上告示栏，工作者自由接取</text>
+          </view>
+          <view
+            class="assign-option {{assignMode === 'assign' ? 'assign-option-on' : ''}}"
+            data-mode="assign"
+            hover-class="choice-chip-hover"
+            bindtap="handleAssignMode"
+          >
+            <view class="assign-top">
+              <view class="assign-icon assign-icon-direct">派</view>
+              <view class="assign-radio">
+                <view wx:if="{{assignMode === 'assign'}}" class="radio-dot"></view>
+              </view>
+            </view>
+            <text class="assign-name">指定工作者</text>
+            <text class="assign-desc">直接放入对方的委托袋</text>
+          </view>
+        </view>
+
+        <scroll-view
+          wx:if="{{assignMode === 'assign'}}"
+          class="member-scroll"
+          scroll-x
+          enhanced
+          show-scrollbar="{{false}}"
+        >
+          <view class="member-row">
+            <view
+              wx:for="{{employees}}"
+              wx:key="id"
+              class="member-chip {{selectedAssigneeId === item.id ? 'member-chip-on' : ''}}"
+              data-id="{{item.id}}"
+              hover-class="choice-chip-hover"
+              bindtap="handleAssignee"
+            >
+              <view class="member-avatar" style="background: {{item.avatarColor}};">
+                {{item.initial}}
+              </view>
+              <view class="member-copy">
+                <text class="member-name">{{item.name}}</text>
+                <text class="member-role">{{item.title}}</text>
+              </view>
+              <view wx:if="{{selectedAssigneeId === item.id}}" class="member-check"></view>
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+
+      <view class="field-divider"></view>
+
+      <view class="field-group">
+        <view class="field-head">
+          <text class="field-no">06</text>
+          <text class="field-label">委托详情</text>
+          <text class="field-hint">{{description.length}} / 500</text>
+        </view>
+        <textarea
+          class="desc-field"
+          placeholder="写清镜头内容、交付标准、注意事项，让接取委托的工作者一看就明白。"
+          placeholder-class="input-placeholder"
+          maxlength="500"
+          cursor-spacing="120"
+          value="{{description}}"
+          data-field="description"
+          bindinput="handleInput"
+          auto-height="{{false}}"
+        ></textarea>
+      </view>
+    </view>
+
+    <view class="publish-note rise-in" style="animation-delay: 160ms;">
+      <view class="note-dot"></view>
+      <text wx:if="{{assignMode === 'assign'}}">
+        张贴后委托会直接放入所选工作者的委托袋，状态为「进行中」。
+      </text>
+      <text wx:else>
+        张贴后委托会挂上告示栏，工作者即可接取。
+      </text>
+    </view>
+  </view>
+
+  <view class="create-footer" style="padding-bottom: {{layout.safeBottom + 18}}px;">
+    <view class="footer-inner">
+      <button class="cancel-btn" hover-class="cancel-btn-hover" bindtap="handleCancel">
+        取消
+      </button>
+      <button
+        class="submit-btn"
+        hover-class="submit-btn-hover"
+        loading="{{submitting}}"
+        disabled="{{submitting}}"
+        bindtap="handleSubmit"
+      >
+        {{assignMode === 'assign' ? '张贴并指派' : '张贴委托'}}
+      </button>
+    </view>
+  </view>
+</view>

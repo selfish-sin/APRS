@@ -1,0 +1,167 @@
+<view class="login">
+  <view class="halo halo-one"></view>
+  <view class="halo halo-two"></view>
+  <view class="soft-orb"></view>
+
+  <view
+    class="page"
+    style="padding-top: {{layout.statusBarHeight + 8}}px; padding-bottom: 14px;"
+  >
+    <view class="brand-bar rise-in">
+      <view class="brand-mark">A</view>
+      <view class="brand-copy">
+        <text class="brand-name">APRS 动画部</text>
+        <text class="brand-en">ANIMATION DEPT.</text>
+      </view>
+    </view>
+
+    <view class="hero rise-in" style="animation-delay: 70ms;">
+      <view class="eyebrow-line">
+        <view class="eyebrow-dash"></view>
+        <text class="eyebrow-text">ANIMATION DEPT. · 委托大厅</text>
+      </view>
+      <view class="hero-title editorial">
+        <view>每一帧，</view>
+        <view>都是一场<text class="accent-word">冒险</text>。</view>
+      </view>
+      <text class="hero-sub">
+        这里是 APRS艺术生产力研究实验室 · 动画部的委托大厅。部门管理员张贴制作卷轴，工作者接取并交付，每个镜头都有清晰的下一步。
+      </text>
+      <view class="project-pill">
+        <view class="project-dot"></view>
+        <text>{{workspace.studio}} · {{workspace.subtitle}}</text>
+      </view>
+    </view>
+
+    <view class="form-area rise-in" style="animation-delay: 140ms;">
+      <view class="block-head">
+        <text class="block-no">01</text>
+        <text class="block-title">选择你的身份</text>
+        <view class="block-line"></view>
+      </view>
+
+      <view class="role-grid">
+        <view
+          wx:for="{{roleOptions}}"
+          wx:key="key"
+          class="role-card {{role === item.key ? 'role-card-on' : ''}}"
+          data-role="{{item.key}}"
+          hover-class="role-card-hover"
+          bindtap="handleRoleChange"
+        >
+          <view class="role-icon role-icon-{{item.key}}">{{item.icon}}</view>
+          <text class="role-name">{{item.label}}</text>
+          <text class="role-tag">{{item.tag}}</text>
+          <text class="role-desc">{{item.description}}</text>
+          <view wx:if="{{role === item.key}}" class="selected-mark">
+            <view class="selected-tick"></view>
+          </view>
+        </view>
+      </view>
+
+      <view class="block-head identity-head">
+        <text class="block-no">02</text>
+        <text class="block-title">
+          {{isExisting ? '资料已找到' : (role === 'admin' ? '登记管理员资料' : '登记工作者资料')}}
+        </text>
+        <view class="block-line"></view>
+      </view>
+
+      <view class="account-form">
+        <view class="account-field">
+          <view class="account-label">
+            <text>QQ 号</text>
+            <text class="account-tag">用于识别资料</text>
+          </view>
+          <input
+            class="account-input"
+            type="number"
+            maxlength="12"
+            placeholder="5-12 位数字"
+            placeholder-class="input-placeholder"
+            value="{{qq}}"
+            bindinput="handleQQInput"
+          />
+        </view>
+
+        <view class="account-field">
+          <view class="account-label">
+            <text>昵称</text>
+            <text wx:if="{{isExisting}}" class="account-tag">已有资料，不可修改</text>
+          </view>
+          <input
+            class="account-input {{isExisting ? 'account-input-disabled' : ''}}"
+            maxlength="12"
+            disabled="{{isExisting}}"
+            placeholder="2-12 个字符"
+            placeholder-class="input-placeholder"
+            value="{{nickname}}"
+            bindinput="handleNicknameInput"
+          />
+        </view>
+
+        <block wx:if="{{role === 'admin'}}">
+          <view wx:if="{{!isExisting}}" class="account-field">
+            <view class="account-label">
+              <text>管理员秘钥</text>
+              <text class="account-tag">首次登记管理员需要</text>
+            </view>
+            <input
+              class="account-input secret-input"
+              password="{{true}}"
+              maxlength="20"
+              placeholder="请输入管理员秘钥"
+              placeholder-class="input-placeholder"
+              value="{{adminKey}}"
+              bindinput="handleAdminKeyInput"
+            />
+          </view>
+        </block>
+
+        <view wx:if="{{isSuspended}}" class="existing-note existing-note-off">
+          <view class="existing-dot existing-dot-off"></view>
+          <text>该 QQ 的{{roleLabel}}资料已被停用执行权，请联系部门管理员恢复。</text>
+        </view>
+        <view wx:elif="{{isExisting}}" class="existing-note">
+          <view class="existing-dot"></view>
+          <text>已找到该 QQ 的{{roleLabel}}资料，将直接进入。</text>
+        </view>
+        <view wx:elif="{{!qq}}" class="register-note">
+          <text>输入 QQ 后会检测是否已有资料；首次登记需要填写昵称。</text>
+        </view>
+        <view wx:else class="register-note">
+          <text wx:if="{{role === 'admin'}}">该 QQ 尚未登记管理员身份，填写昵称并校验秘钥后即可录入。</text>
+          <text wx:else>该 QQ 尚未登记工作者身份，填写昵称后即可录入资料并开始工作。</text>
+        </view>
+
+        <view class="privacy-note">
+          QQ 号仅在管理员资料中可见；同一 QQ 可分别登记管理员和工作者身份各一次。
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view
+    class="login-footer"
+    style="padding-bottom: {{layout.safeBottom + 22}}px;"
+  >
+    <view class="footer-inner">
+      <button
+        class="enter-btn"
+        hover-class="enter-btn-hover"
+        loading="{{entering}}"
+        disabled="{{entering || isSuspended}}"
+        bindtap="handleEnter"
+      >
+        <text>{{isSuspended ? '执行权已停用' : (isExisting ? '直接进入动画部' : '录入资料并进入')}}</text>
+        <block wx:if="{{!entering}}">
+          <view wx:if="{{!isSuspended}}" class="btn-arrow"></view>
+        </block>
+      </button>
+      <view class="footer-note">
+        <view class="footer-dot"></view>
+        <text>身份资料保存在当前设备</text>
+      </view>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,338 @@
+<view class="page-shell project-page" style="padding-bottom: {{isEdit ? 60 : 250}}rpx;">
+  <app-nav title="{{isEdit ? '项目详情' : '项目立项'}}" back="{{true}}" fallback="/pages/projects/index" />
+
+  <view class="project-content">
+    <view class="intro rise-in">
+      <text class="eyebrow">{{isArchived ? 'PROJECT ARCHIVE' : (isEdit ? 'PROJECT CONTROL' : 'PROJECT SETUP')}}</text>
+      <view class="intro-title editorial">
+        {{isArchived ? '这段生产线已经归档。' : (isEdit ? '继续调整这套生产线。' : '把整条生产线排出来。')}}
+      </view>
+      <text class="intro-sub" wx:if="{{!isEdit}}">
+        输入项目名称后，系统会自动生成前期、中期、后期的全部制作任务。逐项调整内容、工作量和单价后再发布。
+      </text>
+      <text class="intro-sub" wx:elif="{{isArchived}}">
+        项目已归档，项目和任务记录转为只读保留。未完成任务在归档时已经取消，历史日志仍可查看。
+      </text>
+      <text class="intro-sub" wx:else>
+        项目已经发布。任务内容、工作量和单价仍可修改；已接取该项任务的工作者会收到变更通知。
+      </text>
+    </view>
+
+    <view wx:if="{{isArchived}}" class="archived-banner">
+      <view class="archived-dot"></view>
+      <text>已归档 · 项目只读，任务和工作日志保留</text>
+    </view>
+    <view wx:elif="{{isEdit}}" class="published-banner">
+      <view class="published-dot"></view>
+      <text>已发布 · 项目名称与期限已锁定，任务可继续修改</text>
+    </view>
+
+    <view wx:if="{{isArchived}}" class="archive-summary-card rise-in">
+      <view class="archive-summary-head">
+        <text class="archive-summary-title">归档时任务状态</text>
+        <text class="archive-summary-note">共 {{archiveStats.total}} 项</text>
+      </view>
+      <view class="archive-summary-grid">
+        <view class="archive-summary-item">
+          <text class="archive-summary-value">{{archiveStats.recruiting}}</text>
+          <text class="archive-summary-label">招揽中</text>
+        </view>
+        <view class="archive-summary-item">
+          <text class="archive-summary-value">{{archiveStats.inProgress}}</text>
+          <text class="archive-summary-label">进行中</text>
+        </view>
+        <view class="archive-summary-item">
+          <text class="archive-summary-value">{{archiveStats.inReview}}</text>
+          <text class="archive-summary-label">待验收</text>
+        </view>
+        <view class="archive-summary-item">
+          <text class="archive-summary-value">{{archiveStats.done}}</text>
+          <text class="archive-summary-label">已完成</text>
+        </view>
+      </view>
+      <text class="archive-summary-hint">归档时未完成的任务已统一标记为已取消，这里保留它们归档前的状态。</text>
+    </view>
+
+    <view class="form-card rise-in" style="animation-delay: 60ms;">
+      <view class="field-group">
+        <view class="field-head">
+          <text class="field-no">01</text>
+          <text class="field-label">项目名称</text>
+          <text class="field-required">必填</text>
+        </view>
+        <input
+          class="text-field title-field"
+          maxlength="30"
+          disabled="{{isEdit}}"
+          placeholder="例如：第 1 集 · 项目名称"
+          placeholder-class="input-placeholder"
+          value="{{name}}"
+          data-field="name"
+          bindinput="handleMetaInput"
+        />
+      </view>
+
+      <view class="field-divider"></view>
+
+      <view class="two-col">
+        <view class="col-item">
+          <view class="field-head compact">
+            <text class="field-label">项目编号</text>
+          </view>
+          <input
+            class="text-field"
+            maxlength="20"
+            disabled="{{isEdit}}"
+            placeholder="EP01"
+            placeholder-class="input-placeholder"
+            value="{{code}}"
+            data-field="code"
+            bindinput="handleMetaInput"
+          />
+        </view>
+        <view class="col-item">
+          <view class="field-head compact">
+            <text class="field-label">整体交付期限</text>
+          </view>
+          <picker
+            class="date-picker"
+            mode="date"
+            value="{{deadline}}"
+            start="{{minDate}}"
+            end="{{maxDate}}"
+            disabled="{{isEdit}}"
+            bindchange="handleDeadlineChange"
+          >
+            <view class="date-field">
+              <text>{{deadline}}</text>
+              <view class="date-chevron"></view>
+            </view>
+          </picker>
+        </view>
+      </view>
+
+      <view class="field-divider"></view>
+
+      <view class="field-group">
+        <view class="field-head">
+          <text class="field-no">02</text>
+          <text class="field-label">项目说明</text>
+          <text class="field-hint">{{description.length}} / 300</text>
+        </view>
+        <textarea
+          class="desc-field"
+          maxlength="300"
+          disabled="{{isEdit}}"
+          placeholder="补充这一集的整体风格、交付标准和特殊要求。"
+          placeholder-class="input-placeholder"
+          value="{{description}}"
+          data-field="description"
+          bindinput="handleMetaInput"
+        ></textarea>
+      </view>
+    </view>
+
+    <view class="summary-strip rise-in" style="animation-delay: 90ms;">
+      <view class="summary-item">
+        <text class="summary-number">{{enabledCount}}</text>
+        <text class="summary-label">启用任务</text>
+      </view>
+      <view class="summary-divider"></view>
+      <view class="summary-item">
+        <text class="summary-number">{{totalAmount}}</text>
+        <text class="summary-label">预计总赏金 · 金币</text>
+      </view>
+    </view>
+
+    <view class="section-head">
+      <view class="section-heading">
+        <text class="section-title">任务清单</text>
+        <text class="section-sub">按前期 / 中期 / 后期自动生成，点击逐项修改</text>
+      </view>
+    </view>
+
+    <view wx:if="{{loading}}" class="loading-card">
+      <view class="loading-line loading-wide"></view>
+      <view class="loading-line loading-mid"></view>
+    </view>
+
+    <view wx:else class="stage-list">
+      <view wx:for="{{stageGroups}}" wx:key="key" class="stage-group">
+        <view class="stage-head">
+          <view class="stage-dot" style="background: {{item.color}};"></view>
+          <text class="stage-name">{{item.name}}</text>
+          <text class="stage-count">{{item.count}} 个工序</text>
+        </view>
+        <view
+          wx:for="{{item.tasks}}"
+          wx:for-item="task"
+          wx:key="key"
+          class="task-row {{task.enabled === false ? 'task-disabled' : ''}}"
+          data-key="{{task.key}}"
+          hover-class="task-row-hover"
+          bindtap="handleTaskTap"
+        >
+          <view class="task-main">
+            <view class="task-row-head">
+              <text wx:if="{{task.title !== task.name}}" class="process-name">{{task.name}}</text>
+              <text wx:if="{{isArchived}}" class="task-status task-status-archive task-status-{{task.archiveTone}}">{{task.archiveLabel}}</text>
+              <text wx:elif="{{isEdit}}" class="task-status" style="color: {{task.statusColor}};">{{task.statusName}}</text>
+            </view>
+            <text class="task-title">{{task.title}}</text>
+            <text wx:if="{{task.unitKey === 'once'}}" class="task-work">一次性结算 · {{task.total}} 金币</text>
+            <text wx:else class="task-work">{{task.quantity}} {{task.unitLabel}} × {{task.unitPrice}} 金币/{{task.unitLabel}}</text>
+            <block wx:if="{{isEdit}}">
+              <text wx:if="{{task.assigneeName}}" class="task-assignee">接取人 · {{task.assigneeName}}</text>
+            </block>
+          </view>
+          <view class="task-side">
+            <text class="task-amount">{{task.total}} 金币</text>
+            <text wx:if="{{task.editable}}" class="task-edit">修改</text>
+            <block wx:if="{{isEdit}}">
+              <text
+                wx:if="{{task.cancellable}}"
+                class="task-cancel"
+                data-key="{{task.key}}"
+                catchtap="handleTaskCancel"
+              >
+                取消
+              </text>
+            </block>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <block wx:if="{{isEdit}}">
+      <view wx:if="{{!isArchived}}" class="archive-zone rise-in">
+        <view class="archive-copy">
+          <text class="archive-title">归档项目</text>
+          <text class="archive-desc">归档后项目转为只读，未完成任务会取消并通知工作者，项目、任务与工作日志全部保留。</text>
+        </view>
+        <button class="archive-project-btn" hover-class="archive-project-hover" bindtap="handleArchiveProject">
+          归档项目
+        </button>
+      </view>
+
+      <view wx:if="{{isArchived}}" class="clear-archived-zone rise-in">
+        <view class="clear-archived-copy">
+          <text class="clear-archived-title">彻底清除此项目</text>
+          <text class="clear-archived-desc">永久删除当前归档项目及其任务、工作日志与排行结算记录，不影响其他项目。</text>
+        </view>
+        <button
+          class="clear-archived-btn"
+          hover-class="clear-archived-hover"
+          catchtap="handleClearArchivedProject"
+        >
+          彻底清除
+        </button>
+      </view>
+    </block>
+  </view>
+
+  <view wx:if="{{!isEdit}}" class="publish-footer" style="padding-bottom: {{layout.safeBottom + 18}}px;">
+    <view class="publish-inner">
+      <button class="cancel-btn" hover-class="cancel-btn-hover" bindtap="handleCancel">取消</button>
+      <button
+        class="publish-btn"
+        hover-class="publish-btn-hover"
+        loading="{{publishing}}"
+        disabled="{{publishing}}"
+        bindtap="handlePublish"
+      >
+        发布项目
+      </button>
+    </view>
+  </view>
+
+  <view wx:if="{{showEditor}}" class="editor-mask">
+    <view class="editor-panel" style="padding-bottom: {{layout.safeBottom + 20}}px;">
+      <view class="editor-head">
+        <view class="editor-head-copy">
+          <text class="editor-eyebrow">{{editingTask.name}}</text>
+          <text class="editor-title">编辑任务</text>
+        </view>
+        <view class="editor-close" hover-class="editor-close-hover" bindtap="handleEditorClose">×</view>
+      </view>
+
+      <scroll-view class="editor-body" scroll-y>
+        <view class="editor-field">
+          <view class="editor-label"><text>任务标题</text><text class="editor-hint">{{editingTask.title.length}} / 40</text></view>
+          <input
+            class="editor-input"
+            maxlength="40"
+            value="{{editingTask.title}}"
+            data-field="title"
+            bindinput="handleEditorInput"
+            placeholder="任务标题"
+            placeholder-class="editor-placeholder"
+          />
+        </view>
+
+        <view class="editor-field">
+          <view class="editor-label"><text>任务说明</text><text class="editor-hint">{{editingTask.description.length}} / 500</text></view>
+          <textarea
+            class="editor-textarea"
+            maxlength="500"
+            value="{{editingTask.description}}"
+            data-field="description"
+            bindinput="handleEditorInput"
+            placeholder="交付标准、注意事项"
+            placeholder-class="editor-placeholder"
+          ></textarea>
+        </view>
+
+        <view class="editor-two-col">
+          <view class="editor-field">
+            <view class="editor-label"><text>工作量（{{editingTask.unitLabel}}）</text></view>
+            <input
+              class="editor-input"
+              type="number"
+              disabled="{{editingTask.unitKey === 'once'}}"
+              value="{{editingTask.quantity}}"
+              data-field="quantity"
+              bindinput="handleEditorInput"
+            />
+          </view>
+          <view class="editor-field">
+            <view class="editor-label">
+              <text wx:if="{{editingTask.unitKey === 'once'}}">一次性总价（金币）</text>
+              <text wx:else>单价（金币/{{editingTask.unitLabel}}）</text>
+            </view>
+            <input
+              class="editor-input"
+              type="number"
+              value="{{editingTask.unitPrice}}"
+              data-field="unitPrice"
+              bindinput="handleEditorInput"
+            />
+          </view>
+        </view>
+
+        <view class="editor-note">
+          <text>{{editingTask.unitName}} · {{editingTask.unitKey === 'once' ? '一次性工作，直接按总价结算' : '按数量 × 单价结算'}}</text>
+        </view>
+
+        <view class="editor-preview">
+          <text class="preview-label">本项小计</text>
+          <text class="preview-value">{{editingTotal}} 金币</text>
+        </view>
+
+        <view wx:if="{{!isEdit}}" class="editor-toggle" hover-class="editor-toggle-hover" bindtap="handleEditorToggle">
+          <view class="toggle-box {{editingTask.enabled === false ? '' : 'toggle-box-on'}}">
+            <view wx:if="{{editingTask.enabled !== false}}" class="toggle-check"></view>
+          </view>
+          <view class="toggle-copy">
+            <text class="toggle-title">纳入本次项目</text>
+            <text class="toggle-desc">取消后发布时不会生成这项委托</text>
+          </view>
+        </view>
+      </scroll-view>
+
+      <view class="editor-actions">
+        <button class="editor-cancel" hover-class="editor-cancel-hover" bindtap="handleEditorClose">取消</button>
+        <button class="editor-save" hover-class="editor-save-hover" bindtap="handleEditorSave">保存修改</button>
+      </view>
+    </view>
+  </view>
+</view>

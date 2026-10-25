@@ -1,0 +1,72 @@
+.nav {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue",
+    "Microsoft YaHei", sans-serif;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: rgba(23, 18, 13, 0.96);
+  border-bottom: 1rpx solid rgba(217, 180, 91, 0.24);
+  box-shadow: 0 10rpx 28rpx rgba(0, 0, 0, 0.36);
+}
+
+.nav-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 32rpx;
+}
+
+.nav-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 64rpx;
+  height: 64rpx;
+  margin-left: -8rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.3);
+  border-radius: 50%;
+  background: rgba(217, 180, 91, 0.06);
+}
+
+.nav-back-hover {
+  background: rgba(217, 180, 91, 0.16);
+}
+
+.chevron {
+  box-sizing: border-box;
+  width: 18rpx;
+  height: 18rpx;
+  margin-left: 6rpx;
+  border-left: 3rpx solid #e2c37d;
+  border-bottom: 3rpx solid #e2c37d;
+  transform: rotate(45deg);
+}
+
+.nav-title-wrap {
+  position: absolute;
+  left: 140rpx;
+  right: 140rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+.nav-title {
+  color: #f4e8d2;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 32rpx;
+  font-weight: 700;
+  letter-spacing: 3rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-spacer {
+  width: 100%;
+}

@@ -1,0 +1,924 @@
+.board-page {
+  min-height: 100vh;
+  padding-bottom: 80rpx;
+  background:
+    radial-gradient(85% 42% at 88% -6%, rgba(217, 180, 91, 0.16), rgba(217, 180, 91, 0) 62%),
+    radial-gradient(70% 38% at -6% 6%, rgba(166, 64, 47, 0.14), rgba(166, 64, 47, 0) 60%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.018) 0,
+      rgba(255, 255, 255, 0.018) 2rpx,
+      rgba(255, 255, 255, 0) 2rpx,
+      rgba(255, 255, 255, 0) 14rpx
+    ),
+    #17120d;
+}
+
+.topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 80;
+  background: rgba(23, 18, 13, 0.9);
+  border-bottom: 1rpx solid rgba(217, 180, 91, 0.12);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.topbar-scrolled {
+  border-bottom-color: rgba(217, 180, 91, 0.32);
+  background: rgba(23, 18, 13, 0.98);
+  box-shadow: 0 12rpx 30rpx rgba(0, 0, 0, 0.38);
+}
+
+.topbar-inner {
+  display: flex;
+  align-items: center;
+  padding: 0 30rpx;
+}
+
+.mini-brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.mini-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 52rpx;
+  height: 52rpx;
+  border: 1rpx solid #d9b45b;
+  border-radius: 10rpx;
+  background: linear-gradient(145deg, #3b2a17, #241a10);
+  box-shadow: inset 0 0 0 3rpx rgba(217, 180, 91, 0.16);
+  color: #f0cf85;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.mini-name {
+  margin-left: 12rpx;
+  color: #f4e8d2;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 28rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+
+.mini-en {
+  margin-left: 10rpx;
+  color: #8f7b5c;
+  font-size: 13rpx;
+  font-weight: 600;
+  letter-spacing: 2rpx;
+}
+
+.role-pill {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 42rpx;
+  margin-left: auto;
+  padding: 0 15rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.4);
+  border-radius: 999rpx;
+  background: rgba(217, 180, 91, 0.08);
+  color: #e2c37d;
+  font-size: 19rpx;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+}
+
+.role-admin {
+  border-color: rgba(192, 113, 99, 0.5);
+  background: rgba(166, 64, 47, 0.16);
+  color: #e0a094;
+}
+
+.role-employee {
+  border-color: rgba(127, 156, 114, 0.5);
+  background: rgba(63, 93, 74, 0.22);
+  color: #b8cfa8;
+}
+
+.role-dot {
+  width: 7rpx;
+  height: 7rpx;
+  margin-right: 8rpx;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.board-content {
+  padding: 0 28rpx;
+}
+
+.welcome {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-top: 34rpx;
+}
+
+.welcome-copy {
+  flex: 1;
+  min-width: 0;
+  padding-right: 20rpx;
+}
+
+.date-line {
+  display: block;
+  color: #a08a66;
+  font-size: 21rpx;
+  font-weight: 500;
+  letter-spacing: 1rpx;
+}
+
+.welcome-title {
+  margin-top: 9rpx;
+  color: #f4e8d2;
+  font-size: 50rpx;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.32;
+  text-shadow: 0 4rpx 18rpx rgba(0, 0, 0, 0.4);
+}
+
+.period {
+  color: #d9b45b;
+}
+
+.user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 80rpx;
+  height: 80rpx;
+  border: 1rpx solid #d9b45b;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4rpx rgba(217, 180, 91, 0.12), 0 8rpx 22rpx rgba(0, 0, 0, 0.4);
+  color: #fff8e8;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 30rpx;
+  font-weight: 700;
+  transition: opacity 160ms ease;
+}
+
+.user-avatar-hover {
+  opacity: 0.8;
+}
+
+.overview {
+  position: relative;
+  overflow: hidden;
+  margin-top: 34rpx;
+  padding: 36rpx 32rpx 30rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.55);
+  border-radius: 18rpx;
+  background:
+    radial-gradient(90% 60% at 100% 0%, rgba(217, 180, 91, 0.12), rgba(217, 180, 91, 0) 60%),
+    linear-gradient(158deg, #2c2418 0%, #221a12 55%, #1b150e 100%);
+  box-shadow:
+    inset 0 0 0 1rpx rgba(217, 180, 91, 0.12),
+    inset 0 0 70rpx rgba(0, 0, 0, 0.5),
+    0 24rpx 50rpx rgba(0, 0, 0, 0.5);
+  color: #f0e3c8;
+}
+
+.overview::before {
+  content: "";
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
+  bottom: 12rpx;
+  left: 12rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.18);
+  border-radius: 12rpx;
+  pointer-events: none;
+}
+
+.overview::after {
+  content: "";
+  position: absolute;
+  top: -8rpx;
+  left: 50%;
+  width: 14rpx;
+  height: 14rpx;
+  margin-left: -7rpx;
+  border: 1rpx solid #d9b45b;
+  background: #17120d;
+  transform: rotate(45deg);
+}
+
+.overview-ring {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.ring-one {
+  top: -190rpx;
+  right: -120rpx;
+  width: 440rpx;
+  height: 440rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.12);
+}
+
+.ring-two {
+  top: -96rpx;
+  right: -20rpx;
+  width: 250rpx;
+  height: 250rpx;
+  border: 1rpx solid rgba(166, 64, 47, 0.35);
+}
+
+.overview-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.overview-label {
+  display: flex;
+  align-items: center;
+  color: #c9b58c;
+  font-size: 21rpx;
+  letter-spacing: 1rpx;
+}
+
+.live-dot {
+  width: 8rpx;
+  height: 8rpx;
+  margin-right: 10rpx;
+  border-radius: 50%;
+  background: #d9b45b;
+  box-shadow: 0 0 12rpx rgba(217, 180, 91, 0.8);
+}
+
+.local-badge {
+  padding: 4rpx 12rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.34);
+  border-radius: 999rpx;
+  color: #c9a45c;
+  font-size: 17rpx;
+  letter-spacing: 1rpx;
+}
+
+.overview-main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  margin-top: 24rpx;
+}
+
+.overview-number {
+  flex: none;
+  color: #f0cf85;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 96rpx;
+  font-weight: 700;
+  line-height: 0.9;
+  text-shadow: 0 6rpx 22rpx rgba(217, 180, 91, 0.24);
+}
+
+.overview-copy {
+  flex: 1;
+  min-width: 0;
+  margin-left: 20rpx;
+  padding-bottom: 4rpx;
+}
+
+.overview-lead {
+  display: block;
+  color: #f4e8d2;
+  font-size: 28rpx;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+}
+
+.overview-body {
+  display: block;
+  margin-top: 6rpx;
+  color: #a08a66;
+  font-size: 20rpx;
+  line-height: 1.6;
+}
+
+.progress-block {
+  position: relative;
+  z-index: 1;
+  margin-top: 28rpx;
+}
+
+.progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #a08a66;
+  font-size: 20rpx;
+  letter-spacing: 1rpx;
+}
+
+.progress-value {
+  color: #e2c37d;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.progress-track {
+  overflow: hidden;
+  height: 12rpx;
+  margin-top: 10rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.2);
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999rpx;
+  background: linear-gradient(90deg, #b98a37, #e8c378);
+  box-shadow: 0 0 14rpx rgba(217, 180, 91, 0.5);
+  transition: width 320ms ease;
+}
+
+.overview-stats {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  margin-top: 26rpx;
+  padding: 18rpx 0;
+  border: 1rpx solid rgba(217, 180, 91, 0.18);
+  border-radius: 10rpx;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.overview-stat {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-number {
+  color: #f0cf85;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 34rpx;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.stat-label {
+  margin-top: 4rpx;
+  color: #a08a66;
+  font-size: 18rpx;
+  letter-spacing: 1rpx;
+}
+
+.stat-divider {
+  width: 1rpx;
+  height: 40rpx;
+  background: rgba(217, 180, 91, 0.2);
+}
+
+.overview-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  margin-top: 26rpx;
+}
+
+.overview-cta {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 33.333vw;
+  width: 33.333vw;
+  min-width: 0;
+  height: 76rpx;
+  margin-top: 0;
+  border: 1rpx solid #f0d399;
+  border-radius: 8rpx;
+  background: linear-gradient(135deg, #e8c378, #c79a43);
+  box-shadow: 0 6rpx 0 #7d5a22, 0 14rpx 26rpx rgba(0, 0, 0, 0.35);
+  color: #241a0f;
+  font-size: 25rpx;
+  font-weight: 700;
+  letter-spacing: 3rpx;
+  line-height: 1;
+}
+
+.overview-cta-hover {
+  transform: translateY(2rpx);
+  box-shadow: 0 4rpx 0 #7d5a22, 0 10rpx 18rpx rgba(0, 0, 0, 0.3);
+}
+
+.overview-project-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 33.333vw;
+  width: 33.333vw;
+  min-width: 0;
+  height: 76rpx;
+  margin-left: 6.667vw;
+  border: 1rpx solid #f0d399;
+  border-radius: 8rpx;
+  background: linear-gradient(135deg, #e8c378, #c79a43);
+  box-shadow: 0 6rpx 0 #7d5a22, 0 14rpx 26rpx rgba(0, 0, 0, 0.35);
+  color: #241a0f;
+  font-size: 25rpx;
+  font-weight: 700;
+  letter-spacing: 3rpx;
+  line-height: 1;
+}
+
+.overview-project-btn-hover {
+  transform: translateY(2rpx);
+  box-shadow: 0 4rpx 0 #7d5a22, 0 10rpx 18rpx rgba(0, 0, 0, 0.3);
+}
+
+.cta-arrow {
+  width: 14rpx;
+  height: 14rpx;
+  margin-left: 12rpx;
+  border-right: 3rpx solid #241a0f;
+  border-top: 3rpx solid #241a0f;
+  transform: rotate(45deg);
+}
+
+.notice-banner {
+  display: flex;
+  align-items: center;
+  margin-top: 24rpx;
+  padding: 16rpx 18rpx;
+  border: 1rpx solid rgba(192, 113, 99, 0.5);
+  border-radius: 10rpx;
+  background: rgba(166, 64, 47, 0.16);
+}
+
+.notice-banner-hover {
+  background: rgba(166, 64, 47, 0.26);
+}
+
+.notice-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 38rpx;
+  height: 38rpx;
+  border-radius: 50%;
+  background: #a6402f;
+  color: #f6e3d7;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.notice-copy {
+  flex: 1;
+  min-width: 0;
+  margin-left: 12rpx;
+}
+
+.notice-title {
+  display: block;
+  overflow: hidden;
+  color: #f0d7cf;
+  font-size: 20rpx;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice-message {
+  display: block;
+  overflow: hidden;
+  margin-top: 3rpx;
+  color: #c9a49b;
+  font-size: 18rpx;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notice-count {
+  flex: none;
+  min-width: 34rpx;
+  height: 34rpx;
+  margin-left: 10rpx;
+  padding: 0 8rpx;
+  border-radius: 999rpx;
+  background: #a6402f;
+  color: #f6e3d7;
+  font-size: 18rpx;
+  line-height: 34rpx;
+  text-align: center;
+}
+
+.task-section {
+  margin-top: 44rpx;
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.section-heading {
+  position: relative;
+  padding-left: 18rpx;
+}
+
+.section-heading::before {
+  content: "";
+  position: absolute;
+  top: 6rpx;
+  bottom: 6rpx;
+  left: 0;
+  width: 4rpx;
+  border-radius: 999rpx;
+  background: linear-gradient(180deg, #e8c378, #a17826);
+}
+
+.section-title {
+  display: block;
+  color: #f4e8d2;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 34rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+  line-height: 1.2;
+}
+
+.section-sub {
+  display: block;
+  margin-top: 4rpx;
+  color: #8f7b5c;
+  font-size: 19rpx;
+  letter-spacing: 0.5rpx;
+}
+
+.filter-scroll {
+  width: 100%;
+  margin-top: 24rpx;
+  white-space: nowrap;
+}
+
+.filter-row {
+  display: inline-flex;
+  align-items: center;
+  padding-bottom: 4rpx;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 56rpx;
+  margin-right: 14rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.24);
+  border-radius: 6rpx;
+  background: rgba(0, 0, 0, 0.2);
+  color: #b7a485;
+  font-size: 22rpx;
+  letter-spacing: 0.5rpx;
+}
+
+.filter-chip-on {
+  border-color: #f0d399;
+  background: linear-gradient(160deg, #f4e7cd, #e5d0a6);
+  box-shadow: 0 4rpx 0 rgba(0, 0, 0, 0.28);
+  color: #241a0f;
+  font-weight: 700;
+}
+
+.filter-chip-hover {
+  opacity: 0.85;
+}
+
+.filter-count {
+  margin-left: 8rpx;
+  font-size: 18rpx;
+  opacity: 0.8;
+}
+
+.stage-block {
+  margin-top: 24rpx;
+}
+
+.stage-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.stage-label-title {
+  color: #f0e3c8;
+  font-family: "Songti SC", "STSong", "Noto Serif SC", Georgia, serif;
+  font-size: 23rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+
+.stage-label-sub {
+  color: #8f7b5c;
+  font-size: 17rpx;
+}
+
+.stage-row {
+  display: flex;
+  margin-top: 12rpx;
+}
+
+.stage-chip {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 78rpx;
+  margin-right: 10rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.22);
+  border-radius: 8rpx;
+  background: rgba(0, 0, 0, 0.2);
+  color: #b7a485;
+}
+
+.stage-chip:last-child {
+  margin-right: 0;
+}
+
+.stage-chip-hover {
+  opacity: 0.84;
+}
+
+.stage-name {
+  font-size: 23rpx;
+  font-weight: 700;
+  letter-spacing: 1rpx;
+  line-height: 1.2;
+}
+
+.stage-count {
+  margin-top: 3rpx;
+  font-size: 17rpx;
+  letter-spacing: 0.5rpx;
+  opacity: 0.72;
+  line-height: 1.2;
+}
+
+.stage-chip-all {
+  color: #d9b45b;
+}
+
+.stage-chip-pre {
+  border-color: rgba(192, 113, 99, 0.3);
+  color: #e0a094;
+}
+
+.stage-chip-mid {
+  border-color: rgba(127, 156, 114, 0.3);
+  color: #b8cfa8;
+}
+
+.stage-chip-post {
+  border-color: rgba(168, 143, 196, 0.3);
+  color: #c3b0d8;
+}
+
+.stage-chip-on {
+  border-color: #f0d399;
+  background: linear-gradient(160deg, #f4e7cd, #e5d0a6);
+  box-shadow: 0 4rpx 0 rgba(0, 0, 0, 0.28);
+  color: #241a0f;
+}
+
+.stage-chip-pre.stage-chip-on {
+  border-color: #c07163;
+  background: rgba(166, 64, 47, 0.3);
+  box-shadow: inset 0 0 0 1rpx rgba(224, 160, 148, 0.24);
+  color: #f6d9d2;
+}
+
+.stage-chip-mid.stage-chip-on {
+  border-color: #7f9c72;
+  background: rgba(53, 103, 93, 0.34);
+  box-shadow: inset 0 0 0 1rpx rgba(184, 207, 168, 0.24);
+  color: #d8e8cc;
+}
+
+.stage-chip-post.stage-chip-on {
+  border-color: #a88fc4;
+  background: rgba(106, 83, 127, 0.36);
+  box-shadow: inset 0 0 0 1rpx rgba(195, 176, 216, 0.24);
+  color: #e2d5f0;
+}
+
+.process-scroll {
+  margin-top: 14rpx;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  height: 76rpx;
+  margin-top: 20rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.22);
+  border-radius: 8rpx;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.search-icon {
+  position: relative;
+  flex: none;
+  width: 30rpx;
+  height: 30rpx;
+  margin-right: 14rpx;
+}
+
+.search-lens {
+  position: absolute;
+  top: 2rpx;
+  left: 2rpx;
+  width: 18rpx;
+  height: 18rpx;
+  border: 3rpx solid #a08a66;
+  border-radius: 50%;
+}
+
+.search-handle {
+  position: absolute;
+  right: 2rpx;
+  bottom: 3rpx;
+  width: 12rpx;
+  height: 3rpx;
+  border-radius: 999rpx;
+  background: #a08a66;
+  transform: rotate(45deg);
+}
+
+.search-input {
+  flex: 1;
+  height: 100%;
+  color: #f0e3c8;
+  font-size: 24rpx;
+}
+
+.search-placeholder {
+  color: #8f7b5c;
+}
+
+.search-clear {
+  flex: none;
+  margin-left: 12rpx;
+  color: #d9b45b;
+  font-size: 22rpx;
+}
+
+.skeleton-list {
+  margin-top: 22rpx;
+}
+
+.skeleton-card {
+  margin-bottom: 22rpx;
+  padding: 28rpx;
+  border: 1rpx solid rgba(217, 180, 91, 0.12);
+  border-radius: 14rpx;
+  background: linear-gradient(100deg, #241c15 0%, #2f2419 42%, #241c15 82%);
+  background-size: 220% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.skeleton-chip {
+  width: 96rpx;
+  height: 34rpx;
+  border-radius: 4rpx;
+  background: rgba(217, 180, 91, 0.12);
+}
+
+.skeleton-line {
+  height: 20rpx;
+  margin-top: 18rpx;
+  border-radius: 999rpx;
+  background: rgba(217, 180, 91, 0.1);
+}
+
+.skeleton-title {
+  width: 62%;
+  height: 34rpx;
+  margin-top: 22rpx;
+}
+
+.skeleton-title.short {
+  width: 44%;
+}
+
+.skeleton-wide {
+  width: 92%;
+}
+
+.skeleton-mid {
+  width: 70%;
+}
+
+.skeleton-foot {
+  display: flex;
+  align-items: center;
+  margin-top: 24rpx;
+}
+
+.skeleton-avatar {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  background: rgba(217, 180, 91, 0.12);
+}
+
+.skeleton-name {
+  width: 140rpx;
+  margin: 0 0 0 12rpx;
+}
+
+.task-list {
+  margin-top: 22rpx;
+}
+
+.board-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 44rpx 0 10rpx;
+  padding-bottom: 20rpx;
+  color: #6f5f47;
+  font-size: 19rpx;
+  letter-spacing: 1rpx;
+}
+
+.foot-line {
+  width: 54rpx;
+  height: 1rpx;
+  margin: 0 14rpx;
+  background: linear-gradient(90deg, rgba(217, 180, 91, 0), rgba(217, 180, 91, 0.4));
+}
+
+.foot-line:last-child {
+  background: linear-gradient(90deg, rgba(217, 180, 91, 0.4), rgba(217, 180, 91, 0));
+}
+
+.rise-in {
+  animation: rise-in 440ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@media (max-width: 360px) {
+  .mini-en {
+    display: none;
+  }
+
+  .welcome-title {
+    font-size: 44rpx;
+  }
+
+  .overview-number {
+    font-size: 84rpx;
+  }
+
+  .section-sub {
+    max-width: 320rpx;
+  }
+}

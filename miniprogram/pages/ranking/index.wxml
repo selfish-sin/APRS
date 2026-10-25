@@ -1,0 +1,152 @@
+<view class="page-shell ranking-page">
+  <app-nav title="月度排行" back="{{false}}" />
+
+  <view class="ranking-content">
+    <view class="ledger-hero rise-in">
+      <view class="hero-top">
+        <view>
+          <text class="eyebrow">MONTHLY LEDGER</text>
+          <view class="ledger-title editorial">月度工作量结算</view>
+          <text class="ledger-sub">{{monthLabel}} · 按已验收委托的结算赏金排名</text>
+        </view>
+        <view class="ledger-seal">榜</view>
+      </view>
+
+      <view class="ledger-total">
+        <text class="ledger-total-number">{{summary.totalReward}}</text>
+        <view class="ledger-total-copy">
+          <text class="ledger-total-unit">金币</text>
+          <text class="ledger-total-label">本月结算总额</text>
+        </view>
+      </view>
+
+      <view class="ledger-stats">
+        <view class="ledger-stat">
+          <text class="ledger-stat-value">{{summary.workerCount}}</text>
+          <text class="ledger-stat-label">结算人数</text>
+        </view>
+        <view class="ledger-stat-line"></view>
+        <view class="ledger-stat">
+          <text class="ledger-stat-value">{{summary.totalTasks}}</text>
+          <text class="ledger-stat-label">已验收委托</text>
+        </view>
+        <view class="ledger-stat-line"></view>
+        <view class="ledger-stat">
+          <text class="ledger-stat-value">{{summary.averageReward}}</text>
+          <text class="ledger-stat-label">人均赏金</text>
+        </view>
+      </view>
+
+      <view wx:if="{{isAdmin}}" class="ledger-tip">
+        <view class="tip-mark">结</view>
+        <text>管理员可据此核对每月结算；仅统计已验收并归档的委托。</text>
+      </view>
+      <block wx:if="{{!isAdmin}}">
+        <view wx:if="{{myRank}}" class="my-rank-strip">
+          <text>我的本月排名</text>
+          <text class="my-rank-value">第 {{myRank}} 名</text>
+          <text class="my-rank-dot">·</text>
+          <text>{{myReward}} 金币</text>
+        </view>
+      </block>
+    </view>
+
+    <scroll-view class="month-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+      <view class="month-track">
+        <view
+          wx:for="{{months}}"
+          wx:key="key"
+          class="month-chip {{month === item.key ? 'month-chip-on' : ''}}"
+          data-month="{{item.key}}"
+          hover-class="month-chip-hover"
+          bindtap="handleMonthChange"
+        >
+          {{item.label}}
+        </view>
+      </view>
+    </scroll-view>
+
+    <view class="section-head">
+      <view class="section-heading">
+        <text class="section-title">工作者排行</text>
+        <text class="section-sub">按结算赏金排序 · 点击展开工作量</text>
+      </view>
+      <text class="section-note">{{rows.length}} 人</text>
+    </view>
+
+    <view wx:if="{{loading}}" class="ranking-loading">
+      <view class="loading-dot"></view>
+      <text>正在结算本月工作量</text>
+    </view>
+
+    <view wx:elif="{{rows.length}}" class="ranking-card rise-in">
+      <view wx:for="{{rows}}" wx:key="key" class="rank-block">
+        <view
+          class="rank-row {{item.isMe ? 'rank-row-me' : ''}}"
+          data-key="{{item.key}}"
+          hover-class="rank-row-hover"
+          bindtap="handleToggleRow"
+        >
+          <view class="rank-badge rank-badge-{{item.rankTone}}">
+            <text class="rank-number">{{item.rank}}</text>
+          </view>
+          <view class="rank-avatar" style="background: {{item.avatarColor}};">{{item.initial}}</view>
+          <view class="rank-main">
+            <view class="rank-name-row">
+              <text class="rank-name">{{item.name}}</text>
+              <view wx:if="{{item.isMe}}" class="rank-me-tag">我</view>
+              <view wx:if="{{item.removed}}" class="rank-removed-tag">资料已移除</view>
+            </view>
+            <text class="rank-title">{{item.title}}</text>
+            <text class="rank-workload">{{item.workloadText}}</text>
+            <view class="rank-meta">
+              <text>{{item.taskCount}} 份委托</text>
+              <text class="rank-meta-dot">·</text>
+              <text>最近 {{item.lastCompletedLabel}}</text>
+            </view>
+          </view>
+          <view class="rank-side">
+            <view class="rank-amount">
+              <text class="rank-amount-number">{{item.reward}}</text>
+              <text class="rank-amount-unit">金币</text>
+            </view>
+            <view class="chevron {{expandedKey === item.key ? 'chevron-open' : ''}}"></view>
+          </view>
+        </view>
+
+        <view wx:if="{{expandedKey === item.key}}" class="rank-detail">
+          <view class="detail-block">
+            <text class="detail-label">工作量构成</text>
+            <view class="detail-chips">
+              <view wx:for="{{item.unitStats}}" wx:for-item="unit" wx:key="key" class="detail-chip">
+                {{unit.text}}
+              </view>
+            </view>
+          </view>
+          <view class="detail-block">
+            <text class="detail-label">阶段分布</text>
+            <view class="detail-chips">
+              <view wx:for="{{item.stageStats}}" wx:for-item="stage" wx:key="key" class="detail-chip detail-chip-stage">
+                {{stage.name}} {{stage.count}}
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <empty-state
+      wx:else
+      title="本月还没有结算记录"
+      description="已验收的委托会按验收时间归入当月，完成第一份委托后再来看榜。"
+      action-label="去告示栏看看"
+      bindaction="goBoard"
+    />
+
+    <view class="ranking-footer">
+      <view class="footer-rule"></view>
+      <text>榜单按验收时间归月，结算金额以委托赏金为准</text>
+      <text class="footer-hint">删除的资料仍保留历史结算记录</text>
+    </view>
+  </view>
+</view>
